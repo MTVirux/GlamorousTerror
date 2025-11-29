@@ -18,7 +18,7 @@
     ],
     "InternalName": "Glamourer++",
     "AssemblyVersion": "1.0.0.0",
-    "TestingAssemblyVersion": "1.0.0.0",
+    "TestingAssemblyVersion": "10.0.0.0",
     "RepoUrl": "https://github.com/MTVirux/Glamourer",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 13,
@@ -29,7 +29,7 @@
     "LastUpdate": 1618608322,
     "DownloadLinkInstall": "https://github.com/MTVirux/Glamourer/releases/download/1.0.0.0/Glamourer.zip",
     "DownloadLinkUpdate": "https://github.com/MTVirux/Glamourer/releases/download/1.0.0.0/Glamourer.zip",
-    "DownloadLinkTesting": "https://github.com/MTVirux/Glamourer/releases/download/testing_1.0.0.0/Glamourer.zip",
+    "DownloadLinkTesting": "https://github.com/MTVirux/Glamourer/releases/download/testing_10.0.0.0/Glamourer.zip",
     "IconUrl": "https://raw.githubusercontent.com/MTVirux/Glamourer/main/images/icon.png"
   }
 ]
