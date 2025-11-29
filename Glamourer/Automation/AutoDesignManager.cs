@@ -423,7 +423,7 @@ public class AutoDesignManager : ISavable, IReadOnlyList<AutoDesignSet>, IDispos
             foreach (var setId in enabledSet.Identifiers)
             {
                 // Use wildcard-aware matching when the stored identifier contains a wildcard pattern in the name.
-                if (!setId.PlayerName.IsEmpty && setId.PlayerName.ToString().Contains('*'))
+                if (!setId.PlayerName.IsEmpty && setId.PlayerName.IndexOf((byte)'*') >= 0)
                 {
                     var sameType = identifier.Type == setId.Type;
                     if (!sameType)
@@ -439,11 +439,7 @@ public class AutoDesignManager : ISavable, IReadOnlyList<AutoDesignSet>, IDispos
                     if (!worldMatches)
                         continue;
 
-                    // Inline wildcard matching to avoid cross-namespace ambiguity.
-                    var name = identifier.PlayerName.ToString();
-                    var pattern = setId.PlayerName.ToString();
-                    var regexPattern = System.Text.RegularExpressions.Regex.Escape(pattern).Replace("\\*", ".*");
-                    if (System.Text.RegularExpressions.Regex.IsMatch(name, $"^{regexPattern}$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                    if (AutoDesignApplier.MatchesWildcard(identifier.PlayerName, setId.PlayerName))
                     {
                         set = enabledSet;
                         return true;
@@ -688,7 +684,7 @@ public class AutoDesignManager : ISavable, IReadOnlyList<AutoDesignSet>, IDispos
         };
 
         static bool IsWildcardName(ByteString name)
-            => name.ToString().Contains('*');
+            => name.IndexOf((byte)'*') >= 0;
     }
 
     static ActorIdentifier[] CreateNpcs(ActorManager manager, ActorIdentifier identifier)

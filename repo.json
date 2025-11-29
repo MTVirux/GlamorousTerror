@@ -1,7 +1,7 @@
 [
   {
-    "Author": "Ottermandias",
-    "Name": "Glamourer",
+    "Author": "Ottermandias & Modded by MTVirux",
+    "Name": "Glamourer++",
     "Punchline": "Change and save appearance of players.",
     "Description": "Adds functionality to change and store appearance of players, customization and equip. Requires Penumbra to be installed and activated to work. Can also add preview options to the Changed Items tab for Penumbra.",
     "Tags": [
@@ -16,10 +16,10 @@
       "Design",
       "Character"
     ],
-    "InternalName": "Glamourer",
+    "InternalName": "Glamourer++",
     "AssemblyVersion": "1.5.1.5",
     "TestingAssemblyVersion": "1.5.1.5",
-    "RepoUrl": "https://github.com/Ottermandias/Glamourer",
+    "RepoUrl": "https://github.com/MTVirux/Glamourer",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 13,
     "TestingDalamudApiLevel": 13,
@@ -27,9 +27,9 @@
     "IsTestingExclusive": "False",
     "DownloadCount": 1,
     "LastUpdate": 1618608322,
-    "DownloadLinkInstall": "https://github.com/Ottermandias/Glamourer/releases/download/1.5.1.5/Glamourer.zip",
-    "DownloadLinkUpdate": "https://github.com/Ottermandias/Glamourer/releases/download/1.5.1.5/Glamourer.zip",
-    "DownloadLinkTesting": "https://github.com/Ottermandias/Glamourer/releases/download/1.5.1.5/Glamourer.zip",
-    "IconUrl": "https://raw.githubusercontent.com/Ottermandias/Glamourer/main/images/icon.png"
+    "DownloadLinkInstall": "https://github.com/MTVirux/Glamourer/releases/download/1.5.1.5/Glamourer.zip",
+    "DownloadLinkUpdate": "https://github.com/MTVirux/Glamourer/releases/download/1.5.1.5/Glamourer.zip",
+    "DownloadLinkTesting": "https://github.com/MTVirux/Glamourer/releases/download/1.5.1.5/Glamourer.zip",
+    "IconUrl": "https://raw.githubusercontent.com/MTVirux/Glamourer/main/images/icon.png"
   }
 ]

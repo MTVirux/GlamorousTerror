@@ -11,6 +11,7 @@ using Penumbra.GameData.DataContainers;
 using Penumbra.GameData.Enums;
 using Penumbra.GameData.Interop;
 using Penumbra.GameData.Structs;
+using Penumbra.String;
 
 namespace Glamourer.Automation;
 
@@ -158,10 +159,8 @@ public sealed class AutoDesignApplier : IDisposable
                 // If the stored identifier uses a wildcard in the player name, it will not directly
                 // be present in the ActorObjectManager dictionaries. Scan the live objects and
                 // apply to any matching actors instead.
-                if (!id.PlayerName.IsEmpty && id.PlayerName.ToString().Contains('*'))
+                if (!id.PlayerName.IsEmpty && id.PlayerName.IndexOf((byte)'*') >= 0)
                 {
-                    var pattern = id.PlayerName.ToString();
-                    var regexPattern = System.Text.RegularExpressions.Regex.Escape(pattern).Replace("\\*", ".*");
                     foreach (var (key, data2) in _objects)
                     {
                         if (key.Type != id.Type)
@@ -183,7 +182,7 @@ public sealed class AutoDesignApplier : IDisposable
                         if (!worldMatches)
                             continue;
 
-                        if (!System.Text.RegularExpressions.Regex.IsMatch(key.PlayerName.ToString(), $"^{regexPattern}$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                        if (!MatchesWildcard(key.PlayerName, id.PlayerName))
                             continue;
 
                         // Skip this actor if there's an exact-match automation set already enabled for it.
@@ -406,7 +405,7 @@ public sealed class AutoDesignApplier : IDisposable
         foreach (var (key, value) in _manager.EnabledSets)
         {
             // Use wildcard-aware matching when the stored identifier contains a wildcard pattern in the name.
-            if (!key.PlayerName.IsEmpty && key.PlayerName.ToString().Contains('*'))
+            if (!key.PlayerName.IsEmpty && key.PlayerName.IndexOf((byte)'*') >= 0)
             {
                 var sameType = identifier.Type == key.Type;
                 if (!sameType)
@@ -422,10 +421,7 @@ public sealed class AutoDesignApplier : IDisposable
                 if (!worldMatches)
                     continue;
 
-                var name = identifier.PlayerName.ToString();
-                var pattern = key.PlayerName.ToString();
-                var regexPattern = System.Text.RegularExpressions.Regex.Escape(pattern).Replace("\\*", ".*");
-                if (System.Text.RegularExpressions.Regex.IsMatch(name, $"^{regexPattern}$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                if (MatchesWildcard(identifier.PlayerName, key.PlayerName))
                 {
                     set = value;
                     return true;
@@ -475,4 +471,55 @@ public sealed class AutoDesignApplier : IDisposable
 
         return check == module->CurrentGearsetIndex;
     }
+
+    /// <summary>
+    /// Matches a UTF8 ByteString against a wildcard pattern containing '*' characters.
+    /// Does not transcode to UTF16, operates directly on UTF8 bytes for efficiency.
+    /// </summary>
+    internal static unsafe bool MatchesWildcard(ByteString name, ByteString pattern)
+    {
+        return MatchesWildcardInternal(name.Path, name.Length, pattern.Path, pattern.Length);
+    }
+
+    private static unsafe bool MatchesWildcardInternal(byte* name, int nameLen, byte* pattern, int patternLen)
+    {
+        int nameIdx = 0;
+        int patternIdx = 0;
+        int starIdx = -1;
+        int matchIdx = 0;
+
+        while (nameIdx < nameLen)
+        {
+            if (patternIdx < patternLen && pattern[patternIdx] == '*')
+            {
+                starIdx = patternIdx;
+                matchIdx = nameIdx;
+                patternIdx++;
+            }
+            else if (patternIdx < patternLen && (pattern[patternIdx] == name[nameIdx] || AsciiToLower(pattern[patternIdx]) == AsciiToLower(name[nameIdx])))
+            {
+                nameIdx++;
+                patternIdx++;
+            }
+            else if (starIdx != -1)
+            {
+                patternIdx = starIdx + 1;
+                matchIdx++;
+                nameIdx = matchIdx;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        while (patternIdx < patternLen && pattern[patternIdx] == '*')
+            patternIdx++;
+
+        return patternIdx == patternLen;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static byte AsciiToLower(byte b)
+        => b is >= (byte)'A' and <= (byte)'Z' ? (byte)(b + 32) : b;
 }
