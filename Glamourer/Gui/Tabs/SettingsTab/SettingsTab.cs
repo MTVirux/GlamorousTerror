@@ -51,10 +51,6 @@ public class SettingsTab(
                 config.EnableAutoDesigns = v;
                 autoDesignApplier.OnEnableAutoDesignsChanged(v);
             });
-        ImGui.NewLine();
-        ImGui.NewLine();
-        ImGui.NewLine();
-        ImGui.NewLine();
 
         using (ImUtf8.Child("SettingsChild"u8, default))
         {
@@ -65,8 +61,6 @@ public class SettingsTab(
             overrides.Draw();
             codeDrawer.Draw();
         }
-
-        MainWindow.DrawSupportButtons(glamourer, changelog.Changelog);
     }
 
     private void DrawBehaviorSettings()
