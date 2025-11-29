@@ -48,7 +48,15 @@ public class CodeDrawer(Configuration config, CodeService codeService, FunModule
 
     private void DrawFeatureToggles()
     {
+        if (ImUtf8.Button("Disable All"u8))
+        {
+            codeService.DisableAll();
+            ForceRedrawAll();
+        }
+        ImUtf8.HoverTooltip("Disable all active fun modes."u8);
         ImUtf8.Text("Enable Fun Modes:"u8);
+        ImGui.SameLine();
+
         ImGui.Dummy(Vector2.Zero);
 
         // Get all code flags except the debug ones

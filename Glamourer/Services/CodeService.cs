@@ -102,6 +102,12 @@ public class CodeService
         _config.Save();
     }
 
+    public void DisableAll()
+    {
+        _config.EnabledCheats = 0;
+        _config.Save();
+    }
+
     // @formatter:off
     private static CodeFlag GetMutuallyExclusive(CodeFlag flag)
         => flag switch
