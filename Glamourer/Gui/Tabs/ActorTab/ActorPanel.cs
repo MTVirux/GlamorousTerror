@@ -239,6 +239,9 @@ public class ActorPanel
         DrawEquipmentMetaToggles();
         ImGui.Dummy(new Vector2(ImGui.GetTextLineHeight() / 2));
         _equipmentDrawer.DrawDragDropTooltip();
+
+        // Apply hover preview when hovering over items in the dropdown
+        _equipmentDrawer.ApplyHoverPreview(_stateManager, _state!);
     }
 
     private void DrawParameterHeader()
