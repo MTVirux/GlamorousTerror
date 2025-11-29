@@ -23,6 +23,9 @@ public sealed class BonusItemCombo : FilterComboCache<EquipItem>
 
     public PrimaryId CustomSetId   { get; private set; }
     public Variant   CustomVariant { get; private set; }
+    public EquipItem?  HoveredItem { get; private set; }
+    public bool        IsOpen      { get; private set; }
+    public bool        ItemSelected { get; private set; }
 
     public BonusItemCombo(IDataManager gameData, ItemManager items, BonusItemFlag slot, Logger log, FavoriteManager favorites)
         : base(() => GetItems(favorites, items, slot), MouseWheelType.Control, log)
@@ -35,9 +38,14 @@ public sealed class BonusItemCombo : FilterComboCache<EquipItem>
 
     protected override void DrawList(float width, float itemHeight)
     {
+        HoveredItem = null;
+        IsOpen = true;
         base.DrawList(width, itemHeight);
         if (NewSelection != null && Items.Count > NewSelection.Value)
+        {
             CurrentSelection = Items[NewSelection.Value];
+            ItemSelected = true;
+        }
     }
 
     protected override int UpdateCurrentSelected(int currentSelected)
@@ -74,6 +82,8 @@ public sealed class BonusItemCombo : FilterComboCache<EquipItem>
 
         ImGui.SameLine();
         var ret = ImGui.Selectable(name, selected);
+        if (ImGui.IsItemHovered())
+            HoveredItem = obj;
         ImGui.SameLine();
         using var color = ImRaii.PushColor(ImGuiCol.Text, 0xFF808080);
         ImGuiUtil.RightAlign($"({obj.PrimaryId.Id}-{obj.Variant.Id})");
@@ -105,8 +115,13 @@ public sealed class BonusItemCombo : FilterComboCache<EquipItem>
         return items.ItemData.ByType[slot.ToEquipType()].OrderByDescending(favorites.Contains).ThenBy(i => i.Id.Id).Prepend(nothing).ToList();
     }
 
+    public void ResetSelection()
+        => ItemSelected = false;
+
     protected override void OnClosePopup()
     {
+        IsOpen = false;
+        
         // If holding control while the popup closes, try to parse the input as a full pair of set id and variant, and set a custom item for that.
         if (!ImGui.GetIO().KeyCtrl)
             return;

@@ -1,6 +1,7 @@
 ﻿using Dalamud.Interface.Components;
 using Dalamud.Interface.Utility;
 using Dalamud.Plugin.Services;
+using Glamourer.Designs;
 using Glamourer.Events;
 using Glamourer.Gui.Materials;
 using Glamourer.Services;
@@ -40,6 +41,11 @@ public class EquipmentDrawer
     private Stain?             _draggedStain;
     private EquipItemSlotCache _draggedItem;
     private EquipSlot          _dragTarget;
+
+    private EquipItem?        _originalItem;
+    private EquipSlot?        _originalSlot;
+    private BonusItemFlag?    _originalBonusSlot;
+    private bool              _isComboOpen;
 
     public EquipmentDrawer(FavoriteManager favorites, IDataManager gameData, ItemManager items, TextureService textures,
         Configuration config, GPoseService gPose, AdvancedDyePopup advancedDyes, ItemCopyService itemCopy)
@@ -696,5 +702,165 @@ public class EquipmentDrawer
 
         if (hasAdvancedDyes)
             ImUtf8.HoverTooltip("This design has advanced dyes setup for this slot."u8);
+    }
+
+    public void ApplyHoverPreview(State.StateManager stateManager, State.ActorState state)
+    {
+        var anyComboOpen = false;
+
+        // Check for hovered items in equipment slots
+        foreach (var slot in EquipSlotExtensions.EqdpSlots)
+        {
+            var combo = _itemCombo[slot.ToIndex()];
+            if (combo.IsOpen)
+            {
+                anyComboOpen = true;
+                if (!_isComboOpen)
+                {
+                    // Combo just opened, save original item
+                    _originalItem = state.ModelData.Item(slot);
+                    _originalSlot = slot;
+                    _originalBonusSlot = null;
+                    _isComboOpen = true;
+                }
+
+                if (combo.HoveredItem.HasValue && combo.HoveredItem.Value.ItemId != state.ModelData.Item(slot).ItemId)
+                {
+                    stateManager.ChangeItem(state, slot, combo.HoveredItem.Value, ApplySettings.Manual);
+                    return;
+                }
+            }
+        }
+
+        // Check for hovered items in bonus slots
+        foreach (var slot in BonusExtensions.AllFlags)
+        {
+            var combo = _bonusItemCombo[slot.ToIndex()];
+            if (combo.IsOpen)
+            {
+                anyComboOpen = true;
+                if (!_isComboOpen)
+                {
+                    // Combo just opened, save original item
+                    _originalItem = state.ModelData.BonusItem(slot);
+                    _originalSlot = null;
+                    _originalBonusSlot = slot;
+                    _isComboOpen = true;
+                }
+
+                if (combo.HoveredItem.HasValue && combo.HoveredItem.Value.Id != state.ModelData.BonusItem(slot).Id)
+                {
+                    stateManager.ChangeBonusItem(state, slot, combo.HoveredItem.Value, ApplySettings.Manual);
+                    return;
+                }
+            }
+        }
+
+        // Check for hovered items in weapon slots
+        foreach (var kvp in _weaponCombo)
+        {
+            var combo = kvp.Value;
+            if (combo.IsOpen)
+            {
+                var slot = kvp.Key.ToSlot();
+                if (slot != EquipSlot.Unknown)
+                {
+                    anyComboOpen = true;
+                    if (!_isComboOpen)
+                    {
+                        // Combo just opened, save original item
+                        _originalItem = state.ModelData.Item(slot);
+                        _originalSlot = slot;
+                        _originalBonusSlot = null;
+                        _isComboOpen = true;
+                    }
+
+                    if (combo.HoveredItem.HasValue && combo.HoveredItem.Value.ItemId != state.ModelData.Item(slot).ItemId)
+                    {
+                        stateManager.ChangeItem(state, slot, combo.HoveredItem.Value, ApplySettings.Manual);
+                        return;
+                    }
+                }
+            }
+        }
+
+        // If combo was open but now closed without selection, restore original
+        if (!anyComboOpen && _isComboOpen && _originalItem.HasValue)
+        {
+            // Check if any combo had an item selected
+            var wasItemSelected = false;
+            foreach (var combo in _itemCombo)
+                if (combo.ItemSelected) { wasItemSelected = true; break; }
+            if (!wasItemSelected)
+                foreach (var combo in _bonusItemCombo)
+                    if (combo.ItemSelected) { wasItemSelected = true; break; }
+            if (!wasItemSelected)
+                foreach (var combo in _weaponCombo.Values)
+                    if (combo.ItemSelected) { wasItemSelected = true; break; }
+
+            // Only revert if no item was selected
+            if (!wasItemSelected)
+            {
+                if (_originalSlot.HasValue)
+                {
+                    var currentItem = state.ModelData.Item(_originalSlot.Value);
+                    if (currentItem.ItemId != _originalItem.Value.ItemId)
+                        stateManager.ChangeItem(state, _originalSlot.Value, _originalItem.Value, ApplySettings.Manual);
+                }
+                else if (_originalBonusSlot.HasValue)
+                {
+                    var currentItem = state.ModelData.BonusItem(_originalBonusSlot.Value);
+                    if (currentItem.Id != _originalItem.Value.Id)
+                        stateManager.ChangeBonusItem(state, _originalBonusSlot.Value, _originalItem.Value, ApplySettings.Manual);
+                }
+            }
+
+            // Reset ItemSelected flags after checking
+            foreach (var combo in _itemCombo)
+                combo.ResetSelection();
+            foreach (var combo in _bonusItemCombo)
+                combo.ResetSelection();
+            foreach (var combo in _weaponCombo.Values)
+                combo.ResetSelection();
+
+            _isComboOpen = false;
+            _originalItem = null;
+            _originalSlot = null;
+            _originalBonusSlot = null;
+        }
+        else if (anyComboOpen && _originalItem.HasValue)
+        {
+            // Combo is still open, restore to original while hovering nothing
+            var shouldRestore = true;
+
+            if (_originalSlot.HasValue)
+            {
+                var combo = _itemCombo[_originalSlot.Value.ToIndex()];
+                if (combo.HoveredItem.HasValue)
+                    shouldRestore = false;
+            }
+            else if (_originalBonusSlot.HasValue)
+            {
+                var combo = _bonusItemCombo[_originalBonusSlot.Value.ToIndex()];
+                if (combo.HoveredItem.HasValue)
+                    shouldRestore = false;
+            }
+
+            if (shouldRestore)
+            {
+                if (_originalSlot.HasValue)
+                {
+                    var currentItem = state.ModelData.Item(_originalSlot.Value);
+                    if (currentItem.ItemId != _originalItem.Value.ItemId)
+                        stateManager.ChangeItem(state, _originalSlot.Value, _originalItem.Value, ApplySettings.Manual);
+                }
+                else if (_originalBonusSlot.HasValue)
+                {
+                    var currentItem = state.ModelData.BonusItem(_originalBonusSlot.Value);
+                    if (currentItem.Id != _originalItem.Value.Id)
+                        stateManager.ChangeBonusItem(state, _originalBonusSlot.Value, _originalItem.Value, ApplySettings.Manual);
+                }
+            }
+        }
     }
 }
