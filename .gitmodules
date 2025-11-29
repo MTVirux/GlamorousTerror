@@ -4,11 +4,11 @@
 	branch = main
 [submodule "Penumbra.GameData"]
 	path = Penumbra.GameData
-	url = https://github.com/MTVirux/Penumbra.GameData.git
+	url = https://github.com/Ottermandias/Penumbra.GameData.git
 	branch = main
 [submodule "Penumbra.String"]
 	path = Penumbra.String
-	url = https://github.com/MTVirux/Penumbra.String.git
+	url = https://github.com/Ottermandias/Penumbra.String.git
 	branch = main
 [submodule "Penumbra.Api"]
 	path = Penumbra.Api
