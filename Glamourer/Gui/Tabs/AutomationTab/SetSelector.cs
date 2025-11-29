@@ -219,12 +219,8 @@ public class SetSelector : IDisposable
                 return true;
 
             // Check for wildcard match
-            var nameStr = id.PlayerName.ToString();
-            if (nameStr.Contains('*'))
+            if (id.PlayerName.IndexOf((byte)'*') >= 0)
             {
-                var pattern = "^" + System.Text.RegularExpressions.Regex.Escape(nameStr).Replace("\\*", ".*") + "$";
-                var regex = new System.Text.RegularExpressions.Regex(pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                
                 foreach (var (actorId, _) in _objects)
                 {
                     if (actorId.Type != id.Type)
@@ -239,8 +235,7 @@ public class SetSelector : IDisposable
 
                     if (actorId.DataId == id.DataId)
                     {
-                        var actorNameStr = actorId.PlayerName.ToString();
-                        if (regex.IsMatch(actorNameStr))
+                        if (AutoDesignApplier.MatchesWildcard(actorId.PlayerName, id.PlayerName))
                         {
                             // Don't show wildcard match as active if the actor already has an exact match automation
                             var hasExactMatch = false;
