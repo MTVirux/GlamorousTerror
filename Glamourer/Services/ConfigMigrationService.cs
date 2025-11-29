@@ -98,7 +98,7 @@ public class ConfigMigrationService(SaveService saveService, FixedDesignMigrator
             return;
 
         _config.Version = 4;
-        _config.Codes   = _config.Codes.DistinctBy(c => c.Code).ToList();
+        // Migration for old Codes list removed - now using EnabledCheats flag
     }
 
     private static void AddColors(Configuration config, bool forceSave)
