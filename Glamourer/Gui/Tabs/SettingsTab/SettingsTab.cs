@@ -22,13 +22,11 @@ public class SettingsTab(
     DesignFileSystemSelector selector,
     ContextMenuService contextMenuService,
     IUiBuilder uiBuilder,
-    GlamourerChangelog changelog,
     IKeyState keys,
     DesignColorUi designColorUi,
     PaletteImport paletteImport,
     CollectionOverrideDrawer overrides,
     CodeDrawer codeDrawer,
-    Glamourer glamourer,
     AutoDesignApplier autoDesignApplier,
     PcpService pcpService)
     : ITab
