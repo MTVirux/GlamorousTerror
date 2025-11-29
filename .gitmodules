@@ -1,20 +1,20 @@
 [submodule "OtterGui"]
 	path = OtterGui
-	url = https://github.com/Ottermandias/OtterGui.git
+	url = https://github.com/MTVirux/OtterGui.git
 	branch = main
 [submodule "Penumbra.GameData"]
 	path = Penumbra.GameData
-	url = https://github.com/Ottermandias/Penumbra.GameData.git
-	branch = main
+	url = https://github.com/MTVirux/Penumbra.GameData.git
+	branch = feat/wildcard-support
 [submodule "Penumbra.String"]
 	path = Penumbra.String
-	url = https://github.com/Ottermandias/Penumbra.String.git
-	branch = main
+	url = https://github.com/MTVirux/Penumbra.String.git
+	branch = feat/wildcard-support
 [submodule "Penumbra.Api"]
 	path = Penumbra.Api
-	url = https://github.com/Ottermandias/Penumbra.Api.git
+	url = https://github.com/MTVirux/Penumbra.Api.git
 	branch = main
 [submodule "Glamourer.Api"]
 	path = Glamourer.Api
-	url = https://github.com/Ottermandias/Glamourer.Api.git
+	url = https://github.com/MTVirux/Glamourer.Api.git
 	branch = main
