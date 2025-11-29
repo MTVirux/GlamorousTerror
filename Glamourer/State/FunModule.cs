@@ -417,10 +417,18 @@ public unsafe class FunModule : IDisposable
 
     private void SetGender(ref CustomizeArray customize)
     {
-        if (!_codes.Enabled(CodeService.CodeFlag.SixtyThree))
-            return;
-
-        _customizations.ChangeGender(ref customize, customize.Gender is Gender.Male ? Gender.Female : Gender.Male);
+        if (_codes.Enabled(CodeService.CodeFlag.AllMale))
+        {
+            _customizations.ChangeGender(ref customize, Gender.Male);
+        }
+        else if (_codes.Enabled(CodeService.CodeFlag.AllFemale))
+        {
+            _customizations.ChangeGender(ref customize, Gender.Female);
+        }
+        else if (_codes.Enabled(CodeService.CodeFlag.SixtyThree))
+        {
+            _customizations.ChangeGender(ref customize, customize.Gender is Gender.Male ? Gender.Female : Gender.Male);
+        }
     }
 
     private void RandomizeCustomize(ref CustomizeArray customize)

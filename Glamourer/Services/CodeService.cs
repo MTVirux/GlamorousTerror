@@ -23,15 +23,17 @@ public class CodeService
         OopsHrothgar = 0x000800,
         OopsViera    = 0x001000,
         //Artisan      = 0x002000,
-        SixtyThree   = 0x004000,
-        Shirts       = 0x008000,
-        World        = 0x010000,
-        Elephants    = 0x020000,
-        Crown        = 0x040000,
-        Dolphins     = 0x080000,
-        Face         = 0x100000,
-        Manderville  = 0x200000,
-        Smiles       = 0x400000,
+        AllMale      = 0x002000,
+        AllFemale    = 0x004000,
+        SixtyThree   = 0x008000,
+        Shirts       = 0x010000,
+        World        = 0x020000,
+        Elephants    = 0x040000,
+        Crown        = 0x080000,
+        Dolphins     = 0x100000,
+        Face         = 0x200000,
+        Manderville  = 0x400000,
+        Smiles       = 0x800000,
     }
 
     public const CodeFlag DyeCodes =
@@ -48,6 +50,8 @@ public class CodeService
       | CodeFlag.OopsAuRa
       | CodeFlag.OopsHrothgar
       | CodeFlag.OopsViera;
+
+    public const CodeFlag GenderCodes = CodeFlag.AllMale | CodeFlag.AllFemale | CodeFlag.SixtyThree;
 
     public const CodeFlag FullCodes = CodeFlag.Face | CodeFlag.Manderville | CodeFlag.Smiles;
 
@@ -115,15 +119,17 @@ public class CodeService
             CodeFlag.OopsAuRa     => (FullCodes | RaceCodes) & ~CodeFlag.OopsAuRa,
             CodeFlag.OopsHrothgar => (FullCodes | RaceCodes) & ~CodeFlag.OopsHrothgar,
             CodeFlag.OopsViera    => (FullCodes | RaceCodes) & ~CodeFlag.OopsViera,
-            CodeFlag.SixtyThree   => FullCodes,
+            CodeFlag.AllMale      => (FullCodes | GenderCodes) & ~CodeFlag.AllMale,
+            CodeFlag.AllFemale    => (FullCodes | GenderCodes) & ~CodeFlag.AllFemale,
+            CodeFlag.SixtyThree   => (FullCodes | GenderCodes) & ~CodeFlag.SixtyThree,
             CodeFlag.Shirts       => 0,
             CodeFlag.World        => (FullCodes | DyeCodes | GearCodes) & ~CodeFlag.World,
             CodeFlag.Elephants    => (FullCodes | DyeCodes | GearCodes) & ~CodeFlag.Elephants,
             CodeFlag.Crown        => FullCodes,
             CodeFlag.Dolphins     => (FullCodes | DyeCodes | GearCodes) & ~CodeFlag.Dolphins,
-            CodeFlag.Face         => (FullCodes | RaceCodes | SizeCodes | GearCodes | DyeCodes | CodeFlag.Crown | CodeFlag.SixtyThree) & ~CodeFlag.Face,
-            CodeFlag.Manderville  => (FullCodes | RaceCodes | SizeCodes | GearCodes | DyeCodes | CodeFlag.Crown | CodeFlag.SixtyThree) & ~CodeFlag.Manderville,
-            CodeFlag.Smiles       => (FullCodes | RaceCodes | SizeCodes | GearCodes | DyeCodes | CodeFlag.Crown | CodeFlag.SixtyThree) & ~CodeFlag.Smiles,
+            CodeFlag.Face         => (FullCodes | RaceCodes | GenderCodes | SizeCodes | GearCodes | DyeCodes | CodeFlag.Crown) & ~CodeFlag.Face,
+            CodeFlag.Manderville  => (FullCodes | RaceCodes | GenderCodes | SizeCodes | GearCodes | DyeCodes | CodeFlag.Crown) & ~CodeFlag.Manderville,
+            CodeFlag.Smiles       => (FullCodes | RaceCodes | GenderCodes | SizeCodes | GearCodes | DyeCodes | CodeFlag.Crown) & ~CodeFlag.Smiles,
             _                     => 0,
         };
 
@@ -143,6 +149,8 @@ public class CodeService
             CodeFlag.OopsAuRa     => "Turns all players to Au Ra.",
             CodeFlag.OopsHrothgar => "Turns all players to Hrothgar.",
             CodeFlag.OopsViera    => "Turns all players to Viera.",
+            CodeFlag.AllMale      => "Turns all players to male.",
+            CodeFlag.AllFemale    => "Turns all players to female.",
             CodeFlag.SixtyThree   => "Inverts the gender of every player.",
             CodeFlag.Shirts       => "Highlights all items in the Unlocks tab as if they were unlocked.",
             CodeFlag.World        => "Sets every player except the player character themselves to job-appropriate gear.",
@@ -171,6 +179,8 @@ public class CodeService
             CodeFlag.OopsAuRa     => "All Au Ra",
             CodeFlag.OopsHrothgar => "All Hrothgar",
             CodeFlag.OopsViera    => "All Viera",
+            CodeFlag.AllMale      => "All Male",
+            CodeFlag.AllFemale    => "All Female",
             CodeFlag.SixtyThree   => "Invert Genders",
             CodeFlag.Shirts       => "Show All Items Unlocked",
             CodeFlag.World        => "Job-Appropriate Gear",
