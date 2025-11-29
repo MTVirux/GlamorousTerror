@@ -16,7 +16,7 @@ public class CodeDrawer(Configuration config, CodeService codeService, FunModule
 
     public void Draw()
     {
-        var show = ImGui.CollapsingHeader("Fun Modes");
+        var show = ImGui.CollapsingHeader("Fun Modes (UNSTABLE)");
         DrawTooltip();
 
         if (!show)
