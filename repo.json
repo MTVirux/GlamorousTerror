@@ -1,7 +1,7 @@
 [
   {
     "Author": "MTVirux",
-    "Name": "Glamourer++",
+    "Name": "Glamourer",
     "Punchline": "Custom build of Glamourer by MTVirux",
     "Description": "Custom build of Glamourer by MTVirux",
     "Tags": [
@@ -16,7 +16,7 @@
       "Design",
       "Character"
     ],
-    "InternalName": "Glamourer++",
+    "InternalName": "Glamourer",
     "AssemblyVersion": "10.0.0.0",
     "TestingAssemblyVersion": "10.0.0.0",
     "RepoUrl": "https://github.com/MTVirux/Glamourer",
