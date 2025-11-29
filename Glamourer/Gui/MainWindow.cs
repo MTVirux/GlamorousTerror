@@ -236,10 +236,10 @@ public class MainWindow : Window, IDisposable
     private string GetLabel()
         => (Glamourer.Version.Length == 0, _config.Ephemeral.IncognitoMode) switch
         {
-            (true, true)   => "Glamourer (Incognito Mode)###GlamourerMainWindow",
-            (true, false)  => "Glamourer###GlamourerMainWindow",
-            (false, false) => $"Glamourer v{Glamourer.Version}###GlamourerMainWindow",
-            (false, true)  => $"Glamourer v{Glamourer.Version} (Incognito Mode)###GlamourerMainWindow",
+            (true, true)   => "Glamourous Terror (Incognito Mode)###GlamourerMainWindow",
+            (true, false)  => "Glamourous Terror###GlamourerMainWindow",
+            (false, false) => $"Glamourous Terror v{Glamourer.Version}###GlamourerMainWindow",
+            (false, true)  => $"Glamourous Terror v{Glamourer.Version} (Incognito Mode)###GlamourerMainWindow",
         };
 
     private void DrawProblemWindow(string text)
