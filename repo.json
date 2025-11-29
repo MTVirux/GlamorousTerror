@@ -1,35 +1,33 @@
-[
-  {
-    "Author": "MTVirux",
-    "Name": "Glamourous Terror",
-    "Punchline": "Custom build of Glamourer by MTVirux",
-    "Description": "Custom build of Glamourer by MTVirux",
-    "Tags": [
-      "Appearance",
-      "Glamour",
-      "Race",
-      "Outfit",
-      "Armor",
-      "Clothes",
-      "Skins",
-      "Customization",
-      "Design",
-      "Character"
-    ],
-    "InternalName": "Glamourer",
-    "AssemblyVersion": "10.0.0.0",
-    "TestingAssemblyVersion": "10.0.0.0",
-    "RepoUrl": "https://github.com/MTVirux/Glamourer",
-    "ApplicableVersion": "any",
-    "DalamudApiLevel": 13,
-    "TestingDalamudApiLevel": 13,
-    "IsHide": "False",
-    "IsTestingExclusive": "False",
-    "DownloadCount": 1,
-    "LastUpdate": 1618608322,
-    "DownloadLinkInstall": "https://github.com/MTVirux/Glamourer/releases/download/10.0.0.0/Glamourer.zip",
-    "DownloadLinkUpdate": "https://github.com/MTVirux/Glamourer/releases/download/10.0.0.0/Glamourer.zip",
-    "DownloadLinkTesting": "https://github.com/MTVirux/Glamourer/releases/download/10.0.0.0/Glamourer.zip",
-    "IconUrl": "https://raw.githubusercontent.com/MTVirux/Glamourer/main/images/icon.png"
-  }
-]
+{
+  "Author": "MTVirux",
+  "Name": "Glamourous Terror",
+  "Punchline": "Custom build of Glamourer by MTVirux",
+  "Description": "Custom build of Glamourer by MTVirux",
+  "Tags": [
+    "Appearance",
+    "Glamour",
+    "Race",
+    "Outfit",
+    "Armor",
+    "Clothes",
+    "Skins",
+    "Customization",
+    "Design",
+    "Character"
+  ],
+  "InternalName": "Glamourer",
+  "AssemblyVersion": "10.0.0.1",
+  "TestingAssemblyVersion": "10.0.0.1",
+  "RepoUrl": "https://github.com/MTVirux/Glamourer",
+  "ApplicableVersion": "any",
+  "DalamudApiLevel": 13,
+  "TestingDalamudApiLevel": 13,
+  "IsHide": "False",
+  "IsTestingExclusive": "False",
+  "DownloadCount": 1,
+  "LastUpdate": 1618608322,
+  "DownloadLinkInstall": "https://github.com/MTVirux/Glamourer/releases/download/10.0.0.0/Glamourer.zip",
+  "DownloadLinkUpdate": "https://github.com/MTVirux/Glamourer/releases/download/10.0.0.0/Glamourer.zip",
+  "DownloadLinkTesting": "https://github.com/MTVirux/Glamourer/releases/download/10.0.0.0/Glamourer.zip",
+  "IconUrl": "https://raw.githubusercontent.com/MTVirux/Glamourer/main/images/icon.png"
+}
