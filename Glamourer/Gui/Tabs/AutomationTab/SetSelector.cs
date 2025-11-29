@@ -7,6 +7,8 @@ using OtterGui;
 using OtterGui.Classes;
 using OtterGui.Extensions;
 using OtterGui.Raii;
+using Penumbra.GameData.Actors;
+using Penumbra.GameData.Enums;
 using Penumbra.GameData.Interop;
 using Penumbra.String;
 using ImGuiClip = OtterGui.ImGuiClip;
@@ -202,10 +204,72 @@ public class SetSelector : IDisposable
         if (IncognitoMode)
             text = pair.Set.Identifiers[0].Incognito(text);
         var textSize  = ImGui.CalcTextSize(text);
-        var textColor = pair.Set.Identifiers.Any(_objects.ContainsKey) ? ColorId.AutomationActorAvailable : ColorId.AutomationActorUnavailable;
+        var textColor = HasMatchingActor(pair.Set) ? ColorId.AutomationActorAvailable : ColorId.AutomationActorUnavailable;
         ImGui.SetCursorPos(new Vector2(ImGui.GetContentRegionAvail().X - textSize.X,
             ImGui.GetCursorPosY() - ImGui.GetTextLineHeightWithSpacing()));
         ImGuiUtil.TextColored(textColor.Value(), text);
+    }
+
+    private bool HasMatchingActor(AutoDesignSet set)
+    {
+        foreach (var id in set.Identifiers)
+        {
+            // Check for exact match
+            if (_objects.ContainsKey(id))
+                return true;
+
+            // Check for wildcard match
+            var nameStr = id.PlayerName.ToString();
+            if (nameStr.Contains('*'))
+            {
+                var pattern = "^" + System.Text.RegularExpressions.Regex.Escape(nameStr).Replace("\\*", ".*") + "$";
+                var regex = new System.Text.RegularExpressions.Regex(pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                
+                foreach (var (actorId, _) in _objects)
+                {
+                    if (actorId.Type != id.Type)
+                        continue;
+
+                    // For retainers, also check the RetainerType to avoid matching Bell retainers with Mannequins
+                    if (actorId.Type == IdentifierType.Retainer)
+                    {
+                        if (id.Retainer != ActorIdentifier.RetainerType.Both && actorId.Retainer != ActorIdentifier.RetainerType.Both && id.Retainer != actorId.Retainer)
+                            continue;
+                    }
+
+                    if (actorId.DataId == id.DataId)
+                    {
+                        var actorNameStr = actorId.PlayerName.ToString();
+                        if (regex.IsMatch(actorNameStr))
+                        {
+                            // Don't show wildcard match as active if the actor already has an exact match automation
+                            var hasExactMatch = false;
+                            foreach (var designSet in _manager)
+                            {
+                                if (!designSet.Enabled)
+                                    continue;
+
+                                foreach (var otherId in designSet.Identifiers)
+                                {
+                                    if (otherId.Equals(actorId))
+                                    {
+                                        hasExactMatch = true;
+                                        break;
+                                    }
+                                }
+                                if (hasExactMatch)
+                                    break;
+                            }
+                            
+                            if (hasExactMatch)
+                                continue;
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     private void DrawSelectionButtons()
