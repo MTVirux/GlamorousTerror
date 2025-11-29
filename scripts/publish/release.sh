@@ -22,20 +22,24 @@ fi
 
 echo "New tag: $newTag"
 
+# Get the repository root (parent of scripts folder)
+scriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repoRoot="$(dirname "$(dirname "$scriptDir}")"
+
 # Update version in Glamourer.csproj
 echo "Updating Glamourer.csproj..."
-csprojPath="./Glamourer/Glamourer.csproj"
+csprojPath="$repoRoot/Glamourer/Glamourer.csproj"
 sed -i "s/<FileVersion>[0-9.]*<\/FileVersion>/<FileVersion>$newTag<\/FileVersion>/" "$csprojPath"
 sed -i "s/<AssemblyVersion>[0-9.]*<\/AssemblyVersion>/<AssemblyVersion>$newTag<\/AssemblyVersion>/" "$csprojPath"
 
 # Update version in Glamourer.json
 echo "Updating Glamourer.json..."
-glamourerJsonPath="./Glamourer/Glamourer.json"
+glamourerJsonPath="$repoRoot/Glamourer/Glamourer.json"
 jq --arg version "$newTag" '.AssemblyVersion = $version' "$glamourerJsonPath" > tmp.$$.json && mv tmp.$$.json "$glamourerJsonPath"
 
 # Update version in repo.json
 echo "Updating repo.json..."
-repoJsonPath="./repo.json"
+repoJsonPath="$repoRoot/repo.json"
 jq --arg version "$newTag" '.[0].AssemblyVersion = $version | .[0].TestingAssemblyVersion = $version' "$repoJsonPath" > tmp.$$.json && mv tmp.$$.json "$repoJsonPath"
 
 # Commit the version changes
