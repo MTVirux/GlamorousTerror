@@ -26,9 +26,13 @@ if (-not $latestTag) {
 Write-Host "New testing tag: $newTag"
 Write-Host "Version: $version"
 
+# Get the repository root (parent of scripts folder)
+$scriptDir = Split-Path -Parent $PSScriptRoot
+$repoRoot = Split-Path -Parent $scriptDir
+
 # Update version in Glamourer.csproj
 Write-Host "Updating Glamourer.csproj..."
-$csprojPath = ".\Glamourer\Glamourer.csproj"
+$csprojPath = Join-Path $repoRoot "Glamourer\Glamourer.csproj"
 $csproj = Get-Content $csprojPath -Raw
 $csproj = $csproj -replace '<FileVersion>[\d\.]+</FileVersion>', "<FileVersion>$version</FileVersion>"
 $csproj = $csproj -replace '<AssemblyVersion>[\d\.]+</AssemblyVersion>', "<AssemblyVersion>$version</AssemblyVersion>"
@@ -36,14 +40,14 @@ Set-Content -Path $csprojPath -Value $csproj -NoNewline
 
 # Update version in Glamourer.json
 Write-Host "Updating Glamourer.json..."
-$glamourerJsonPath = ".\Glamourer\Glamourer.json"
+$glamourerJsonPath = Join-Path $repoRoot "Glamourer\Glamourer.json"
 $glamourerJson = Get-Content $glamourerJsonPath -Raw | ConvertFrom-Json
 $glamourerJson.AssemblyVersion = $version
 $glamourerJson | ConvertTo-Json -Depth 10 | Set-Content -Path $glamourerJsonPath
 
 # Update version in repo.json
 Write-Host "Updating repo.json..."
-$repoJsonPath = ".\repo.json"
+$repoJsonPath = Join-Path $repoRoot "repo.json"
 $repoJson = Get-Content $repoJsonPath -Raw | ConvertFrom-Json
 $repoJson[0].TestingAssemblyVersion = $version
 $repoJson | ConvertTo-Json -Depth 10 | Set-Content -Path $repoJsonPath
