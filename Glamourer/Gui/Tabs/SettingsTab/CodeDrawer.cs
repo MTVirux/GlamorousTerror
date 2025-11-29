@@ -9,7 +9,7 @@ using Penumbra.GameData.Interop;
 
 namespace Glamourer.Gui.Tabs.SettingsTab;
 
-public class CodeDrawer(Configuration config, CodeService codeService, FunModule funModule, StateManager stateManager, ActorObjectManager actors) : IUiService
+public class CodeDrawer(CodeService codeService, FunModule funModule, StateManager stateManager, ActorObjectManager actors) : IUiService
 {
     private static ReadOnlySpan<byte> Tooltip
         => "Fun Modes allow for some easter-egg features that usually manipulate the appearance of all players you see (including yourself) in some way."u8;
