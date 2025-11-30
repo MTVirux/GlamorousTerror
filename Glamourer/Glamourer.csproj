@@ -1,7 +1,7 @@
 <Project Sdk="Dalamud.NET.Sdk/13.1.0">
   <PropertyGroup>
     <RootNamespace>Glamourer</RootNamespace>
-    <AssemblyName>Glamourer</AssemblyName>
+    <AssemblyName>GlamorousTerror</AssemblyName>
     <FileVersion>1.0.0.9</FileVersion>
     <AssemblyVersion>1.0.0.9</AssemblyVersion>
     <Product>Glamourer</Product>
