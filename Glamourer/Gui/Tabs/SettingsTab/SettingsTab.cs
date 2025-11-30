@@ -11,6 +11,7 @@ using Glamourer.Interop;
 using Glamourer.Interop.PalettePlus;
 using Glamourer.Services;
 using OtterGui;
+using OtterGui.Classes;
 using OtterGui.Raii;
 using OtterGui.Text;
 using OtterGui.Widgets;
@@ -28,6 +29,8 @@ public class SettingsTab(
     CollectionOverrideDrawer overrides,
     CodeDrawer codeDrawer,
     AutoDesignApplier autoDesignApplier,
+    AutoDesignManager autoDesignManager,
+    DesignManager designManager,
     PcpService pcpService)
     : ITab
 {
@@ -63,6 +66,36 @@ public class SettingsTab(
         }
         ImGui.Separator();
 
+        if (ImGui.Button("Migrate Old Glamourer Designs"))
+        {
+            try
+            {
+                var migrated = designManager.MigrateOldDesigns();
+                if (migrated)
+                    Glamourer.Messager.NotificationMessage("Migrated old Glamourer designs.", Dalamud.Interface.ImGuiNotification.NotificationType.Success);
+                else
+                    Glamourer.Messager.NotificationMessage("No old Glamourer design file found.", Dalamud.Interface.ImGuiNotification.NotificationType.Info);
+            }
+            catch (Exception e)
+            {
+                Glamourer.Messager.NotificationMessage(e, "Failed to migrate old designs.", Dalamud.Interface.ImGuiNotification.NotificationType.Error);
+            }
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("Reload Designs from Config"))
+        {
+            try
+            {
+                designManager.ReloadDesigns();
+                Glamourer.Messager.NotificationMessage("Reloaded designs from configuration.", Dalamud.Interface.ImGuiNotification.NotificationType.Success);
+            }
+            catch (Exception e)
+            {
+                Glamourer.Messager.NotificationMessage(e, "Failed to reload designs.", Dalamud.Interface.ImGuiNotification.NotificationType.Error);
+            }
+        }
+
         using (ImUtf8.Child("SettingsChild"u8, default))
         {
             DrawBehaviorSettings();
@@ -88,19 +121,28 @@ public class SettingsTab(
             var version = obj["Version"]?.ToObject<int>() ?? 0;
             if (version != 1)
                 return false;
-            var sets = obj["Sets"]?.ToObject<List<Glamourer.Automation.AutoDesignSet>>();
+            var sets = obj["Sets"]?.ToObject<List<AutoDesignSet>>();
             if (sets == null)
                 return false;
-            var manager = ServiceManager.GetService<Glamourer.Automation.AutoDesignManager>();
+            var manager = autoDesignManager;
             int imported = 0;
             foreach (var set in sets)
             {
                 if (!manager.Any(existing => existing.Name == set.Name))
                 {
-                    manager.Add(set);
-                    imported++;
+                    if (set.Identifiers.Length == 0)
+                        continue;
+
+                    manager.AddDesignSet(set.Name, set.Identifiers[0]);
+                    var idx = manager.Count - 1;
+                    if (set.Enabled)
+                        manager.SetState(idx, true);
+                    manager.ChangeBaseState(idx, set.BaseState);
+                    manager.ChangeResetSettings(idx, set.ResetTemporarySettings);
+                    ++imported;
                 }
             }
+
             return imported > 0;
         }
         catch { return false; }
@@ -113,7 +155,7 @@ public class SettingsTab(
         if (!Directory.Exists(backupDir))
             return false;
         var backupFiles = Directory.GetFiles(backupDir, "*.json");
-        var manager = ServiceManager.GetService<Glamourer.Designs.DesignManager>();
+        var manager = designManager;
         int imported = 0;
         foreach (var backupFile in backupFiles)
         {
@@ -121,7 +163,7 @@ public class SettingsTab(
             {
                 var text = File.ReadAllText(backupFile);
                 var data = Newtonsoft.Json.Linq.JObject.Parse(text);
-                var design = Glamourer.Designs.Design.LoadDesign(null, null, null, null, data); // You may need to pass actual services here
+                var design = Design.LoadDesign(null, null, null, null, data); // You may need to pass actual services here
                 if (!manager.Designs.Any(d => d.Identifier == design.Identifier))
                 {
                     manager.Designs.Add(design);
