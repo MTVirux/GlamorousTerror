@@ -24,9 +24,9 @@ csprojPath="$repoRoot/Glamourer/Glamourer.csproj"
 sed -i "s/<FileVersion>[0-9.]*<\/FileVersion>/<FileVersion>$version<\/FileVersion>/" "$csprojPath"
 sed -i "s/<AssemblyVersion>[0-9.]*<\/AssemblyVersion>/<AssemblyVersion>$version<\/AssemblyVersion>/" "$csprojPath"
 
-# Update version in Glamourer.json
-echo "Updating Glamourer.json..."
-glamourerJsonPath="$repoRoot/Glamourer/Glamourer.json"
+# Update version in GlamorousTerror.json
+echo "Updating GlamorousTerror.json..."
+glamourerJsonPath="$repoRoot/Glamourer/GlamorousTerror.json"
 jq --arg version "$version" '.AssemblyVersion = $version' "$glamourerJsonPath" > tmp.$$.json && mv tmp.$$.json "$glamourerJsonPath"
 
 # Update version in repo.json

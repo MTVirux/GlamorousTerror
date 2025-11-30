@@ -1,0 +1,28 @@
+{
+  "Author": "MTVirux",
+  "Name": "Glamourous Terror",
+  "Punchline": "Custom build of Glamourer by MTVirux",
+  "Description": "Custom build of Glamourer by MTVirux. Requires Penumbra to function.",
+  "Tags": [
+    "Appearance",
+    "Glamour",
+    "Race",
+    "Outfit",
+    "Armor",
+    "Clothes",
+    "Skins",
+    "Customization",
+    "Design",
+    "Character",
+    "Terror",
+    "Sea Of Terror"
+  ],
+  "LastUpdate": 1618608322,
+  "InternalName": "GlamorousTerror",
+  "AssemblyVersion": "1.0.0.0",
+  "RepoUrl": "https://github.com/MTVirux/Glamourer",
+  "ApplicableVersion": "any",
+  "DalamudApiLevel": 13,
+  "ImageUrls": null,
+  "IconUrl": "https://raw.githubusercontent.com/MTVirux/Glamourer/main/images/icon.png"
+}

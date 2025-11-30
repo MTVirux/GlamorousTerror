@@ -29,7 +29,7 @@ jobs:
       - name: write version into json
         run: |
           $ver = '${{ github.ref_name }}' -replace 'testing_'
-          $path = './Glamourer/bin/Debug/Glamourer.json'
+          $path = './Glamourer/bin/Debug/GlamorousTerror.json'
           $json = Get-Content -Raw $path | ConvertFrom-Json
           $json.AssemblyVersion = $ver
           $content = $json | ConvertTo-Json
