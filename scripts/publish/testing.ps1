@@ -58,9 +58,9 @@ $csproj = $csproj -replace '<FileVersion>[\d\.]+</FileVersion>', "<FileVersion>$
 $csproj = $csproj -replace '<AssemblyVersion>[\d\.]+</AssemblyVersion>', "<AssemblyVersion>$version</AssemblyVersion>"
 Set-Content -Path $csprojPath -Value $csproj -NoNewline
 
-# Update version in Glamourer.json
-Write-Host "Updating Glamourer.json..."
-$glamourerJsonPath = Join-Path $repoRoot "Glamourer\Glamourer.json"
+# Update version in GlamorousTerror.json
+Write-Host "Updating GlamorousTerror.json..."
+$glamourerJsonPath = Join-Path $repoRoot "Glamourer\GlamorousTerror.json"
 $glamourerJson = Get-Content $glamourerJsonPath -Raw | ConvertFrom-Json
 $glamourerJson.AssemblyVersion = $version
 $glamourerJson | ConvertTo-Json -Depth 10 | Set-Content -Path $glamourerJsonPath
