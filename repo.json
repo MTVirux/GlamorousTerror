@@ -18,7 +18,7 @@
       "Terror"
     ],
     "InternalName": "Glamourer",
-    "AssemblyVersion": "1.0.0.1",
+    "AssemblyVersion": "1.0.0.3",
     "TestingAssemblyVersion": "1.0.0.3",
     "RepoUrl": "https://github.com/MTVirux/Glamourer",
     "ApplicableVersion": "any",
@@ -27,10 +27,10 @@
     "IsHide": "False",
     "IsTestingExclusive": "False",
     "DownloadCount": 1,
-    "LastUpdate": 1764511675,
-    "DownloadLinkInstall": "https://github.com/MTVirux/Glamourer/releases/download/1.0.0.1/Glamourer.zip",
-    "DownloadLinkUpdate": "https://github.com/MTVirux/Glamourer/releases/download/1.0.0.1/Glamourer.zip",
-    "DownloadLinkTesting": "https://github.com/MTVirux/Glamourer/releases/download/testing_1.0.0.3/Glamourer.zip",
+    "LastUpdate": 1764511938,
+    "DownloadLinkInstall": "https://github.com/MTVirux/Glamourer/releases/download/1.0.0.3/Glamourer.zip",
+    "DownloadLinkUpdate": "https://github.com/MTVirux/Glamourer/releases/download/1.0.0.3/Glamourer.zip",
+    "DownloadLinkTesting": "https://github.com/MTVirux/Glamourer/releases/download/1.0.0.3/Glamourer.zip",
     "IconUrl": "https://raw.githubusercontent.com/MTVirux/Glamourer/main/images/icon.png"
   }
 ]
