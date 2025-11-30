@@ -451,34 +451,80 @@ public class SettingsTab(
     /// <summary> Draw the Import subsection. </summary>
     private void DrawImportSettings()
     {
-        if (!ImUtf8.CollapsingHeader("Import"u8))
+        if (!ImUtf8.CollapsingHeader("Glamourer Import/Export"u8))
             return;
 
         ImGui.PushStyleColor(ImGuiCol.Text, 0xFF0000FF);
-        ImGui.Text("Warning: Pressing this button will delete all GlamourousTerror data.");
+        ImGui.Text("Warning: USE THESE SETTINGS CAREFULLY! Improper use may lead to data loss.");
         ImGui.PopStyleColor();
 
         if (ImGui.Button("Import from Glamourer"))
+            ImGui.OpenPopup("ImportFromGlamourerConfirm");
+
+        ImGui.SameLine();
+        if (ImGui.Button("Export to Glamourer"))
+            ImGui.OpenPopup("ExportToGlamourerConfirm");
+
+        if (ImGui.BeginPopupModal("ImportFromGlamourerConfirm", ImGuiWindowFlags.AlwaysAutoResize))
         {
-            try
+            ImUtf8.Text("This will overwrite the current GlamourousTerror config with the data from a neighboring Glamourer config directory.\nThis operation may delete or replace your existing data. Continue?");
+            ImGui.Dummy(Vector2.UnitY * 4);
+            if (ImGui.Button("Confirm"))
             {
-                var source = Path.Combine(fileNames.ConfigDirectory, "..", "Glamourer");
-                if (Directory.Exists(source))
+                try
                 {
-                    CopyDirectory(source, fileNames.ConfigDirectory);
-                    designManager.ReloadDesigns();
-                    autoDesignManager.Reload();
-                    Glamourer.Messager.NotificationMessage("Imported data from Glamourer and reloaded.", Dalamud.Interface.ImGuiNotification.NotificationType.Success);
+                    var source = Path.Combine(fileNames.ConfigDirectory, "..", "Glamourer");
+                    if (Directory.Exists(source))
+                    {
+                        CopyDirectory(source, fileNames.ConfigDirectory);
+                        designManager.ReloadDesigns();
+                        autoDesignManager.Reload();
+                        Glamourer.Messager.NotificationMessage("Imported data from Glamourer and reloaded.", Dalamud.Interface.ImGuiNotification.NotificationType.Success);
+                    }
+                    else
+                    {
+                        Glamourer.Messager.NotificationMessage("Glamourer config directory not found.", Dalamud.Interface.ImGuiNotification.NotificationType.Warning);
+                    }
                 }
-                else
+                catch (Exception e)
                 {
-                    Glamourer.Messager.NotificationMessage("Glamourer config directory not found.", Dalamud.Interface.ImGuiNotification.NotificationType.Warning);
+                    Glamourer.Messager.NotificationMessage(e, "Failed to import from Glamourer.", Dalamud.Interface.ImGuiNotification.NotificationType.Error);
                 }
+
+                ImGui.CloseCurrentPopup();
             }
-            catch (Exception e)
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel"))
+                ImGui.CloseCurrentPopup();
+
+            ImGui.EndPopup();
+        }
+
+        if (ImGui.BeginPopupModal("ExportToGlamourerConfirm", ImGuiWindowFlags.AlwaysAutoResize))
+        {
+            ImUtf8.Text("This will copy your current GlamourousTerror config to a neighboring Glamourer config directory.\nExisting files in the target directory may be overwritten. Continue?");
+            ImGui.Dummy(Vector2.UnitY * 4);
+            if (ImGui.Button("Confirm"))
             {
-                Glamourer.Messager.NotificationMessage(e, "Failed to import from Glamourer.", Dalamud.Interface.ImGuiNotification.NotificationType.Error);
+                try
+                {
+                    var target = Path.Combine(fileNames.ConfigDirectory, "..", "Glamourer");
+                    Directory.CreateDirectory(target);
+                    CopyDirectory(fileNames.ConfigDirectory, target);
+                    Glamourer.Messager.NotificationMessage("Exported data to Glamourer.", Dalamud.Interface.ImGuiNotification.NotificationType.Success);
+                }
+                catch (Exception e)
+                {
+                    Glamourer.Messager.NotificationMessage(e, "Failed to export to Glamourer.", Dalamud.Interface.ImGuiNotification.NotificationType.Error);
+                }
+
+                ImGui.CloseCurrentPopup();
             }
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel"))
+                ImGui.CloseCurrentPopup();
+
+            ImGui.EndPopup();
         }
     }
 
