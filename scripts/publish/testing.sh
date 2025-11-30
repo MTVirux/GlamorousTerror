@@ -18,9 +18,9 @@ echo "Local branch is up to date with remote."
 latestTag=$(git tag -l "testing_*" | sort -V | tail -n 1)
 
 if [ -z "$latestTag" ]; then
-    echo "No existing testing tags found. Creating initial tag testing_1.0.0.0"
-    newTag="testing_1.0.0.0"
-    version="1.0.0.0"
+    echo "No existing testing tags found. Creating initial tag testing_1.0.1.0"
+    newTag="testing_1.0.1.0"
+    version="1.0.1.0"
 else
     echo "Latest testing tag: $latestTag"
     

@@ -39,7 +39,7 @@ Write-Host "`n=== Next Versions ===" -ForegroundColor Cyan
 
 # Calculate next release version
 if (-not $latestReleaseTag) {
-    $nextReleaseVersion = "1.0.0.0"
+    $nextReleaseVersion = "1.0.1.0"
 } else {
     $parts = $latestReleaseTag -split '\.'
     $lastIndex = $parts.Length - 1
@@ -64,8 +64,8 @@ if ($testingTagExists) {
 
 # Calculate next testing version
 if (-not $latestTestingTag) {
-    $nextTestingVersion = "1.0.0.0"
-    $nextTestingTag = "testing_1.0.0.0"
+    $nextTestingVersion = "1.0.1.0"
+    $nextTestingTag = "testing_1.0.1.0"
 } else {
     $version = $latestTestingTag -replace '^testing_', ''
     $parts = $version -split '\.'

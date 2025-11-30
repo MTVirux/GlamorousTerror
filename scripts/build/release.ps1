@@ -3,8 +3,8 @@ git fetch --tags
 $latestTag = git tag -l | Where-Object { $_ -notmatch '^testing_' } | Sort-Object -Descending | Select-Object -First 1
 
 if (-not $latestTag) {
-    Write-Host "No existing tags found. Using version 1.0.0.0"
-    $version = "1.0.0.0"
+    Write-Host "No existing tags found. Using version 1.0.1.0"
+    $version = "1.0.1.0"
 } else {
     Write-Host "Latest tag: $latestTag"
     $version = $latestTag
