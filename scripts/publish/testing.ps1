@@ -45,16 +45,9 @@ $glamourerJson = Get-Content $glamourerJsonPath -Raw | ConvertFrom-Json
 $glamourerJson.AssemblyVersion = $version
 $glamourerJson | ConvertTo-Json -Depth 10 | Set-Content -Path $glamourerJsonPath
 
-# Update version in repo.json
-Write-Host "Updating repo.json..."
-$repoJsonPath = Join-Path $repoRoot "repo.json"
-$repoJson = Get-Content $repoJsonPath -Raw | ConvertFrom-Json
-$repoJson[0].TestingAssemblyVersion = $version
-$repoJson | ConvertTo-Json -Depth 10 | Set-Content -Path $repoJsonPath
-
 # Commit the version changes
 Write-Host "Committing version changes..."
-git add $csprojPath $glamourerJsonPath $repoJsonPath
+git add $csprojPath $glamourerJsonPath
 git commit -m "Bump testing version to $version"
 
 # Push the commit first

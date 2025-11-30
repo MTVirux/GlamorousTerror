@@ -1,6 +1,6 @@
-# Get the latest tag from the remote repository
+# Get the latest tag from the remote repository (excluding testing tags)
 git fetch --tags
-$latestTag = git describe --tags --abbrev=0 2>$null
+$latestTag = git tag -l | Where-Object { $_ -notmatch '^testing_' } | Sort-Object -Descending | Select-Object -First 1
 
 if (-not $latestTag) {
     Write-Host "No existing tags found. Using version 1.0.0.0"
