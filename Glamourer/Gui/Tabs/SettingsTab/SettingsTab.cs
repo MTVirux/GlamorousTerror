@@ -15,6 +15,7 @@ using OtterGui.Classes;
 using OtterGui.Raii;
 using OtterGui.Text;
 using OtterGui.Widgets;
+using System.IO;
 
 namespace Glamourer.Gui.Tabs.SettingsTab;
 
@@ -31,7 +32,8 @@ public class SettingsTab(
     AutoDesignApplier autoDesignApplier,
     AutoDesignManager autoDesignManager,
     DesignManager designManager,
-    PcpService pcpService)
+    PcpService pcpService,
+    FilenameService fileNames)
     : ITab
 {
     private readonly VirtualKey[] _validKeys = keys.GetValidVirtualKeys().Prepend(VirtualKey.NO_KEY).ToArray();
@@ -61,6 +63,7 @@ public class SettingsTab(
             DrawDesignDefaultSettings();
             DrawInterfaceSettings();
             DrawColorSettings();
+            DrawImportSettings();
             overrides.Draw();
             codeDrawer.Draw();
         }
@@ -445,6 +448,40 @@ public class SettingsTab(
         ImGui.NewLine();
     }
 
+    /// <summary> Draw the Import subsection. </summary>
+    private void DrawImportSettings()
+    {
+        if (!ImUtf8.CollapsingHeader("Import"u8))
+            return;
+
+        ImGui.PushStyleColor(ImGuiCol.Text, 0xFF0000FF);
+        ImGui.Text("Warning: Pressing this button will delete all GlamourousTerror data.");
+        ImGui.PopStyleColor();
+
+        if (ImGui.Button("Import from Glamourer"))
+        {
+            try
+            {
+                var source = Path.Combine(fileNames.ConfigDirectory, "..", "Glamourer");
+                if (Directory.Exists(source))
+                {
+                    CopyDirectory(source, fileNames.ConfigDirectory);
+                    designManager.ReloadDesigns();
+                    autoDesignManager.Reload();
+                    Glamourer.Messager.NotificationMessage("Imported data from Glamourer and reloaded.", Dalamud.Interface.ImGuiNotification.NotificationType.Success);
+                }
+                else
+                {
+                    Glamourer.Messager.NotificationMessage("Glamourer config directory not found.", Dalamud.Interface.ImGuiNotification.NotificationType.Warning);
+                }
+            }
+            catch (Exception e)
+            {
+                Glamourer.Messager.NotificationMessage(e, "Failed to import from Glamourer.", Dalamud.Interface.ImGuiNotification.NotificationType.Error);
+            }
+        }
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     private void Checkbox(ReadOnlySpan<byte> label, ReadOnlySpan<byte> tooltip, bool current, Action<bool> setter)
     {
@@ -564,4 +601,19 @@ public class SettingsTab(
             HeightDisplayType.OlympicPool => "Olympic-size swimming Pools (0.000 Pools)"u8,
             _                             => ""u8,
         };
+
+    private static void CopyDirectory(string sourceDir, string destDir)
+    {
+        var dir = new DirectoryInfo(sourceDir);
+        if (!dir.Exists)
+            return;
+
+        Directory.CreateDirectory(destDir);
+
+        foreach (var file in dir.GetFiles())
+            file.CopyTo(Path.Combine(destDir, file.Name), true);
+
+        foreach (var subDir in dir.GetDirectories())
+            CopyDirectory(subDir.FullName, Path.Combine(destDir, subDir.Name));
+    }
 }

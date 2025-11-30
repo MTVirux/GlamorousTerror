@@ -457,6 +457,9 @@ public class AutoDesignManager : ISavable, IReadOnlyList<AutoDesignSet>, IDispos
         return false;
     }
 
+    public void Reload()
+        => Load();
+
     private void Load()
     {
         var file = _saveService.FileNames.AutomationFile;
