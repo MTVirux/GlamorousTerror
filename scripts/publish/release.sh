@@ -46,10 +46,38 @@ jq --arg version "$newTag" '.[0].AssemblyVersion = $version | .[0].TestingAssemb
 echo "Committing version changes..."
 git add "$csprojPath" "$glamourerJsonPath" "$repoJsonPath"
 git commit -m "Bump version to $newTag"
+
+# Push the commit first
+echo "Pushing version changes to main..."
 git push origin main
 
-# Create and push the new tag
-echo "Creating and pushing tag..."
+# Verify the commit is on remote with retry logic
+echo "Verifying commit on remote..."
+maxAttempts=90  # 3 minutes at 2 seconds per attempt
+attempt=0
+verified=false
+
+while [ $attempt -lt $maxAttempts ]; do
+    git fetch origin main
+    localCommit=$(git rev-parse HEAD)
+    remoteCommit=$(git rev-parse origin/main)
+    
+    if [ "$localCommit" = "$remoteCommit" ]; then
+        verified=true
+        break
+    fi
+    
+    attempt=$((attempt + 1))
+    echo "Waiting for commit to sync... (Attempt $attempt/$maxAttempts)"
+    sleep 2
+done
+
+if [ "$verified" = false ]; then
+    echo "Error: Failed to verify commit on remote after 3 minutes. Local and remote are out of sync."
+    exit 1
+fi
+
+echo "Commit verified on remote. Creating and pushing tag..."
 git tag "$newTag"
 git push origin "$newTag"
 

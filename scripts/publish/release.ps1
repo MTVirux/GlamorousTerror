@@ -51,10 +51,38 @@ $repoJson | ConvertTo-Json -Depth 10 | Set-Content -Path $repoJsonPath
 Write-Host "Committing version changes..."
 git add $csprojPath $glamourerJsonPath $repoJsonPath
 git commit -m "Bump version to $newTag"
+
+# Push the commit first
+Write-Host "Pushing version changes to main..."
 git push origin main
 
-# Create and push the new tag
-Write-Host "Creating and pushing tag..."
+# Verify the commit is on remote with retry logic
+Write-Host "Verifying commit on remote..."
+$maxAttempts = 90  # 3 minutes at 2 seconds per attempt
+$attempt = 0
+$verified = $false
+
+while ($attempt -lt $maxAttempts) {
+    git fetch origin main
+    $localCommit = git rev-parse HEAD
+    $remoteCommit = git rev-parse origin/main
+    
+    if ($localCommit -eq $remoteCommit) {
+        $verified = $true
+        break
+    }
+    
+    $attempt++
+    Write-Host "Waiting for commit to sync... (Attempt $attempt/$maxAttempts)"
+    Start-Sleep -Seconds 2
+}
+
+if (-not $verified) {
+    Write-Error "Failed to verify commit on remote after 3 minutes. Local and remote are out of sync."
+    exit 1
+}
+
+Write-Host "Commit verified on remote. Creating and pushing tag..."
 git tag $newTag
 git push origin $newTag
 
