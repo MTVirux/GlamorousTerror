@@ -28,7 +28,7 @@ echo -e "\033[36m=== Next Versions ===\033[0m"
 
 # Calculate next release version
 if [ -z "$latestReleaseTag" ]; then
-    nextReleaseVersion="1.0.0.0"
+    nextReleaseVersion="1.0.1.0"
 else
     IFS='.' read -r -a parts <<< "$latestReleaseTag"
     lastIndex=$((${#parts[@]} - 1))
@@ -48,8 +48,8 @@ fi
 
 # Calculate next testing version
 if [ -z "$latestTestingTag" ]; then
-    nextTestingVersion="1.0.0.0"
-    nextTestingTag="testing_1.0.0.0"
+    nextTestingVersion="1.0.1.0"
+    nextTestingTag="testing_1.0.1.0"
 else
     version=${latestTestingTag#testing_}
     IFS='.' read -r -a parts <<< "$version"

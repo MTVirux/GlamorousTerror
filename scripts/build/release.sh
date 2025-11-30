@@ -5,8 +5,8 @@ git fetch --tags
 latestTag=$(git tag -l | grep -v '^testing_' | sort -V | tail -n 1)
 
 if [ -z "$latestTag" ]; then
-    echo "No existing tags found. Using version 1.0.0.0"
-    version="1.0.0.0"
+    echo "No existing tags found. Using version 1.0.1.0"
+    version="1.0.1.0"
 else
     echo "Latest tag: $latestTag"
     version="$latestTag"
