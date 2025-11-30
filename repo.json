@@ -17,7 +17,7 @@
   ],
   "InternalName": "Glamourer",
   "AssemblyVersion": "10.0.0.1",
-  "TestingAssemblyVersion": "10.0.0.1",
+  "TestingAssemblyVersion": "1.0.0.0",
   "RepoUrl": "https://github.com/MTVirux/Glamourer",
   "ApplicableVersion": "any",
   "DalamudApiLevel": 13,
