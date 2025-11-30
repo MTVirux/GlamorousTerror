@@ -50,6 +50,19 @@ public class SettingsTab(
                 autoDesignApplier.OnEnableAutoDesignsChanged(v);
             });
 
+        // Import button for automations and designs
+        ImGui.Separator();
+        if (ImGui.Button("Import Automations & Designs from Backup"))
+        {
+            var automationImported = ImportAutomationsFromBackup();
+            var designsImported = ImportDesignsFromBackup();
+            if (automationImported || designsImported)
+                Glamourer.Messager.NotificationMessage("Imported automations and/or designs from backup.", Dalamud.Interface.ImGuiNotification.NotificationType.Success);
+            else
+                Glamourer.Messager.NotificationMessage("No new automations or designs found in backup.", Dalamud.Interface.ImGuiNotification.NotificationType.Info);
+        }
+        ImGui.Separator();
+
         using (ImUtf8.Child("SettingsChild"u8, default))
         {
             DrawBehaviorSettings();
@@ -59,6 +72,65 @@ public class SettingsTab(
             overrides.Draw();
             codeDrawer.Draw();
         }
+
+    }
+
+    // Handler for importing automations from backup
+    private bool ImportAutomationsFromBackup()
+    {
+        var backupPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "XIVLauncher", "backups", "Glamourer", "automation.json");
+        if (!File.Exists(backupPath))
+            return false;
+        try
+        {
+            var text = File.ReadAllText(backupPath);
+            var obj = Newtonsoft.Json.Linq.JObject.Parse(text);
+            var version = obj["Version"]?.ToObject<int>() ?? 0;
+            if (version != 1)
+                return false;
+            var sets = obj["Sets"]?.ToObject<List<Glamourer.Automation.AutoDesignSet>>();
+            if (sets == null)
+                return false;
+            var manager = ServiceManager.GetService<Glamourer.Automation.AutoDesignManager>();
+            int imported = 0;
+            foreach (var set in sets)
+            {
+                if (!manager.Any(existing => existing.Name == set.Name))
+                {
+                    manager.Add(set);
+                    imported++;
+                }
+            }
+            return imported > 0;
+        }
+        catch { return false; }
+    }
+
+    // Handler for importing designs from backup
+    private bool ImportDesignsFromBackup()
+    {
+        var backupDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "XIVLauncher", "backups", "Glamourer", "designs");
+        if (!Directory.Exists(backupDir))
+            return false;
+        var backupFiles = Directory.GetFiles(backupDir, "*.json");
+        var manager = ServiceManager.GetService<Glamourer.Designs.DesignManager>();
+        int imported = 0;
+        foreach (var backupFile in backupFiles)
+        {
+            try
+            {
+                var text = File.ReadAllText(backupFile);
+                var data = Newtonsoft.Json.Linq.JObject.Parse(text);
+                var design = Glamourer.Designs.Design.LoadDesign(null, null, null, null, data); // You may need to pass actual services here
+                if (!manager.Designs.Any(d => d.Identifier == design.Identifier))
+                {
+                    manager.Designs.Add(design);
+                    imported++;
+                }
+            }
+            catch { }
+        }
+        return imported > 0;
     }
 
     private void DrawBehaviorSettings()
