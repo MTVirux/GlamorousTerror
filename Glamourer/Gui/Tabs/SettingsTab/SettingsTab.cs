@@ -53,48 +53,7 @@ public class SettingsTab(
                 autoDesignApplier.OnEnableAutoDesignsChanged(v);
             });
 
-        // Import button for automations and designs
-        ImGui.Separator();
-        if (ImGui.Button("Import Automations & Designs from Backup"))
-        {
-            var automationImported = ImportAutomationsFromBackup();
-            var designsImported = ImportDesignsFromBackup();
-            if (automationImported || designsImported)
-                Glamourer.Messager.NotificationMessage("Imported automations and/or designs from backup.", Dalamud.Interface.ImGuiNotification.NotificationType.Success);
-            else
-                Glamourer.Messager.NotificationMessage("No new automations or designs found in backup.", Dalamud.Interface.ImGuiNotification.NotificationType.Info);
-        }
-        ImGui.Separator();
 
-        if (ImGui.Button("Migrate Old Glamourer Designs"))
-        {
-            try
-            {
-                var migrated = designManager.MigrateOldDesigns();
-                if (migrated)
-                    Glamourer.Messager.NotificationMessage("Migrated old Glamourer designs.", Dalamud.Interface.ImGuiNotification.NotificationType.Success);
-                else
-                    Glamourer.Messager.NotificationMessage("No old Glamourer design file found.", Dalamud.Interface.ImGuiNotification.NotificationType.Info);
-            }
-            catch (Exception e)
-            {
-                Glamourer.Messager.NotificationMessage(e, "Failed to migrate old designs.", Dalamud.Interface.ImGuiNotification.NotificationType.Error);
-            }
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button("Reload Designs from Config"))
-        {
-            try
-            {
-                designManager.ReloadDesigns();
-                Glamourer.Messager.NotificationMessage("Reloaded designs from configuration.", Dalamud.Interface.ImGuiNotification.NotificationType.Success);
-            }
-            catch (Exception e)
-            {
-                Glamourer.Messager.NotificationMessage(e, "Failed to reload designs.", Dalamud.Interface.ImGuiNotification.NotificationType.Error);
-            }
-        }
 
         using (ImUtf8.Child("SettingsChild"u8, default))
         {
