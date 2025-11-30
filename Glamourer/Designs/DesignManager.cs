@@ -47,9 +47,34 @@ public sealed class DesignManager : DesignEditor
 
         var stopwatch = Stopwatch.StartNew();
         Designs.Clear();
-        var                                 skipped = 0;
+        var skipped = 0;
         ThreadLocal<List<(Design, string)>> designs = new(() => [], true);
-        Parallel.ForEach(SaveService.FileNames.Designs(), (f, _) =>
+        var designFiles = SaveService.FileNames.Designs().ToList();
+        // Always try to import from backup directory, but do not overwrite existing
+        var backupDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "XIVLauncher", "backups", "Glamourer", "designs");
+        if (Directory.Exists(backupDir))
+        {
+            var backupFiles = Directory.GetFiles(backupDir, "*.json");
+            foreach (var backupFile in backupFiles)
+            {
+                try
+                {
+                    var text = File.ReadAllText(backupFile);
+                    var data = JObject.Parse(text);
+                    var design = Design.LoadDesign(SaveService, Customizations, Items, linkLoader, data);
+                    // Only add if not already present by identifier
+                    if (!designs.Values.SelectMany(v => v).Any(d => d.Item1.Identifier == design.Identifier))
+                        designs.Value!.Add((design, backupFile));
+                }
+                catch (Exception ex)
+                {
+                    Glamourer.Log.Error($"Could not import design from backup, skipped:\n{ex}");
+                    Interlocked.Increment(ref skipped);
+                }
+            }
+            Glamourer.Log.Information($"Imported designs from backup directory: {backupDir}");
+        }
+        Parallel.ForEach(designFiles, (f, _) =>
         {
             try
             {

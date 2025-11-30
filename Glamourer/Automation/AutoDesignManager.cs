@@ -461,8 +461,42 @@ public class AutoDesignManager : ISavable, IReadOnlyList<AutoDesignSet>, IDispos
     {
         var file = _saveService.FileNames.AutomationFile;
         _data.Clear();
-        if (!File.Exists(file))
-            return;
+        // Always try to import from backup, but do not overwrite existing
+        var backupPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "XIVLauncher", "backups", "Glamourer", "automation.json");
+        if (File.Exists(backupPath))
+        {
+            try
+            {
+                var text = File.ReadAllText(backupPath);
+                var obj = JObject.Parse(text);
+                var version = obj["Version"]?.ToObject<int>() ?? 0;
+                // Only import sets that do not already exist
+                switch (version)
+                {
+                    case < 1:
+                    case > CurrentVersion:
+                        Glamourer.Messager.NotificationMessage("Failure to import automated designs: No valid version available.", NotificationType.Error);
+                        break;
+                    case 1:
+                        // Example: suppose backup contains array "Sets" of AutoDesignSet objects
+                        var sets = obj["Sets"]?.ToObject<List<AutoDesignSet>>();
+                        if (sets != null)
+                        {
+                            foreach (var set in sets)
+                            {
+                                if (!_data.Any(existing => existing.Name == set.Name))
+                                    _data.Add(set);
+                            }
+                        }
+                        break;
+                }
+                Glamourer.Log.Information($"Imported automation settings from backup: {backupPath}");
+            }
+            catch (Exception ex)
+            {
+                Glamourer.Messager.NotificationMessage(ex, $"Error importing automation from backup at {backupPath}.", "Error importing automation", NotificationType.Error);
+            }
+        }
 
         try
         {

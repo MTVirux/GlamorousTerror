@@ -119,24 +119,47 @@ public class Configuration : IPluginConfiguration, ISavable
 
     private void Load(ConfigMigrationService migrator)
     {
+        // If main config does not exist, try to import from backup/external file
         if (!File.Exists(_saveService.FileNames.ConfigFile))
-            return;
-
-        if (File.Exists(_saveService.FileNames.ConfigFile))
-            try
+        {
+            // Example: look for XIVLauncher/backups/Glamourer/config.json (customize path as needed)
+            var backupPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "XIVLauncher", "backups", "Glamourer", "config.json");
+            if (File.Exists(backupPath))
             {
-                var text = File.ReadAllText(_saveService.FileNames.ConfigFile);
-                JsonConvert.PopulateObject(text, this, new JsonSerializerSettings
+                try
                 {
-                    Error = HandleDeserializationError,
-                });
+                    var text = File.ReadAllText(backupPath);
+                    JsonConvert.PopulateObject(text, this, new JsonSerializerSettings
+                    {
+                        Error = HandleDeserializationError,
+                    });
+                    Glamourer.Log.Information($"Imported Glamourer settings from backup: {backupPath}");
+                }
+                catch (Exception ex)
+                {
+                    Glamourer.Messager.NotificationMessage(ex,
+                        $"Error importing Configuration from backup at {backupPath}.",
+                        "Error importing Configuration", NotificationType.Error);
+                }
             }
-            catch (Exception ex)
+            return;
+        }
+
+        // If main config exists, load as usual
+        try
+        {
+            var text = File.ReadAllText(_saveService.FileNames.ConfigFile);
+            JsonConvert.PopulateObject(text, this, new JsonSerializerSettings
             {
-                Glamourer.Messager.NotificationMessage(ex,
-                    "Error reading Configuration, reverting to default.\nYou may be able to restore your configuration using the rolling backups in the XIVLauncher/backups/Glamourer directory.",
-                    "Error reading Configuration", NotificationType.Error);
-            }
+                Error = HandleDeserializationError,
+            });
+        }
+        catch (Exception ex)
+        {
+            Glamourer.Messager.NotificationMessage(ex,
+                "Error reading Configuration, reverting to default.\nYou may be able to restore your configuration using the rolling backups in the XIVLauncher/backups/Glamourer directory.",
+                "Error reading Configuration", NotificationType.Error);
+        }
 
         migrator.Migrate(this);
         return;
