@@ -32,7 +32,6 @@ jobs:
           $path = './Glamourer/bin/Release/Glamourer.json'
           $json = Get-Content -Raw $path | ConvertFrom-Json
           $json.AssemblyVersion = $ver
-          $json.LastUpdate = [int][double]::Parse((Get-Date -UFormat %s))
           $content = $json | ConvertTo-Json
           set-content -Path $path -Value $content
       - name: Archive
