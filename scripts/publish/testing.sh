@@ -43,14 +43,9 @@ echo "Updating Glamourer.json..."
 glamourerJsonPath="$repoRoot/Glamourer/Glamourer.json"
 jq --arg version "$version" '.AssemblyVersion = $version' "$glamourerJsonPath" > tmp.$$.json && mv tmp.$$.json "$glamourerJsonPath"
 
-# Update version in repo.json
-echo "Updating repo.json..."
-repoJsonPath="$repoRoot/repo.json"
-jq --arg version "$version" '.[0].TestingAssemblyVersion = $version' "$repoJsonPath" > tmp.$$.json && mv tmp.$$.json "$repoJsonPath"
-
 # Commit the version changes
 echo "Committing version changes..."
-git add "$csprojPath" "$glamourerJsonPath" "$repoJsonPath"
+git add "$csprojPath" "$glamourerJsonPath"
 git commit -m "Bump testing version to $version"
 
 # Push the commit first

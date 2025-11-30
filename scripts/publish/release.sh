@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Get the latest tag from the repository
-latestTag=$(git describe --tags --abbrev=0 2>/dev/null)
+# Get the latest tag from the repository (excluding testing tags)
+latestTag=$(git tag -l | grep -v '^testing_' | sort -V | tail -n 1)
 
 if [ -z "$latestTag" ]; then
     echo "No existing tags found. Creating initial tag 1.0.0.0"
@@ -45,14 +45,9 @@ echo "Updating Glamourer.json..."
 glamourerJsonPath="$repoRoot/Glamourer/Glamourer.json"
 jq --arg version "$newTag" '.AssemblyVersion = $version' "$glamourerJsonPath" > tmp.$$.json && mv tmp.$$.json "$glamourerJsonPath"
 
-# Update version in repo.json
-echo "Updating repo.json..."
-repoJsonPath="$repoRoot/repo.json"
-jq --arg version "$newTag" '.[0].AssemblyVersion = $version | .[0].TestingAssemblyVersion = $version' "$repoJsonPath" > tmp.$$.json && mv tmp.$$.json "$repoJsonPath"
-
 # Commit the version changes
 echo "Committing version changes..."
-git add "$csprojPath" "$glamourerJsonPath" "$repoJsonPath"
+git add "$csprojPath" "$glamourerJsonPath"
 git commit -m "Bump version to $newTag"
 
 # Push the commit first
