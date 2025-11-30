@@ -19,6 +19,7 @@ public sealed class DesignManager : DesignEditor
 {
     public readonly  DesignStorage  Designs;
     private readonly HumanModelList _humans;
+    private readonly DesignLinkLoader _linkLoader;
 
     public DesignManager(SaveService saveService, ItemManager items, CustomizeService customizations,
         DesignChanged @event, HumanModelList humans, DesignStorage storage, DesignLinkLoader designLinkLoader, Configuration config)
@@ -26,10 +27,9 @@ public sealed class DesignManager : DesignEditor
     {
         Designs = storage;
         _humans = humans;
+        _linkLoader = designLinkLoader;
 
-        LoadDesigns(designLinkLoader);
         CreateDesignFolder(saveService);
-        MigrateOldDesigns();
         designLinkLoader.SetAllObjects();
     }
 
@@ -39,6 +39,11 @@ public sealed class DesignManager : DesignEditor
     /// Clear currently loaded designs and load all designs anew from file.
     /// Invalid data is fixed, but changes are not saved until manual changes.
     /// </summary>
+    public void ReloadDesigns()
+    {
+        LoadDesigns(_linkLoader);
+    }
+
     private void LoadDesigns(DesignLinkLoader linkLoader)
     {
         _humans.Awaiter.Wait();
@@ -66,7 +71,7 @@ public sealed class DesignManager : DesignEditor
             }
         });
 
-        List<(Design, string)> invalidNames = [];
+        List<(Design, string)> invalidNames = new();
         foreach (var (design, path) in designs.Values.SelectMany(v => v))
         {
             if (design.Identifier.ToString() != Path.GetFileNameWithoutExtension(path))
@@ -499,10 +504,10 @@ public sealed class DesignManager : DesignEditor
         ApplyDesign(design, other);
     }
 
-    private void MigrateOldDesigns()
+    public bool MigrateOldDesigns()
     {
         if (!File.Exists(SaveService.FileNames.MigrationDesignFile))
-            return;
+            return false;
 
         var errors     = 0;
         var skips      = 0;
@@ -565,6 +570,8 @@ public sealed class DesignManager : DesignEditor
         {
             Glamourer.Log.Error($"Could not move migrated design file {SaveService.FileNames.MigrationDesignFile} to backup file:\n{ex}");
         }
+        return true;
+
     }
 
     /// <summary> Try to ensure existence of the design folder. </summary>
