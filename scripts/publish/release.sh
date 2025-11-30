@@ -45,9 +45,15 @@ echo "Updating Glamourer.json..."
 glamourerJsonPath="$repoRoot/Glamourer/Glamourer.json"
 jq --arg version "$newTag" '.AssemblyVersion = $version' "$glamourerJsonPath" > tmp.$$.json && mv tmp.$$.json "$glamourerJsonPath"
 
+# Update LastUpdate in repo.json
+echo "Updating repo.json..."
+repoJsonPath="$repoRoot/repo.json"
+timestamp=$(date +%s)
+jq --argjson timestamp "$timestamp" '.[0].LastUpdate = $timestamp' "$repoJsonPath" > tmp.$$.json && mv tmp.$$.json "$repoJsonPath"
+
 # Commit the version changes
 echo "Committing version changes..."
-git add "$csprojPath" "$glamourerJsonPath"
+git add "$csprojPath" "$glamourerJsonPath" "$repoJsonPath"
 git commit -m "[CI] Update release version to $newTag"
 
 # Push the commit first

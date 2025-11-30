@@ -53,9 +53,17 @@ $glamourerJson = Get-Content $glamourerJsonPath -Raw | ConvertFrom-Json
 $glamourerJson.AssemblyVersion = $newTag
 $glamourerJson | ConvertTo-Json -Depth 10 | Set-Content -Path $glamourerJsonPath
 
+# Update LastUpdate in repo.json
+Write-Host "Updating repo.json..."
+$repoJsonPath = Join-Path $repoRoot "repo.json"
+$repoJson = Get-Content $repoJsonPath -Raw | ConvertFrom-Json
+$timestamp = [int][double]::Parse((Get-Date -UFormat %s))
+$repoJson[0].LastUpdate = $timestamp
+$repoJson | ConvertTo-Json -Depth 10 | Set-Content -Path $repoJsonPath
+
 # Commit the version changes
 Write-Host "Committing version changes..."
-git add $csprojPath $glamourerJsonPath
+git add $csprojPath $glamourerJsonPath $repoJsonPath
 git commit -m "[CI] Update release version to $newTag"
 
 # Push the commit first
