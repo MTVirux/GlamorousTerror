@@ -32,6 +32,7 @@ jobs:
           $path = './Glamourer/bin/Debug/Glamourer.json'
           $json = Get-Content -Raw $path | ConvertFrom-Json
           $json.AssemblyVersion = $ver
+          $json.LastUpdate = [int][double]::Parse((Get-Date -UFormat %s))
           $content = $json | ConvertTo-Json
           set-content -Path $path -Value $content
       - name: Archive
@@ -68,7 +69,8 @@ jobs:
           $ver = $verT -replace 'testing_'
           $path = './repo.json'
           $json = Get-Content -Raw $path | ConvertFrom-Json
-          $json[0].TestingAssemblyVersion = $ver          
+          $json[0].TestingAssemblyVersion = $ver
+          $json[0].LastUpdate = [int][double]::Parse((Get-Date -UFormat %s))
           $json[0].DownloadLinkTesting = $json.DownloadLinkTesting -replace '[^/]+/Glamourer.zip',"$verT/Glamourer.zip"
           $content = $json | ConvertTo-Json -AsArray
           set-content -Path $path -Value $content
