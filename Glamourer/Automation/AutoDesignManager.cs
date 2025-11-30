@@ -462,6 +462,9 @@ public class AutoDesignManager : ISavable, IReadOnlyList<AutoDesignSet>, IDispos
         var file = _saveService.FileNames.AutomationFile;
         _data.Clear();
 
+        if (!File.Exists(file))
+            return;
+
         try
         {
             var text    = File.ReadAllText(file);
