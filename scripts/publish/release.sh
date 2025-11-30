@@ -22,6 +22,14 @@ fi
 
 echo "New tag: $newTag"
 
+# Check if equivalent testing tag exists
+testingTag="testing_$newTag"
+if ! git tag -l "$testingTag" | grep -q .; then
+    echo "Error: Testing tag '$testingTag' does not exist. Please create and test a testing release before publishing a production release."
+    exit 1
+fi
+echo "Found testing tag: $testingTag"
+
 # Get the repository root (parent of scripts folder)
 scriptDir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repoRoot="$(dirname "$(dirname "$scriptDir}")"

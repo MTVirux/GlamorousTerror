@@ -20,6 +20,15 @@ if (-not $latestTag) {
 
 Write-Host "New tag: $newTag"
 
+# Check if equivalent testing tag exists
+$testingTag = "testing_$newTag"
+$testingTagExists = git tag -l $testingTag
+if (-not $testingTagExists) {
+    Write-Error "Testing tag '$testingTag' does not exist. Please create and test a testing release before publishing a production release."
+    exit 1
+}
+Write-Host "Found testing tag: $testingTag"
+
 # Get the repository root (parent of scripts folder)
 $scriptDir = Split-Path -Parent $PSScriptRoot
 $repoRoot = Split-Path -Parent $scriptDir
