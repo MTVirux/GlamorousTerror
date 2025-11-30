@@ -204,6 +204,9 @@ public class ActorPanel
         if (_customizationDrawer.Draw(_state!.ModelData.Customize, _state.IsLocked, _lockedRedraw))
             _stateManager.ChangeEntireCustomize(_state, _customizationDrawer.Customize, _customizationDrawer.Changed, ApplySettings.Manual);
 
+        // Apply hover preview for customization popups (Face, Hairstyle, FacePaint).
+        _customizationDrawer.ApplyHoverPreview(_stateManager, _state!);
+
         EquipmentDrawer.DrawMetaToggle(ToggleDrawData.FromState(MetaIndex.Wetness, _stateManager, _state));
         ImGui.Dummy(new Vector2(ImGui.GetTextLineHeight() / 2));
     }

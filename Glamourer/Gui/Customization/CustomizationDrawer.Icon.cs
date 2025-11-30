@@ -1,6 +1,7 @@
 ﻿using Dalamud.Interface.Textures.TextureWraps;
 using Glamourer.GameData;
 using Glamourer.Unlocks;
+using Glamourer.Designs;
 using Dalamud.Bindings.ImGui;
 using OtterGui;
 using OtterGui.Extensions;
@@ -13,6 +14,15 @@ namespace Glamourer.Gui.Customization;
 public partial class CustomizationDrawer
 {
     private const string IconSelectorPopup = "Style Picker";
+
+    // State for icon popup hover preview
+    private bool           _iconPopupOpen;
+    private bool           _iconPopupActiveThisFrame;
+    private bool           _iconPopupSelectionMade;
+    private CustomizeIndex _iconPopupIndex;
+    private CustomizeValue _iconPopupOriginalValue;
+    private int?           _iconPopupHoveredIndex;
+    private CustomizeValue _iconPopupHoveredValue;
 
     private void DrawIconSelector(CustomizeIndex index)
     {
@@ -75,8 +85,19 @@ public partial class CustomizationDrawer
         if (!popup)
             return;
 
+        // Mark popup as active this frame and initialize open state.
+        _iconPopupActiveThisFrame = true;
+        if (!_iconPopupOpen)
+        {
+            _iconPopupOpen = true;
+            _iconPopupIndex = _currentIndex;
+            _iconPopupOriginalValue = _customize[_currentIndex];
+            _iconPopupSelectionMade = false;
+        }
+
         using var style = ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, Vector2.Zero)
             .Push(ImGuiStyleVar.FrameRounding, 0);
+        var prevValue = _customize[_currentIndex];
         for (var i = 0; i < _currentCount; ++i)
         {
             var custom = _set.Data(_currentIndex, i, _customize.Face);
@@ -91,10 +112,34 @@ public partial class CustomizationDrawer
 
                 if (ImGui.ImageButton(wrap?.Handle ?? icon.GetWrapOrEmpty().Handle, _iconSize))
                 {
-                    UpdateValue(custom.Value);
-                    ImGui.CloseCurrentPopup();
+                    // If the clicked option is already selected, close the popup.
+                    if (custom.Value == prevValue)
+                    {
+                        ImGui.CloseCurrentPopup();
+                    }
+                    else
+                    {
+                        UpdateValue(custom.Value);
+                        // Mark that a selection was made inside the popup so we don't revert on close.
+                        _iconPopupSelectionMade = true;
+                        // For non-face/hairstyle/facepaint selectors, close the popup after selecting
+                        // a new option. For face/hairstyle/facepaint, keep it open to allow multiple picks.
+                        if (_currentIndex is not (Penumbra.GameData.Enums.CustomizeIndex.Face
+                                                 or Penumbra.GameData.Enums.CustomizeIndex.Hairstyle
+                                                 or Penumbra.GameData.Enums.CustomizeIndex.FacePaint))
+                            ImGui.CloseCurrentPopup();
+                    }
                 }
-
+                // Track hovered option for previewing.
+                if (ImGui.IsItemHovered())
+                {
+                    _iconPopupHoveredIndex = i;
+                    _iconPopupHoveredValue = custom.Value;
+                }
+                else if (_iconPopupHoveredIndex == i)
+                {
+                    _iconPopupHoveredIndex = null;
+                }
                 if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
                     if (isFavorite)
                         _favorites.Remove(_set.Gender, _set.Clan, _currentIndex, custom.Value);
@@ -102,8 +147,19 @@ public partial class CustomizationDrawer
                         _favorites.TryAdd(_set.Gender, _set.Clan, _currentIndex, custom.Value);
 
                 if (hasIcon)
-                    ImGuiUtil.HoverIconTooltip(wrap!, _iconSize,
-                        FavoriteManager.TypeAllowed(_currentIndex) ? "Right-Click to toggle favorite." : string.Empty);
+                {
+                    var parts = new List<string>();
+                    if (FavoriteManager.TypeAllowed(_currentIndex))
+                        parts.Add("Right-Click to toggle favorite.");
+
+                    if (_currentIndex is Penumbra.GameData.Enums.CustomizeIndex.Face
+                        or Penumbra.GameData.Enums.CustomizeIndex.Hairstyle
+                        or Penumbra.GameData.Enums.CustomizeIndex.FacePaint)
+                        parts.Add("Hold CTRL to preview on actor.");
+
+                    var tip = parts.Count > 0 ? string.Join("\n", parts) : string.Empty;
+                    ImGuiUtil.HoverIconTooltip(wrap!, _iconSize, tip);
+                }
 
                 var text      = custom.Value.ToString();
                 var textWidth = ImGui.CalcTextSize(text).X;
@@ -226,6 +282,58 @@ public partial class CustomizationDrawer
                 ImGuiUtil.HoverIconTooltip(wrap!, _iconSize);
             if (idx % 4 != 3)
                 ImGui.SameLine();
+        }
+    }
+
+    /// <summary>
+    /// Apply hover preview changes to the provided actor state. This will preview the hovered
+    /// customization option while holding Control for face/hairstyle/facepaint, and restore
+    /// the original value when the popup closes or when not hovering.
+    /// </summary>
+    public void ApplyHoverPreview(State.StateManager stateManager, State.ActorState state)
+    {
+        // If popup was active this frame, handle preview or restoration while open.
+        if (_iconPopupActiveThisFrame)
+        {
+            // If hovering an option and Ctrl is held, and this is a previewable index, apply it.
+            if (_iconPopupHoveredIndex.HasValue && ImGui.GetIO().KeyCtrl
+                && (_iconPopupIndex is CustomizeIndex.Face or CustomizeIndex.Hairstyle or CustomizeIndex.FacePaint))
+            {
+                var current = state.ModelData.Customize[_iconPopupIndex];
+                if (current != _iconPopupHoveredValue)
+                    stateManager.ChangeCustomize(state, _iconPopupIndex, _iconPopupHoveredValue, ApplySettings.Manual);
+            }
+            else
+            {
+                // Not hovering or Ctrl not held: restore original while popup open if no selection was made.
+                if (!_iconPopupSelectionMade)
+                {
+                    var current = state.ModelData.Customize[_iconPopupIndex];
+                    if (current != _iconPopupOriginalValue)
+                        stateManager.ChangeCustomize(state, _iconPopupIndex, _iconPopupOriginalValue, ApplySettings.Manual);
+                }
+            }
+
+            // Reset per-frame active marker for next frame.
+            _iconPopupActiveThisFrame = false;
+            return;
+        }
+
+        // Popup was open previously but not active this frame -> it has been closed.
+        if (_iconPopupOpen)
+        {
+            // If no selection was made inside the popup, restore original value.
+            if (!_iconPopupSelectionMade)
+            {
+                var current = state.ModelData.Customize[_iconPopupIndex];
+                if (current != _iconPopupOriginalValue)
+                    stateManager.ChangeCustomize(state, _iconPopupIndex, _iconPopupOriginalValue, ApplySettings.Manual);
+            }
+
+            // Clear open state and hovered index.
+            _iconPopupOpen = false;
+            _iconPopupHoveredIndex = null;
+            _iconPopupSelectionMade = false;
         }
     }
 }
