@@ -31,6 +31,7 @@ public sealed class DesignManager : DesignEditor
 
         CreateDesignFolder(saveService);
         designLinkLoader.SetAllObjects();
+        LoadDesigns(_linkLoader);
     }
 
     #region Design Management
