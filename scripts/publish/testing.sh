@@ -47,7 +47,7 @@ jq --arg version "$version" '.AssemblyVersion = $version' "$glamourerJsonPath" >
 # Commit the version changes
 echo "Committing version changes..."
 git add "$csprojPath" "$glamourerJsonPath"
-git commit -m "Bump testing version to $version"
+git commit -m "[CI] Update testing version to $version"
 
 # Push the commit first
 echo "Pushing version changes to main..."

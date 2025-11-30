@@ -37,7 +37,7 @@ $glamourerJson | ConvertTo-Json -Depth 10 | Set-Content -Path $glamourerJsonPath
 # Commit the version changes
 Write-Host "Committing version changes..."
 git add $csprojPath $glamourerJsonPath
-git commit -m "Bump version to $newTag"
+git commit -m "[CI] Update release version to $newTag"
 
 # Push the commit first
 Write-Host "Pushing version changes to main..."
