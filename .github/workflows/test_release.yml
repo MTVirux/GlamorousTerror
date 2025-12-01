@@ -35,7 +35,7 @@ jobs:
           $content = $json | ConvertTo-Json
           set-content -Path $path -Value $content
       - name: Archive
-        run: Compress-Archive -Path Glamourer/bin/Debug/* -DestinationPath Glamourer.zip
+        run: Compress-Archive -Path Glamourer/bin/Debug/* -DestinationPath GlamorousTerror.zip
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -58,8 +58,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
-          asset_path: ./Glamourer.zip
-          asset_name: Glamourer.zip
+          asset_path: ./GlamorousTerror.zip
+          asset_name: GlamorousTerror.zip
           asset_content_type: application/zip
 
       - name: Write out repo.json
@@ -70,7 +70,7 @@ jobs:
           $json = Get-Content -Raw $path | ConvertFrom-Json
           $json[0].TestingAssemblyVersion = $ver
           $json[0].LastUpdate = [int][double]::Parse((Get-Date -UFormat %s))
-          $json[0].DownloadLinkTesting = $json.DownloadLinkTesting -replace '[^/]+/Glamourer.zip',"$verT/Glamourer.zip"
+          $json[0].DownloadLinkTesting = $json.DownloadLinkTesting -replace '[^/]+/GlamorousTerror.zip',"$verT/GlamorousTerror.zip"
           $content = $json | ConvertTo-Json -AsArray
           set-content -Path $path -Value $content
 
