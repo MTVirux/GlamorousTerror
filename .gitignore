@@ -3,3 +3,6 @@ obj/
 .vs/
 private/
 scripts/
+.vscode/
+.github/
+!.github/workflows
