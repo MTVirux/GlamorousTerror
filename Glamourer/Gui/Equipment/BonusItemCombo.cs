@@ -40,7 +40,6 @@ public sealed class BonusItemCombo : FilterComboCache<EquipItem>
     {
         HoveredItem = null;
         IsOpen = true;
-        ItemSelected = false;
         base.DrawList(width, itemHeight);
         if (NewSelection != null && Items.Count > NewSelection.Value)
         {
@@ -118,6 +117,12 @@ public sealed class BonusItemCombo : FilterComboCache<EquipItem>
 
     public void ResetSelection()
         => ItemSelected = false;
+
+    protected override void Cleanup()
+    {
+        base.Cleanup();
+        IsOpen = false;
+    }
 
     protected override void OnClosePopup()
     {

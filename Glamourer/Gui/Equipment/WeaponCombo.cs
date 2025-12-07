@@ -38,7 +38,6 @@ public sealed class WeaponCombo : FilterComboCache<EquipItem>
     {
         HoveredItem = null;
         IsOpen = true;
-        ItemSelected = false;
         base.DrawList(width, itemHeight);
         if (NewSelection != null && Items.Count > NewSelection.Value)
         {
@@ -92,6 +91,12 @@ public sealed class WeaponCombo : FilterComboCache<EquipItem>
 
     public void ResetSelection()
         => ItemSelected = false;
+
+    protected override void Cleanup()
+    {
+        base.Cleanup();
+        IsOpen = false;
+    }
 
     protected override void OnClosePopup()
     {
