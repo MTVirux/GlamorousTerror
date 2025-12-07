@@ -40,6 +40,7 @@ public sealed class ItemCombo : FilterComboCache<EquipItem>
     {
         HoveredItem = null;
         IsOpen = true;
+        ItemSelected = false;
         base.DrawList(width, itemHeight);
         if (NewSelection != null && Items.Count > NewSelection.Value)
         {
