@@ -835,9 +835,26 @@ public class EquipmentDrawer
 
             if (_originalSlot.HasValue)
             {
-                var combo = _itemCombo[_originalSlot.Value.ToIndex()];
-                if (combo.HoveredItem.HasValue)
-                    shouldRestore = false;
+                var slot = _originalSlot.Value;
+                // Check if this is a weapon slot (uses _weaponCombo) or equipment slot (uses _itemCombo)
+                if (slot == EquipSlot.MainHand || slot == EquipSlot.OffHand)
+                {
+                    // For weapon slots, check the _weaponCombo dictionary
+                    foreach (var combo in _weaponCombo.Values)
+                    {
+                        if (combo.HoveredItem.HasValue)
+                        {
+                            shouldRestore = false;
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    var combo = _itemCombo[slot.ToIndex()];
+                    if (combo.HoveredItem.HasValue)
+                        shouldRestore = false;
+                }
             }
             else if (_originalBonusSlot.HasValue)
             {
