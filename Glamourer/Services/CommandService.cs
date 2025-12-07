@@ -68,7 +68,7 @@ public class CommandService : IDisposable, IApiService
         _resolver          = resolver;
         _penumbra          = penumbra;
 
-        _commands.AddHandler(MainCommandString, new CommandInfo(OnGlamourer) { HelpMessage = "Open or close the Glamourer window." });
+        _commands.AddHandler(MainCommandString, new CommandInfo(OnGlamourer) { HelpMessage = "Open or close the Glamourer window. (May not work if original Glamourer is enabled)" });
         _commands.AddHandler(MainCommandAlias, new CommandInfo(OnGlamourer) { HelpMessage = "Open or close the Glamourer window." });
         _commands.AddHandler(MainCommandAlias2, new CommandInfo(OnGlamourer) { HelpMessage = "Open or close the Glamourer window." });
         _commands.AddHandler(ApplyCommandString,
