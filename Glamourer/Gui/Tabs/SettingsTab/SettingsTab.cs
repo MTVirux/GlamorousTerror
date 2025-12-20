@@ -287,7 +287,16 @@ public class SettingsTab(
                 config.EnableGameContextMenu = v;
                 if (v)
                     contextMenuService.Enable();
-                else
+                else if (!config.EnableImportCharacterContextMenu)
+                    contextMenuService.Disable();
+            });
+        Checkbox("Enable Import Character Context Menu"u8, "Whether to show an Import to Glamourer button when right-clicking characters in-game."u8,
+            config.EnableImportCharacterContextMenu,       v =>
+            {
+                config.EnableImportCharacterContextMenu = v;
+                if (v)
+                    contextMenuService.Enable();
+                else if (!config.EnableGameContextMenu)
                     contextMenuService.Disable();
             });
         Checkbox("Show Window when UI is Hidden"u8, "Whether to show Glamourer windows even when the games UI is hidden."u8,
