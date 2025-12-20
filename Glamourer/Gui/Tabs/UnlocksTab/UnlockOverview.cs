@@ -16,6 +16,7 @@ namespace Glamourer.Gui.Tabs.UnlocksTab;
 
 public class UnlockOverview(
     ItemManager items,
+    ItemNameService itemNames,
     CustomizeService customizations,
     ItemUnlockManager itemUnlocks,
     CustomizeUnlockManager customizeUnlocks,
@@ -210,7 +211,7 @@ public class UnlockOverview(
                 using var tt = ImRaii.Tooltip();
                 if (size.X >= iconSize.X && size.Y >= iconSize.Y)
                     ImGui.Image(icon, size);
-                ImUtf8.Text(item.Name);
+                ImUtf8.Text(itemNames.GetItemName(item));
                 ImUtf8.Text($"{item.Type.ToName()}");
                 ImUtf8.Text($"{item.Id.Id}");
                 ImUtf8.Text($"{item.PrimaryId.Id}-{item.Variant.Id}");
@@ -286,7 +287,7 @@ public class UnlockOverview(
                 using var tt = ImRaii.Tooltip();
                 if (size.X >= iconSize.X && size.Y >= iconSize.Y)
                     ImGui.Image(icon, size);
-                ImGui.TextUnformatted(item.Name);
+                ImGui.TextUnformatted(itemNames.GetItemName(item));
                 var slot = item.Type.ToSlot();
                 ImGui.TextUnformatted($"{item.Type.ToName()} ({slot.ToName()})");
                 if (item.Type.ValidOffhand().IsOffhandType())

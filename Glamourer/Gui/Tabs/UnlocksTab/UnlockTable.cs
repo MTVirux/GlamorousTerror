@@ -23,12 +23,12 @@ public class UnlockTable : Table<EquipItem>, IDisposable
 
     private Guid _lastCurrentCollection = Guid.Empty;
 
-    public UnlockTable(ItemManager items, TextureService textures, ItemUnlockManager itemUnlocks,
+    public UnlockTable(ItemManager items, ItemNameService itemNames, TextureService textures, ItemUnlockManager itemUnlocks,
         PenumbraChangedItemTooltip tooltip, ObjectUnlocked @event, JobService jobs, FavoriteManager favorites, PenumbraService penumbra)
         : base("ItemUnlockTable", new ItemList(items),
             new FavoriteColumn(favorites, @event) { Label = "F" },
             new ModdedColumn(penumbra) { Label            = "M" },
-            new NameColumn(textures, tooltip) { Label     = "Item Name..." },
+            new NameColumn(itemNames, textures, tooltip) { Label     = "Item Name..." },
             new SlotColumn { Label                        = "Equip Slot" },
             new TypeColumn { Label                        = "Item Type..." },
             new UnlockDateColumn(itemUnlocks) { Label     = "Unlocked" },
@@ -170,21 +170,23 @@ public class UnlockTable : Table<EquipItem>, IDisposable
 
     private sealed class NameColumn : ColumnString<EquipItem>
     {
+        private readonly ItemNameService            _itemNames;
         private readonly TextureService             _textures;
         private readonly PenumbraChangedItemTooltip _tooltip;
 
         public override float Width
             => 400 * ImGuiHelpers.GlobalScale;
 
-        public NameColumn(TextureService textures, PenumbraChangedItemTooltip tooltip)
+        public NameColumn(ItemNameService itemNames, TextureService textures, PenumbraChangedItemTooltip tooltip)
         {
+            _itemNames = itemNames;
             _textures =  textures;
             _tooltip  =  tooltip;
             Flags     |= ImGuiTableColumnFlags.NoHide | ImGuiTableColumnFlags.NoReorder;
         }
 
         public override string ToName(EquipItem item)
-            => item.Name;
+            => _itemNames.GetItemName(item);
 
         public override void DrawColumn(EquipItem item, int _)
         {
@@ -194,7 +196,7 @@ public class UnlockTable : Table<EquipItem>, IDisposable
                 ImGui.Dummy(new Vector2(ImGui.GetFrameHeight()));
             ImGui.SameLine();
             ImGui.AlignTextToFramePadding();
-            if (ImGui.Selectable(item.Name))
+            if (ImGui.Selectable(_itemNames.GetItemName(item)))
                 Glamourer.Messager.Chat.Print(new SeStringBuilder().AddItemLink(item.ItemId.Id, false).BuiltString);
 
             if (ImGui.IsItemClicked(ImGuiMouseButton.Right) && _tooltip.Player(out var state))

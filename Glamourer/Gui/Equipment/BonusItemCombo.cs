@@ -17,6 +17,7 @@ namespace Glamourer.Gui.Equipment;
 public sealed class BonusItemCombo : FilterComboCache<EquipItem>
 {
     private readonly FavoriteManager _favorites;
+    private readonly ItemNameService _itemNames;
     public readonly  string          Label;
     private          CustomItemId    _currentItem;
     private          float           _innerWidth;
@@ -27,10 +28,11 @@ public sealed class BonusItemCombo : FilterComboCache<EquipItem>
     public bool        IsOpen      { get; private set; }
     public bool        ItemSelected { get; private set; }
 
-    public BonusItemCombo(IDataManager gameData, ItemManager items, BonusItemFlag slot, Logger log, FavoriteManager favorites)
+    public BonusItemCombo(IDataManager gameData, ItemManager items, ItemNameService itemNames, BonusItemFlag slot, Logger log, FavoriteManager favorites)
         : base(() => GetItems(favorites, items, slot), MouseWheelType.Control, log)
     {
         _favorites    = favorites;
+        _itemNames    = itemNames;
         Label         = GetLabel(gameData, slot);
         _currentItem  = 0;
         SearchByParts = true;
@@ -91,10 +93,12 @@ public sealed class BonusItemCombo : FilterComboCache<EquipItem>
     }
 
     protected override bool IsVisible(int globalIndex, LowerString filter)
-        => base.IsVisible(globalIndex, filter) || filter.IsContained(Items[globalIndex].PrimaryId.Id.ToString());
+        => base.IsVisible(globalIndex, filter) 
+        || filter.IsContained(Items[globalIndex].PrimaryId.Id.ToString())
+        || _itemNames.MatchesAnyLanguage(Items[globalIndex], filter);
 
     protected override string ToString(EquipItem obj)
-        => obj.Name;
+        => _itemNames.GetItemName(obj);
 
     private static string GetLabel(IDataManager gameData, BonusItemFlag slot)
     {

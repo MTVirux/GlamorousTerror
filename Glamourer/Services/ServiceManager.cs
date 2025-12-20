@@ -92,6 +92,7 @@ public static class StaticServiceManager
             .AddSingleton<ActorManager>()
             .AddSingleton<CustomizeService>()
             .AddSingleton<ItemManager>()
+            .AddSingleton<ItemNameService>()
             .AddSingleton<GamePathParser>()
             .AddSingleton<HumanModelList>();
 
