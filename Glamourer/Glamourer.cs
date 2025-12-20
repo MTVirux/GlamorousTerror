@@ -44,6 +44,7 @@ public class Glamourer : IDalamudPlugin
             _services.GetService<ScalingService>();
             _services.GetService<StateListener>();         // Initialize State Listener.
             _services.GetService<GlamourerWindowSystem>(); // initialize ui.
+            _services.GetService<CharacterPopupMenu>();    // initialize custom popup menu.
             _services.GetService<CommandService>();        // initialize commands.
             _services.GetService<IpcProviders>();          // initialize IPC.
             Log.Information($"Glamourer v{Version} loaded successfully.");

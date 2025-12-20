@@ -28,6 +28,7 @@ public class ContextMenuService : IDisposable
     private readonly QuickDesignCombo   _quickDesignCombo;
     private readonly AutoDesignApplier  _autoDesignApplier;
     private readonly Configuration      _config;
+    private readonly CharacterPopupMenu _characterPopupMenu;
     private          EquipItem          _lastItem;
     private readonly StainId[]          _lastStains = new StainId[StainId.NumStains];
 
@@ -93,17 +94,18 @@ public class ContextMenuService : IDisposable
 
     public ContextMenuService(ItemManager items, StateManager state, ActorObjectManager objects, Configuration config,
         IContextMenu context, DesignManager designManager, DesignConverter designConverter, QuickDesignCombo quickDesignCombo,
-        AutoDesignApplier autoDesignApplier)
+        AutoDesignApplier autoDesignApplier, CharacterPopupMenu characterPopupMenu)
     {
-        _contextMenu       = context;
-        _items             = items;
-        _state             = state;
-        _objects           = objects;
-        _designManager     = designManager;
-        _designConverter   = designConverter;
-        _quickDesignCombo  = quickDesignCombo;
-        _autoDesignApplier = autoDesignApplier;
-        _config            = config;
+        _contextMenu         = context;
+        _items               = items;
+        _state               = state;
+        _objects             = objects;
+        _designManager       = designManager;
+        _designConverter     = designConverter;
+        _quickDesignCombo    = quickDesignCombo;
+        _autoDesignApplier   = autoDesignApplier;
+        _config              = config;
+        _characterPopupMenu  = characterPopupMenu;
 
         if (config.EnableGameContextMenu || config.EnableImportCharacterContextMenu)
             Enable();
@@ -193,14 +195,14 @@ public class ContextMenuService : IDisposable
             IsSubmenu  = false,
         };
 
-        // Main submenu
+        // Main submenu (IsSubmenu is set dynamically based on config)
         _glamorousTerrorSubmenu = new MenuItem
         {
             IsEnabled   = true,
             IsReturn    = false,
             PrefixChar  = 'G',
             Name        = "Glamorous Terror",
-            IsSubmenu   = true,
+            IsSubmenu   = !config.UseCustomCharacterPopupMenu,
             PrefixColor = 541,
             OnClicked   = OnGlamorousTerrorSubmenuClick,
         };
@@ -208,6 +210,13 @@ public class ContextMenuService : IDisposable
 
     private void OnGlamorousTerrorSubmenuClick(IMenuItemClickedArgs args)
     {
+        // If custom popup is enabled, open it instead of the native submenu
+        if (_config.UseCustomCharacterPopupMenu)
+        {
+            _characterPopupMenu.Open(_lastActor, _lastCharacterName);
+            return;
+        }
+
         args.OpenSubmenu([
             _importAsDesign,
             _applyEquipmentToSelf,

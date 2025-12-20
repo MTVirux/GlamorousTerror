@@ -576,7 +576,14 @@ public class PenumbraService : IDisposable
             _registerSettingsSection = new global::Penumbra.Api.IpcSubscribers.RegisterSettingsSection(_pluginInterface);
             _unregisterSettingsSection = new global::Penumbra.Api.IpcSubscribers.UnregisterSettingsSection(_pluginInterface);
 
-            _registerSettingsSection.Invoke(InvokeDrawSettingsSection);
+            try
+            {
+                _registerSettingsSection.Invoke(InvokeDrawSettingsSection);
+            }
+            catch (IpcNotReadyError)
+            {
+                Glamourer.Log.Debug("Could not register Penumbra settings section - IPC not ready yet.");
+            }
 
             Available = true;
             _penumbraReloaded.Invoke();
