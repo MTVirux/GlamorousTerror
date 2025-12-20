@@ -4,5 +4,5 @@ obj/
 private/
 scripts/
 .vscode/
-.github/
+.github/*
 !.github/workflows
