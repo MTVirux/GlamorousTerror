@@ -67,12 +67,12 @@ public class GlamourerChangelog
     }
 
     private static void AddGlamorousTerrorFeatures(Changelog log)
-        => log.NextVersion("Glamorous Terror Features - Version 1.1.0.0")
+        => log.NextVersion("Glamorous Terror Features")
             .RegisterHighlight("Added Glamorous Terror context menu (right-click a character in-game) [NEW]")
             .RegisterEntry("Preview-on-hover functionality for most content in Actor tab (affects selected character)")
-            .RegisterEntry("Allow the use of wildcards in automation targets (Just inputting '*' will target all characters)")
-            .RegisterEntry("Converted Glamourer's \"Cheat Codes\" to \"Fun Modes\" and removed password restrictions.")
-            .RegisterEntry("Import/Export designs from/to Glamourer");
+            .RegisterEntry("Allow the use of wildcards in automation targets")
+            .RegisterEntry("Converted Glamourer's \"Cheat Codes\" to \"Fun Modes\" and removed password restrictions.");
+
     private static void Add1_5_1_0(Changelog log)
         => log.NextVersion("Version 1.5.1.0")
             .RegisterHighlight("Added support for Penumbras PCP functionality to add the current state of the character as a design.")
