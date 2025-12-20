@@ -50,6 +50,7 @@ public class Configuration : IPluginConfiguration, ISavable
     public bool   UnlockedItemMode                 { get; set; } = false;
     public byte   DisableFestivals                 { get; set; } = 1;
     public bool   EnableGameContextMenu            { get; set; } = true;
+    public bool   EnableImportCharacterContextMenu { get; set; } = true;
     public bool   HideWindowInCutscene             { get; set; } = false;
     public bool   ShowAutomationSetEditing         { get; set; } = true;
     public bool   ShowAllAutomatedApplicationRules { get; set; } = true;
