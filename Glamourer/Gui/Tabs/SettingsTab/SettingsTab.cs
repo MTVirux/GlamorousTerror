@@ -294,7 +294,7 @@ public class SettingsTab(
                 else if (!config.EnableImportCharacterContextMenu)
                     contextMenuService.Disable();
             });
-        Checkbox("Enable Import Character Context Menu"u8, "Whether to show an Import to Glamourer button when right-clicking characters in-game."u8,
+        Checkbox("Enable Character Context Menu"u8, "Whether to show a Glamorous Terror submenu when right-clicking characters in-game.\nIncludes options to import designs, apply equipment/appearance to self or target, and apply quick designs."u8,
             config.EnableImportCharacterContextMenu,       v =>
             {
                 config.EnableImportCharacterContextMenu = v;
