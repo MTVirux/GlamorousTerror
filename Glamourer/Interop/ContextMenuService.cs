@@ -1,6 +1,7 @@
 ﻿using Dalamud.Game.Gui.ContextMenu;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using Glamourer.Automation;
 using Glamourer.Designs;
 using Glamourer.Gui;
 using Glamourer.Interop.Material;
@@ -23,6 +24,7 @@ public class ContextMenuService : IDisposable
     private readonly DesignManager      _designManager;
     private readonly DesignConverter    _designConverter;
     private readonly QuickDesignCombo   _quickDesignCombo;
+    private readonly AutoDesignApplier  _autoDesignApplier;
     private readonly Configuration      _config;
     private          EquipItem          _lastItem;
     private readonly StainId[]          _lastStains = new StainId[StainId.NumStains];
@@ -42,18 +44,22 @@ public class ContextMenuService : IDisposable
     private readonly MenuItem _applyGearToTarget;
     private readonly MenuItem _applyAppearanceToTarget;
     private readonly MenuItem _applyQuickDesignToTarget;
+    private readonly MenuItem _revertToAutomation;
+    private readonly MenuItem _resetToGameState;
 
     public ContextMenuService(ItemManager items, StateManager state, ActorObjectManager objects, Configuration config,
-        IContextMenu context, DesignManager designManager, DesignConverter designConverter, QuickDesignCombo quickDesignCombo)
+        IContextMenu context, DesignManager designManager, DesignConverter designConverter, QuickDesignCombo quickDesignCombo,
+        AutoDesignApplier autoDesignApplier)
     {
-        _contextMenu      = context;
-        _items            = items;
-        _state            = state;
-        _objects          = objects;
-        _designManager    = designManager;
-        _designConverter  = designConverter;
-        _quickDesignCombo = quickDesignCombo;
-        _config           = config;
+        _contextMenu       = context;
+        _items             = items;
+        _state             = state;
+        _objects           = objects;
+        _designManager     = designManager;
+        _designConverter   = designConverter;
+        _quickDesignCombo  = quickDesignCombo;
+        _autoDesignApplier = autoDesignApplier;
+        _config            = config;
 
         if (config.EnableGameContextMenu || config.EnableImportCharacterContextMenu)
             Enable();
@@ -125,6 +131,24 @@ public class ContextMenuService : IDisposable
             IsSubmenu  = false,
         };
 
+        _revertToAutomation = new MenuItem
+        {
+            IsEnabled  = true,
+            IsReturn   = false,
+            Name       = "Revert to Automation State",
+            OnClicked  = OnRevertToAutomationClick,
+            IsSubmenu  = false,
+        };
+
+        _resetToGameState = new MenuItem
+        {
+            IsEnabled  = true,
+            IsReturn   = false,
+            Name       = "Reset to Game State",
+            OnClicked  = OnResetToGameStateClick,
+            IsSubmenu  = false,
+        };
+
         // Main submenu
         _glamorousTerrorSubmenu = new MenuItem
         {
@@ -147,6 +171,8 @@ public class ContextMenuService : IDisposable
             _applyGearToTarget,
             _applyAppearanceToTarget,
             _applyQuickDesignToTarget,
+            _revertToAutomation,
+            _resetToGameState,
         ]);
     }
 
@@ -435,6 +461,65 @@ public class ContextMenuService : IDisposable
         catch (Exception ex)
         {
             Glamourer.Log.Error($"Failed to apply quick design to target: {ex}");
+        }
+    }
+
+    private void OnRevertToAutomationClick(IMenuItemClickedArgs _)
+    {
+        if (!_lastActor.Valid)
+            return;
+
+        try
+        {
+            if (!_config.EnableAutoDesigns)
+            {
+                Glamourer.Log.Warning("Auto designs are not enabled");
+                return;
+            }
+
+            var targetIdentifier = _lastActor.GetIdentifier(_objects.Actors);
+            if (!_state.GetOrCreate(targetIdentifier, _lastActor, out var targetState))
+                return;
+
+            if (targetState.IsLocked)
+            {
+                Glamourer.Log.Warning($"Cannot revert {_lastCharacterName} - state is locked");
+                return;
+            }
+
+            _autoDesignApplier.ReapplyAutomation(_lastActor, targetIdentifier, targetState, true, false, out var forcedRedraw);
+            _state.ReapplyAutomationState(_lastActor, forcedRedraw, true, StateSource.Manual);
+            Glamourer.Log.Information($"Reverted {_lastCharacterName} to automation state");
+        }
+        catch (Exception ex)
+        {
+            Glamourer.Log.Error($"Failed to revert to automation state: {ex}");
+        }
+    }
+
+    private void OnResetToGameStateClick(IMenuItemClickedArgs _)
+    {
+        if (!_lastActor.Valid)
+            return;
+
+        try
+        {
+            var targetIdentifier = _lastActor.GetIdentifier(_objects.Actors);
+            if (!_state.GetOrCreate(targetIdentifier, _lastActor, out var targetState))
+                return;
+
+            if (targetState.IsLocked)
+            {
+                Glamourer.Log.Warning($"Cannot reset {_lastCharacterName} - state is locked");
+                return;
+            }
+
+            _state.ResetState(targetState, StateSource.Manual, isFinal: true);
+            Glamourer.Log.Information($"Reset {_lastCharacterName} to game state");
+        }
+        catch (Exception ex)
+        {
+            Glamourer.Log.Error($"Failed to reset to game state: {ex}");
         }
     }
 
