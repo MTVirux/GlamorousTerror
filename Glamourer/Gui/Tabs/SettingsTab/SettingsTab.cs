@@ -27,11 +27,13 @@ public class SettingsTab(
     DesignFileSystemSelector selector,
     ContextMenuService contextMenuService,
     IUiBuilder uiBuilder,
+    GlamourerChangelog changelog,
     IKeyState keys,
     DesignColorUi designColorUi,
     PaletteImport paletteImport,
     CollectionOverrideDrawer overrides,
     CodeDrawer codeDrawer,
+    Glamourer glamourer,
     AutoDesignApplier autoDesignApplier,
     AutoRedrawChanged autoRedraw,
     AutoDesignManager autoDesignManager,
@@ -63,7 +65,9 @@ public class SettingsTab(
                 autoDesignApplier.OnEnableAutoDesignsChanged(v);
             });
 
+        ImGui.SameLine();
 
+        MainWindow.DrawSupportButtons(glamourer, changelog.Changelog);
 
         using (ImUtf8.Child("SettingsChild"u8, default))
         {
