@@ -26,6 +26,24 @@ public enum HeightDisplayType
     OlympicPool,
 }
 
+/// <summary>
+/// Language options for displaying equipment names.
+/// Uses the game's built-in language options to select which language to show item names in.
+/// </summary>
+public enum EquipmentNameLanguage
+{
+    /// <summary> Use the game's current language setting. </summary>
+    GameDefault,
+    /// <summary> Display equipment names in English. </summary>
+    English,
+    /// <summary> Display equipment names in Japanese. </summary>
+    Japanese,
+    /// <summary> Display equipment names in German. </summary>
+    German,
+    /// <summary> Display equipment names in French. </summary>
+    French,
+}
+
 public class DefaultDesignSettings
 {
     public bool AlwaysForceRedrawing   = false;
@@ -79,8 +97,10 @@ public class Configuration : IPluginConfiguration, ISavable
 
     public DefaultDesignSettings DefaultDesignSettings { get; set; } = new();
 
-    public HeightDisplayType    HeightDisplayType    { get; set; } = HeightDisplayType.Centimetre;
-    public RenameField          ShowRename           { get; set; } = RenameField.BothDataPrio;
+    public HeightDisplayType       HeightDisplayType       { get; set; } = HeightDisplayType.Centimetre;
+    public EquipmentNameLanguage   EquipmentNameLanguage   { get; set; } = EquipmentNameLanguage.GameDefault;
+    public bool CrossLanguageEquipmentSearch { get; set; } = true;
+    public RenameField             ShowRename              { get; set; } = RenameField.BothDataPrio;
     public ModifiableHotkey     ToggleQuickDesignBar { get; set; } = new(VirtualKey.NO_KEY);
     public DoubleModifier       DeleteDesignModifier { get; set; } = new(ModifierHotkey.Control, ModifierHotkey.Shift);
     public DoubleModifier       IncognitoModifier    { get; set; } = new(ModifierHotkey.Control);

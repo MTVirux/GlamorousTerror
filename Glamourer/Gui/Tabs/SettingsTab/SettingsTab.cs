@@ -41,6 +41,7 @@ public class SettingsTab(
     SaveService saveService,
     CustomizeService customizeService,
     ItemManager itemManager,
+    ItemNameService itemNameService,
     DesignLinkLoader linkLoader,
     PcpService pcpService,
     FilenameService fileNames)
@@ -337,6 +338,7 @@ public class SettingsTab(
         Checkbox("Smaller Equip Display"u8, "Use single-line display without icons and small dye buttons instead of double-line display."u8,
             config.SmallEquip,              v => config.SmallEquip = v);
         DrawHeightUnitSettings();
+        DrawEquipmentLanguageSettings();
         Checkbox("Show Application Checkboxes"u8,
             "Show the application checkboxes in the Customization and Equipment panels of the design tab, instead of only showing them under Application Rules."u8,
             !config.HideApplyCheckmarks, v => config.HideApplyCheckmarks = !v);
@@ -683,6 +685,54 @@ public class SettingsTab(
         ImUtf8.Text("Character Height Display Type"u8);
         ImUtf8.HoverTooltip(tt);
     }
+
+    private void DrawEquipmentLanguageSettings()
+    {
+        ImGui.SetNextItemWidth(300 * ImGuiHelpers.GlobalScale);
+        using (var combo = ImUtf8.Combo("##equipLanguage"u8, EquipmentLanguageName(config.EquipmentNameLanguage)))
+        {
+            if (combo)
+                foreach (var lang in Enum.GetValues<EquipmentNameLanguage>())
+                {
+                    if (ImUtf8.Selectable(EquipmentLanguageName(lang), lang == config.EquipmentNameLanguage) && lang != config.EquipmentNameLanguage)
+                    {
+                        config.EquipmentNameLanguage = lang;
+                        config.Save();
+                        itemNameService.ClearCache();
+                    }
+                }
+        }
+
+        ImGui.SameLine();
+        const string langTt = "Select which language to display equipment item names in. This affects the item selection lists and equipment display.";
+        ImGuiComponents.HelpMarker(langTt);
+        ImGui.SameLine();
+        ImUtf8.Text("Equipment Name Language"u8);
+        ImUtf8.HoverTooltip(langTt);
+
+        // Cross-language search toggle
+        ImGui.SetNextItemWidth(300 * ImGuiHelpers.GlobalScale);
+        bool crossLang = config.CrossLanguageEquipmentSearch;
+        if (ImUtf8.Checkbox("Enable Cross-Language Equipment Search"u8, ref crossLang) && crossLang != config.CrossLanguageEquipmentSearch)
+        {
+            config.CrossLanguageEquipmentSearch = crossLang;
+            config.Save();
+            itemNameService.ClearCache();
+        }
+        const string crossLangTt = "If enabled, equipment search will match queries in all supported languages. If disabled, only the selected display language is searched.";
+        ImGuiComponents.HelpMarker(crossLangTt);
+    }
+
+    private static ReadOnlySpan<byte> EquipmentLanguageName(EquipmentNameLanguage lang)
+        => lang switch
+        {
+            EquipmentNameLanguage.GameDefault => "Game Default"u8,
+            EquipmentNameLanguage.English     => "English"u8,
+            EquipmentNameLanguage.Japanese    => "日本語 (Japanese)"u8,
+            EquipmentNameLanguage.German      => "Deutsch (German)"u8,
+            EquipmentNameLanguage.French      => "Français (French)"u8,
+            _                                 => ""u8,
+        };
 
     private static ReadOnlySpan<byte> HeightDisplayTypeName(HeightDisplayType type)
         => type switch

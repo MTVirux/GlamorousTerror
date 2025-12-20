@@ -24,6 +24,7 @@ public class EquipmentDrawer
     private const float DefaultWidth = 280;
 
     private readonly ItemManager                            _items;
+    private readonly ItemNameService                        _itemNames;
     private readonly GlamourerColorCombo                    _stainCombo;
     private readonly DictStain                              _stainData;
     private readonly ItemCombo[]                            _itemCombo;
@@ -47,10 +48,11 @@ public class EquipmentDrawer
     private BonusItemFlag?    _originalBonusSlot;
     private bool              _isComboOpen;
 
-    public EquipmentDrawer(FavoriteManager favorites, IDataManager gameData, ItemManager items, TextureService textures,
+    public EquipmentDrawer(FavoriteManager favorites, IDataManager gameData, ItemManager items, ItemNameService itemNames, TextureService textures,
         Configuration config, GPoseService gPose, AdvancedDyePopup advancedDyes, ItemCopyService itemCopy)
     {
         _items          = items;
+        _itemNames      = itemNames;
         _textures       = textures;
         _config         = config;
         _gPose          = gPose;
@@ -58,18 +60,18 @@ public class EquipmentDrawer
         _itemCopy       = itemCopy;
         _stainData      = items.Stains;
         _stainCombo     = new GlamourerColorCombo(DefaultWidth - 20, _stainData, favorites);
-        _itemCombo      = EquipSlotExtensions.EqdpSlots.Select(e => new ItemCombo(gameData, items, e, Glamourer.Log, favorites)).ToArray();
-        _bonusItemCombo = BonusExtensions.AllFlags.Select(f => new BonusItemCombo(gameData, items, f, Glamourer.Log, favorites)).ToArray();
+        _itemCombo      = EquipSlotExtensions.EqdpSlots.Select(e => new ItemCombo(gameData, items, itemNames, e, Glamourer.Log, favorites)).ToArray();
+        _bonusItemCombo = BonusExtensions.AllFlags.Select(f => new BonusItemCombo(gameData, items, itemNames, f, Glamourer.Log, favorites)).ToArray();
         _weaponCombo    = new Dictionary<FullEquipType, WeaponCombo>(FullEquipTypeExtensions.WeaponTypes.Count * 2);
         foreach (var type in Enum.GetValues<FullEquipType>())
         {
             if (type.ToSlot() is EquipSlot.MainHand)
-                _weaponCombo.TryAdd(type, new WeaponCombo(items, type, Glamourer.Log, favorites));
+                _weaponCombo.TryAdd(type, new WeaponCombo(items, itemNames, type, Glamourer.Log, favorites));
             else if (type.ToSlot() is EquipSlot.OffHand)
-                _weaponCombo.TryAdd(type, new WeaponCombo(items, type, Glamourer.Log, favorites));
+                _weaponCombo.TryAdd(type, new WeaponCombo(items, itemNames, type, Glamourer.Log, favorites));
         }
 
-        _weaponCombo.Add(FullEquipType.Unknown, new WeaponCombo(items, FullEquipType.Unknown, Glamourer.Log, favorites));
+        _weaponCombo.Add(FullEquipType.Unknown, new WeaponCombo(items, itemNames, FullEquipType.Unknown, Glamourer.Log, favorites));
     }
 
     private Vector2 _iconSize;
@@ -462,7 +464,7 @@ public class EquipmentDrawer
             UiHelpers.OpenCombo($"##{combo.Label}");
 
         using var disabled = ImRaii.Disabled(data.Locked);
-        var change = combo.Draw(data.CurrentItem.Name, data.CurrentItem.ItemId, small ? _comboLength - ImGui.GetFrameHeight() : _comboLength,
+        var change = combo.Draw(_itemNames.GetItemName(data.CurrentItem), data.CurrentItem.ItemId, small ? _comboLength - ImGui.GetFrameHeight() : _comboLength,
             _requiredComboWidth);
         DrawGearDragDrop(data);
         if (change)
@@ -484,7 +486,7 @@ public class EquipmentDrawer
             UiHelpers.OpenCombo($"##{combo.Label}");
 
         using var disabled = ImRaii.Disabled(data.Locked);
-        var change = combo.Draw(data.CurrentItem.Name, data.CurrentItem.Id.BonusItem,
+        var change = combo.Draw(_itemNames.GetItemName(data.CurrentItem), data.CurrentItem.Id.BonusItem,
             small ? _comboLength - ImGui.GetFrameHeight() : _comboLength,
             _requiredComboWidth);
         if (ImGui.IsItemHovered() && ImGui.GetIO().KeyCtrl)
@@ -544,9 +546,9 @@ public class EquipmentDrawer
 
         using var tt = ImUtf8.Tooltip();
         if (_dragTarget is EquipSlot.Unknown)
-            ImUtf8.Text($"Dragging {_draggedItem.Dragged.Name}...");
+            ImUtf8.Text($"Dragging {_itemNames.GetItemName(_draggedItem.Dragged)}...");
         else
-            ImUtf8.Text($"Converting to {_draggedItem[_dragTarget].Name}...");
+            ImUtf8.Text($"Converting to {_itemNames.GetItemName(_draggedItem[_dragTarget])}...");
     }
 
     private static bool ResetOrClear<T>(bool locked, bool clicked, bool allowRevert, bool allowClear,
@@ -594,7 +596,7 @@ public class EquipmentDrawer
         {
             if (!mainhand.Locked && open)
                 UiHelpers.OpenCombo($"##{label}");
-            if (combo.Draw(mainhand.CurrentItem.Name, mainhand.CurrentItem.ItemId, small ? _comboLength - ImGui.GetFrameHeight() : _comboLength,
+            if (combo.Draw(_itemNames.GetItemName(mainhand.CurrentItem), mainhand.CurrentItem.ItemId, small ? _comboLength - ImGui.GetFrameHeight() : _comboLength,
                     _requiredComboWidth))
                 changedItem = combo.CurrentSelection;
             else if (combo.CustomVariant.Id > 0 && (drawAll || ItemData.ConvertWeaponId(combo.CustomSetId) == mainhand.CurrentItem.Type))
@@ -638,7 +640,7 @@ public class EquipmentDrawer
         using var disabled = ImRaii.Disabled(locked);
         if (!locked && open)
             UiHelpers.OpenCombo($"##{combo.Label}");
-        if (combo.Draw(offhand.CurrentItem.Name, offhand.CurrentItem.ItemId, small ? _comboLength - ImGui.GetFrameHeight() : _comboLength,
+        if (combo.Draw(_itemNames.GetItemName(offhand.CurrentItem), offhand.CurrentItem.ItemId, small ? _comboLength - ImGui.GetFrameHeight() : _comboLength,
                 _requiredComboWidth))
             offhand.SetItem(combo.CurrentSelection);
         else if (combo.CustomVariant.Id > 0 && ItemData.ConvertWeaponId(combo.CustomSetId) == offhand.CurrentItem.Type)

@@ -15,6 +15,7 @@ namespace Glamourer.Gui.Equipment;
 public sealed class WeaponCombo : FilterComboCache<EquipItem>
 {
     private readonly FavoriteManager _favorites;
+    private readonly ItemNameService _itemNames;
     public readonly  string          Label;
     private          ItemId          _currentItem;
     private          float           _innerWidth;
@@ -26,10 +27,11 @@ public sealed class WeaponCombo : FilterComboCache<EquipItem>
     public bool        IsOpen         { get; private set; }
     public bool        ItemSelected   { get; private set; }
 
-    public WeaponCombo(ItemManager items, FullEquipType type, Logger log, FavoriteManager favorites)
+    public WeaponCombo(ItemManager items, ItemNameService itemNames, FullEquipType type, Logger log, FavoriteManager favorites)
         : base(() => GetWeapons(favorites, items, type), MouseWheelType.Control, log)
     {
         _favorites    = favorites;
+        _itemNames    = itemNames;
         Label         = GetLabel(type);
         SearchByParts = true;
     }
@@ -119,10 +121,12 @@ public sealed class WeaponCombo : FilterComboCache<EquipItem>
     }
 
     protected override bool IsVisible(int globalIndex, LowerString filter)
-        => base.IsVisible(globalIndex, filter) || Items[globalIndex].ModelString.StartsWith(filter.Lower);
+        => base.IsVisible(globalIndex, filter) 
+        || Items[globalIndex].ModelString.StartsWith(filter.Lower)
+        || _itemNames.MatchesAnyLanguage(Items[globalIndex], filter);
 
     protected override string ToString(EquipItem obj)
-        => obj.Name;
+        => _itemNames.GetItemName(obj);
 
     private static string GetLabel(FullEquipType type)
         => type.IsUnknown() ? "Mainhand" : type.ToName();
