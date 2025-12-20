@@ -68,7 +68,7 @@ public class GlamourerChangelog
 
     private static void AddGlamorousTerrorFeatures(Changelog log)
         => log.NextVersion("Glamorous Terror Features - Version 1.1.0.0")
-            .RegisterHighlight("Copy a design from character context menu (right-click in-game) [NEW]")
+            .RegisterHighlight("Added Glamorous Terror context menu (right-click a character in-game) [NEW]")
             .RegisterEntry("Preview-on-hover functionality for most content in Actor tab (affects selected character)")
             .RegisterEntry("Allow the use of wildcards in automation targets (Just inputting '*' will target all characters)")
             .RegisterEntry("Converted Glamourer's \"Cheat Codes\" to \"Fun Modes\" and removed password restrictions.")
