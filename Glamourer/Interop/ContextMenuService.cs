@@ -1,8 +1,10 @@
 ﻿using Dalamud.Game.Gui.ContextMenu;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using Glamourer.Api.Enums;
 using Glamourer.Automation;
 using Glamourer.Designs;
+using Glamourer.GameData;
 using Glamourer.Gui;
 using Glamourer.Interop.Material;
 using Glamourer.Services;
@@ -46,6 +48,48 @@ public class ContextMenuService : IDisposable
     private readonly MenuItem _applyQuickDesignToTarget;
     private readonly MenuItem _revertToAutomation;
     private readonly MenuItem _resetToGameState;
+
+    // Equipment slot definitions for submenus (EquipSlot.Unknown used for "All", BonusItem.Glasses handled as -1)
+    private static readonly (string Name, EquipSlot Slot, bool IsBonusItem)[] EquipmentSlots =
+    [
+        ("All", EquipSlot.Unknown, false),
+        ("Head", EquipSlot.Head, false),
+        ("Body", EquipSlot.Body, false),
+        ("Hands", EquipSlot.Hands, false),
+        ("Legs", EquipSlot.Legs, false),
+        ("Feet", EquipSlot.Feet, false),
+        ("Ears", EquipSlot.Ears, false),
+        ("Neck", EquipSlot.Neck, false),
+        ("Wrists", EquipSlot.Wrists, false),
+        ("Right Ring", EquipSlot.RFinger, false),
+        ("Left Ring", EquipSlot.LFinger, false),
+        ("Main Hand", EquipSlot.MainHand, false),
+        ("Off Hand", EquipSlot.OffHand, false),
+        ("Facewear", EquipSlot.Unknown, true),
+    ];
+
+    // Appearance option definitions for submenus
+    private static readonly (string Name, CustomizeFlag Flag)[] AppearanceOptions =
+    [
+        ("All", CustomizeFlagExtensions.AllRelevant),
+        ("Clan/Race", CustomizeFlag.Clan | CustomizeFlag.Race),
+        ("Gender", CustomizeFlag.Gender),
+        ("Body Type", CustomizeFlag.BodyType),
+        ("Height", CustomizeFlag.Height),
+        ("Face", CustomizeFlag.Face),
+        ("Hairstyle", CustomizeFlag.Hairstyle | CustomizeFlag.Highlights | CustomizeFlag.HairColor | CustomizeFlag.HighlightsColor),
+        ("Skin Color", CustomizeFlag.SkinColor),
+        ("Eye Colors", CustomizeFlag.EyeColorRight | CustomizeFlag.EyeColorLeft | CustomizeFlag.SmallIris),
+        ("Eye Shape", CustomizeFlag.EyeShape),
+        ("Eyebrows", CustomizeFlag.Eyebrows),
+        ("Nose", CustomizeFlag.Nose),
+        ("Jaw", CustomizeFlag.Jaw),
+        ("Mouth", CustomizeFlag.Mouth | CustomizeFlag.Lipstick | CustomizeFlag.LipColor),
+        ("Facial Features", CustomizeFlag.FacialFeature1 | CustomizeFlag.FacialFeature2 | CustomizeFlag.FacialFeature3 | CustomizeFlag.FacialFeature4 | CustomizeFlag.FacialFeature5 | CustomizeFlag.FacialFeature6 | CustomizeFlag.FacialFeature7 | CustomizeFlag.LegacyTattoo),
+        ("Tattoo Color", CustomizeFlag.TattooColor),
+        ("Body", CustomizeFlag.MuscleMass | CustomizeFlag.BustSize | CustomizeFlag.TailShape),
+        ("Face Paint", CustomizeFlag.FacePaint | CustomizeFlag.FacePaintReversed | CustomizeFlag.FacePaintColor),
+    ];
 
     public ContextMenuService(ItemManager items, StateManager state, ActorObjectManager objects, Configuration config,
         IContextMenu context, DesignManager designManager, DesignConverter designConverter, QuickDesignCombo quickDesignCombo,
@@ -91,8 +135,8 @@ public class ContextMenuService : IDisposable
             IsEnabled  = true,
             IsReturn   = false,
             Name       = "Apply Equipment to Self",
-            OnClicked  = OnApplyEquipmentToSelfClick,
-            IsSubmenu  = false,
+            OnClicked  = OnApplyEquipmentToSelfSubmenuClick,
+            IsSubmenu  = true,
         };
 
         _applyAppearanceToSelf = new MenuItem
@@ -100,8 +144,8 @@ public class ContextMenuService : IDisposable
             IsEnabled  = true,
             IsReturn   = false,
             Name       = "Apply Appearance to Self",
-            OnClicked  = OnApplyAppearanceToSelfClick,
-            IsSubmenu  = false,
+            OnClicked  = OnApplyAppearanceToSelfSubmenuClick,
+            IsSubmenu  = true,
         };
 
         _applyGearToTarget = new MenuItem
@@ -109,8 +153,8 @@ public class ContextMenuService : IDisposable
             IsEnabled  = true,
             IsReturn   = false,
             Name       = "Apply Current Gear to Target",
-            OnClicked  = OnApplyGearToTargetClick,
-            IsSubmenu  = false,
+            OnClicked  = OnApplyGearToTargetSubmenuClick,
+            IsSubmenu  = true,
         };
 
         _applyAppearanceToTarget = new MenuItem
@@ -118,8 +162,8 @@ public class ContextMenuService : IDisposable
             IsEnabled  = true,
             IsReturn   = false,
             Name       = "Apply Current Appearance to Target",
-            OnClicked  = OnApplyAppearanceToTargetClick,
-            IsSubmenu  = false,
+            OnClicked  = OnApplyAppearanceToTargetSubmenuClick,
+            IsSubmenu  = true,
         };
 
         _applyQuickDesignToTarget = new MenuItem
@@ -316,7 +360,81 @@ public class ContextMenuService : IDisposable
         }
     }
 
-    private void OnApplyEquipmentToSelfClick(IMenuItemClickedArgs _)
+    #region Equipment/Appearance Submenus
+
+    private void OnApplyEquipmentToSelfSubmenuClick(IMenuItemClickedArgs args)
+    {
+        var menuItems = GetEquipmentMenuItems(ApplyEquipmentToSelf, includeWeapons: AreJobsCompatible());
+        args.OpenSubmenu(menuItems);
+    }
+
+    private void OnApplyAppearanceToSelfSubmenuClick(IMenuItemClickedArgs args)
+    {
+        var menuItems = AppearanceOptions.Select(opt => new MenuItem
+        {
+            IsEnabled = true,
+            IsReturn  = false,
+            Name      = opt.Name,
+            OnClicked = _ => ApplyAppearanceToSelf(opt.Flag),
+            IsSubmenu = false,
+        }).ToArray();
+        args.OpenSubmenu(menuItems);
+    }
+
+    private void OnApplyGearToTargetSubmenuClick(IMenuItemClickedArgs args)
+    {
+        var menuItems = GetEquipmentMenuItems(ApplyGearToTarget, includeWeapons: AreJobsCompatible());
+        args.OpenSubmenu(menuItems);
+    }
+
+    private void OnApplyAppearanceToTargetSubmenuClick(IMenuItemClickedArgs args)
+    {
+        var menuItems = AppearanceOptions.Select(opt => new MenuItem
+        {
+            IsEnabled = true,
+            IsReturn  = false,
+            Name      = opt.Name,
+            OnClicked = _ => ApplyAppearanceToTarget(opt.Flag),
+            IsSubmenu = false,
+        }).ToArray();
+        args.OpenSubmenu(menuItems);
+    }
+
+    private MenuItem[] GetEquipmentMenuItems(Action<EquipSlot, bool> clickAction, bool includeWeapons)
+    {
+        return EquipmentSlots
+            .Where(slot => includeWeapons || (slot.Slot != EquipSlot.MainHand && slot.Slot != EquipSlot.OffHand))
+            .Select(slot => new MenuItem
+            {
+                IsEnabled = true,
+                IsReturn  = false,
+                Name      = slot.Name,
+                OnClicked = _ => clickAction(slot.Slot, slot.IsBonusItem),
+                IsSubmenu = false,
+            }).ToArray();
+    }
+
+    private bool AreJobsCompatible()
+    {
+        if (!_lastActor.Valid || !_lastActor.IsCharacter)
+            return false;
+
+        var (_, playerData) = _objects.PlayerData;
+        if (!playerData.Valid)
+            return false;
+
+        Actor playerActor = playerData.Objects[0];
+        if (!playerActor.Valid || !playerActor.IsCharacter)
+            return false;
+
+        return _lastActor.Job == playerActor.Job;
+    }
+
+    #endregion
+
+    #region Equipment/Appearance Application Methods
+
+    private void ApplyEquipmentToSelf(EquipSlot slot, bool isBonusItem)
     {
         if (!_lastActor.Valid)
             return;
@@ -331,11 +449,31 @@ public class ContextMenuService : IDisposable
                 return;
 
             var designData = _state.FromActor(_lastActor, true, false);
+            ApplicationCollection collection;
+            string slotName;
+
+            if (isBonusItem)
+            {
+                // Facewear/Glasses only
+                collection = new ApplicationCollection(0, BonusItemFlag.Glasses, CustomizeFlag.BodyType, 0, 0, 0);
+                slotName = "facewear";
+            }
+            else if (slot == EquipSlot.Unknown)
+            {
+                collection = ApplicationCollection.Equipment;
+                slotName = "all equipment";
+            }
+            else
+            {
+                collection = new ApplicationCollection(slot.ToBothFlags(), 0, CustomizeFlag.BodyType, 0, 0, 0);
+                slotName = slot.ToString();
+            }
+
             var tempDesign = _designConverter.Convert(designData, new StateMaterialManager(),
-                new ApplicationRules(ApplicationCollection.Equipment, false));
+                new ApplicationRules(collection, false));
 
             _state.ApplyDesign(playerState, tempDesign, ApplySettings.Manual with { IsFinal = true });
-            Glamourer.Log.Information($"Applied equipment from {_lastCharacterName} to self");
+            Glamourer.Log.Information($"Applied {slotName} from {_lastCharacterName} to self");
         }
         catch (Exception ex)
         {
@@ -343,7 +481,7 @@ public class ContextMenuService : IDisposable
         }
     }
 
-    private void OnApplyAppearanceToSelfClick(IMenuItemClickedArgs _)
+    private void ApplyAppearanceToSelf(CustomizeFlag flags)
     {
         if (!_lastActor.Valid)
             return;
@@ -358,8 +496,11 @@ public class ContextMenuService : IDisposable
                 return;
 
             var designData = _state.FromActor(_lastActor, true, false);
+            var collection = flags == CustomizeFlagExtensions.AllRelevant
+                ? ApplicationCollection.Customizations
+                : new ApplicationCollection(0, 0, flags | CustomizeFlag.BodyType, 0, 0, 0);
             var tempDesign = _designConverter.Convert(designData, new StateMaterialManager(),
-                new ApplicationRules(ApplicationCollection.Customizations, false));
+                new ApplicationRules(collection, false));
 
             _state.ApplyDesign(playerState, tempDesign, ApplySettings.Manual with { IsFinal = true });
             Glamourer.Log.Information($"Applied appearance from {_lastCharacterName} to self");
@@ -370,7 +511,7 @@ public class ContextMenuService : IDisposable
         }
     }
 
-    private void OnApplyGearToTargetClick(IMenuItemClickedArgs _)
+    private void ApplyGearToTarget(EquipSlot slot, bool isBonusItem)
     {
         if (!_lastActor.Valid)
             return;
@@ -391,11 +532,31 @@ public class ContextMenuService : IDisposable
                 return;
 
             // Convert player's equipment to a design and apply to target
+            ApplicationCollection collection;
+            string slotName;
+
+            if (isBonusItem)
+            {
+                // Facewear/Glasses only
+                collection = new ApplicationCollection(0, BonusItemFlag.Glasses, CustomizeFlag.BodyType, 0, 0, 0);
+                slotName = "facewear";
+            }
+            else if (slot == EquipSlot.Unknown)
+            {
+                collection = ApplicationCollection.Equipment;
+                slotName = "all gear";
+            }
+            else
+            {
+                collection = new ApplicationCollection(slot.ToBothFlags(), 0, CustomizeFlag.BodyType, 0, 0, 0);
+                slotName = slot.ToString();
+            }
+
             var tempDesign = _designConverter.Convert(playerState.ModelData, playerState.Materials,
-                new ApplicationRules(ApplicationCollection.Equipment, false));
+                new ApplicationRules(collection, false));
 
             _state.ApplyDesign(targetState, tempDesign, ApplySettings.Manual with { IsFinal = true });
-            Glamourer.Log.Information($"Applied current gear to {_lastCharacterName}");
+            Glamourer.Log.Information($"Applied current {slotName} to {_lastCharacterName}");
         }
         catch (Exception ex)
         {
@@ -403,7 +564,7 @@ public class ContextMenuService : IDisposable
         }
     }
 
-    private void OnApplyAppearanceToTargetClick(IMenuItemClickedArgs _)
+    private void ApplyAppearanceToTarget(CustomizeFlag flags)
     {
         if (!_lastActor.Valid)
             return;
@@ -424,8 +585,11 @@ public class ContextMenuService : IDisposable
                 return;
 
             // Convert player's appearance to a design and apply to target
+            var collection = flags == CustomizeFlagExtensions.AllRelevant
+                ? ApplicationCollection.Customizations
+                : new ApplicationCollection(0, 0, flags | CustomizeFlag.BodyType, 0, 0, 0);
             var tempDesign = _designConverter.Convert(playerState.ModelData, playerState.Materials,
-                new ApplicationRules(ApplicationCollection.Customizations, false));
+                new ApplicationRules(collection, false));
 
             _state.ApplyDesign(targetState, tempDesign, ApplySettings.Manual with { IsFinal = true });
             Glamourer.Log.Information($"Applied current appearance to {_lastCharacterName}");
@@ -435,6 +599,8 @@ public class ContextMenuService : IDisposable
             Glamourer.Log.Error($"Failed to apply appearance to target: {ex}");
         }
     }
+
+    #endregion
 
     private void OnApplyQuickDesignToTargetClick(IMenuItemClickedArgs _)
     {
