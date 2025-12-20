@@ -303,6 +303,14 @@ public class SettingsTab(
                 else if (!config.EnableGameContextMenu)
                     contextMenuService.Disable();
             });
+        using (ImRaii.Disabled(!config.EnableImportCharacterContextMenu))
+        {
+            using (ImRaii.PushIndent())
+            {
+                Checkbox("Use Custom Popup Menu"u8, "Use a custom ImGui popup instead of the native game context menu.\nThis provides better control over menu positioning and appearance."u8,
+                    config.UseCustomCharacterPopupMenu, v => config.UseCustomCharacterPopupMenu = v);
+            }
+        }
         Checkbox("Show Window when UI is Hidden"u8, "Whether to show Glamourer windows even when the games UI is hidden."u8,
             config.ShowWindowWhenUiHidden,          v =>
             {

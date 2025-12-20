@@ -146,6 +146,7 @@ public static class StaticServiceManager
             .AddSingleton<NpcTab>()
             .AddSingleton<MainWindow>()
             .AddSingleton<GenericPopupWindow>()
+            .AddSingleton<CharacterPopupMenu>()
             .AddSingleton<GlamourerWindowSystem>()
             .AddSingleton<CustomizationDrawer>()
             .AddSingleton<EquipmentDrawer>()
