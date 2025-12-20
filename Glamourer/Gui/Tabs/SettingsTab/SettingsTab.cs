@@ -143,12 +143,6 @@ public class SettingsTab(
         DrawPenumbraIntegrationSettings2();
     }
 
-    public void DrawPenumbraIntegrationSettings()
-    {
-        DrawPenumbraIntegrationSettings1();
-        DrawPenumbraIntegrationSettings2();
-    }
-
     private void DrawBehaviorSettings()
     {
         if (!ImUtf8.CollapsingHeader("Glamourer Behavior"u8))
