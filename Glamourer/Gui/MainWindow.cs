@@ -206,16 +206,7 @@ public class MainWindow : Window, IDisposable
         var width = ImUtf8.CalcTextSize(SupportInfoButtonText).X + ImGui.GetStyle().FramePadding.X * 2;
         var xPos  = ImGui.GetWindowWidth() - width;
         ImGui.SetCursorPos(new Vector2(xPos, 0));
-        CustomGui.DrawDiscordButton(Glamourer.Messager, width);
-
-        ImGui.SetCursorPos(new Vector2(xPos, ImGui.GetFrameHeightWithSpacing()));
-        DrawSupportButton(glamourer); 
-
-        ImGui.SetCursorPos(new Vector2(xPos, 2 * ImGui.GetFrameHeightWithSpacing()));
-        CustomGui.DrawGuideButton(Glamourer.Messager, width);
-
-        ImGui.SetCursorPos(new Vector2(xPos, 3 * ImGui.GetFrameHeightWithSpacing()));
-        if (ImGui.Button("Show Changelogs", new Vector2(width, 0)))
+        if (ImGui.Button("Show Changelogs+", new Vector2(width, 0)))
             changelog.ForceOpen = true;
     }
 
