@@ -6,6 +6,7 @@ using Dalamud.Interface.Utility;
 using Dalamud.Plugin.Services;
 using Glamourer.Automation;
 using Glamourer.Designs;
+using Glamourer.Designs.Links;
 using Glamourer.Events;
 using Glamourer.Gui.Tabs.DesignTab;
 using Glamourer.Interop;
@@ -33,7 +34,14 @@ public class SettingsTab(
     CodeDrawer codeDrawer,
     AutoDesignApplier autoDesignApplier,
     AutoRedrawChanged autoRedraw,
-    PcpService pcpService)
+    AutoDesignManager autoDesignManager,
+    DesignManager designManager,
+    SaveService saveService,
+    CustomizeService customizeService,
+    ItemManager itemManager,
+    DesignLinkLoader linkLoader,
+    PcpService pcpService,
+    FilenameService fileNames)
     : ITab
 {
     private readonly VirtualKey[] _validKeys = keys.GetValidVirtualKeys().Prepend(VirtualKey.NO_KEY).ToArray();
@@ -125,7 +133,7 @@ public class SettingsTab(
             {
                 var text = File.ReadAllText(backupFile);
                 var data = Newtonsoft.Json.Linq.JObject.Parse(text);
-                var design = Design.LoadDesign(null, null, null, null, data); // You may need to pass actual services here
+                var design = Design.LoadDesign(saveService, customizeService, itemManager, linkLoader, data);
                 if (!manager.Designs.Any(d => d.Identifier == design.Identifier))
                 {
                     manager.Designs.Add(design);
