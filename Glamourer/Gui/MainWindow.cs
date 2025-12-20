@@ -203,11 +203,20 @@ public class MainWindow : Window, IDisposable
     /// <summary> Draw the support button group on the right-hand side of the window. </summary>
     public static void DrawSupportButtons(Glamourer glamourer, Changelog changelog)
     {
-        var width = ImUtf8.CalcTextSize(SupportInfoButtonText).X + ImGui.GetStyle().FramePadding.X * 2;
+        var ChangelogButtonText = "Glamourous & Glamourer Changelog"u8;
+        var width = ImUtf8.CalcTextSize(ChangelogButtonText).X + ImGui.GetStyle().FramePadding.X * 2;
         var xPos  = ImGui.GetWindowWidth() - width;
         ImGui.SetCursorPos(new Vector2(xPos, 0));
-        if (ImGui.Button("Show Changelogs+", new Vector2(width, 0)))
+        // Push a darkred color for the button
+        var darkred = new Vector4(0.32f, 0.07f, 0.07f, 1.0f);
+        
+        ImGui.PushStyleColor(ImGuiCol.Button, darkred);
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, darkred * 1.5f);
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, darkred * 0.9f);
+        if (ImGui.Button(ChangelogButtonText, new Vector2(width, 0)))
             changelog.ForceOpen = true;
+        ImGui.PopStyleColor(3);
+
     }
 
     /// <summary>
