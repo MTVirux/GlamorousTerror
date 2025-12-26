@@ -12,6 +12,38 @@ namespace Glamourer.Gui.Equipment;
 public sealed class GlamourerColorCombo(float _comboWidth, DictStain _stains, FavoriteManager _favorites)
     : FilterComboColors(_comboWidth, MouseWheelType.Control, CreateFunc(_stains, _favorites), Glamourer.Log)
 {
+    private bool     _popupWasOpen;
+    private bool     _popupActiveThisFrame;
+    private StainId? _hoveredStain;
+
+    public bool PopupActive => _popupActiveThisFrame;
+
+    public StainId? HoveredStain => _hoveredStain;
+
+    public bool PopupJustClosed => _popupWasOpen && !_popupActiveThisFrame;
+
+    public void EndFrame()
+    {
+        _popupWasOpen = _popupActiveThisFrame;
+        _popupActiveThisFrame = false;
+        _hoveredStain = null;
+    }
+
+    public override bool Draw(string label, uint color, string name, bool found, bool gloss, float previewWidth,
+        MouseWheelType mouseWheel = MouseWheelType.Control)
+    {
+        _popupActiveThisFrame = false;
+        _hoveredStain = null;
+
+        return base.Draw(label, color, name, found, gloss, previewWidth, mouseWheel);
+    }
+
+    protected override void DrawList(float width, float itemHeight)
+    {
+        _popupActiveThisFrame = true;
+        base.DrawList(width, itemHeight);
+    }
+
     protected override bool DrawSelectable(int globalIdx, bool selected)
     {
         using (var _ = ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, ImGuiHelpers.ScaledVector2(4, 0)))
@@ -33,7 +65,12 @@ public sealed class GlamourerColorCombo(float _comboWidth, DictStain _stains, Fa
         var       totalWidth  = ImGui.GetContentRegionMax().X;
         using var style       = ImRaii.PushStyle(ImGuiStyleVar.ButtonTextAlign, new Vector2(buttonWidth / 2 / totalWidth, 0.5f));
 
-        return base.DrawSelectable(globalIdx, selected);
+        var ret = base.DrawSelectable(globalIdx, selected);
+
+        if (ImGui.IsItemHovered())
+            _hoveredStain = new StainId(Items[globalIdx].Key);
+
+        return ret;
     }
 
     private static Func<IReadOnlyList<KeyValuePair<byte, (string Name, uint Color, bool Gloss)>>> CreateFunc(DictStain stains,

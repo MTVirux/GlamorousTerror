@@ -48,6 +48,11 @@ public class EquipmentDrawer
     private BonusItemFlag?    _originalBonusSlot;
     private bool              _isComboOpen;
 
+    private EquipSlot? _stainPreviewSlot;
+    private int        _stainPreviewIndex;
+    private StainIds   _stainPreviewOriginal;
+    private bool       _stainSelectionMade;
+
     public EquipmentDrawer(FavoriteManager favorites, IDataManager gameData, ItemManager items, ItemNameService itemNames, TextureService textures,
         Configuration config, GPoseService gPose, AdvancedDyePopup advancedDyes, ItemCopyService itemCopy)
     {
@@ -415,6 +420,30 @@ public class EquipmentDrawer
                 ? _stainCombo.Draw($"##stain{data.Slot}", stain.RgbaColor, stain.Name, found, stain.Gloss)
                 : _stainCombo.Draw($"##stain{data.Slot}", stain.RgbaColor, stain.Name, found, stain.Gloss, width);
 
+            if (_stainCombo.PopupActive && data.IsState)
+            {
+                if (_stainPreviewSlot != data.Slot || _stainPreviewIndex != index)
+                {
+                    _stainPreviewSlot     = data.Slot;
+                    _stainPreviewIndex    = index;
+                    _stainPreviewOriginal = data.CurrentStains;
+                }
+
+                if (_stainCombo.HoveredStain.HasValue)
+                {
+                    var hoveredStain = _stainCombo.HoveredStain.Value;
+                    if (data.CurrentStains[index] != hoveredStain)
+                        data.SetStain(index, hoveredStain);
+                }
+                else if (data.CurrentStains[index] != _stainPreviewOriginal[index])
+                {
+                    data.SetStain(index, _stainPreviewOriginal[index]);
+                }
+            }
+
+            if (change && data.IsState)
+                _stainSelectionMade = true;
+
             _itemCopy.HandleCopyPaste(data, index);
             if (!change)
                 DrawStainDragDrop(data, index, stain, found);
@@ -708,6 +737,21 @@ public class EquipmentDrawer
 
     public void ApplyHoverPreview(State.StateManager stateManager, State.ActorState state)
     {
+        if (_stainCombo.PopupJustClosed && _stainPreviewSlot.HasValue)
+        {
+            if (!_stainSelectionMade)
+            {
+                var currentStains = state.ModelData.Stain(_stainPreviewSlot.Value);
+                if (currentStains != _stainPreviewOriginal)
+                    stateManager.ChangeStains(state, _stainPreviewSlot.Value, _stainPreviewOriginal, ApplySettings.Manual);
+            }
+            _stainPreviewSlot = null;
+            _stainSelectionMade = false;
+        }
+
+        // End frame for stain combo state tracking
+        _stainCombo.EndFrame();
+
         var anyComboOpen = false;
 
         // Check for hovered items in equipment slots

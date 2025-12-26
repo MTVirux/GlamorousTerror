@@ -292,6 +292,12 @@ public partial class CustomizationDrawer
     /// </summary>
     public void ApplyHoverPreview(State.StateManager stateManager, State.ActorState state)
     {
+        // Handle color picker popup preview (hair color, lip color, etc.)
+        ApplyColorHoverPreview(stateManager, state);
+
+        // Handle list/dropdown popup preview (eyebrow, eye shape, etc.)
+        ApplyListHoverPreview(stateManager, state);
+
         // If popup was active this frame, handle preview or restoration while open.
         if (_iconPopupActiveThisFrame)
         {
