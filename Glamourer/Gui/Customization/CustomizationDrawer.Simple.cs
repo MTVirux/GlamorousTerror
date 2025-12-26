@@ -9,6 +9,15 @@ namespace Glamourer.Gui.Customization;
 
 public partial class CustomizationDrawer
 {
+    // State for list combo popup hover preview
+    private bool           _listPopupOpen;
+    private bool           _listPopupActiveThisFrame;
+    private bool           _listPopupSelectionMade;
+    private CustomizeIndex _listPopupIndex;
+    private CustomizeValue _listPopupOriginalValue;
+    private int?           _listPopupHoveredIndex;
+    private CustomizeValue _listPopupHoveredValue;
+
     private void PercentageSelector(CustomizeIndex index)
     {
         using var _        = SetId(index);
@@ -168,12 +177,37 @@ public partial class CustomizationDrawer
         using (var combo = ImRaii.Combo("##combo", $"{_currentOption} #{current + 1}"))
         {
             if (combo)
+            {
+                // Mark popup as active this frame and initialize open state.
+                _listPopupActiveThisFrame = true;
+                if (!_listPopupOpen)
+                {
+                    _listPopupOpen = true;
+                    _listPopupIndex = _currentIndex;
+                    _listPopupOriginalValue = _customize[_currentIndex];
+                    _listPopupSelectionMade = false;
+                }
 
                 for (var i = 0; i < _currentCount; ++i)
                 {
                     if (ImGui.Selectable($"{_currentOption} #{i + 1}##combo", i == current))
+                    {
                         UpdateValue((CustomizeValue)i);
+                        _listPopupSelectionMade = true;
+                    }
+
+                    // Track hovered option for previewing.
+                    if (ImGui.IsItemHovered())
+                    {
+                        _listPopupHoveredIndex = i;
+                        _listPopupHoveredValue = (CustomizeValue)i;
+                    }
+                    else if (_listPopupHoveredIndex == i)
+                    {
+                        _listPopupHoveredIndex = null;
+                    }
                 }
+            }
         }
 
         if (CaptureMouseWheel(ref current, 0, _currentCount))
@@ -202,11 +236,37 @@ public partial class CustomizationDrawer
         using (var combo = ImRaii.Combo("##combo", $"{_currentOption} #{current}"))
         {
             if (combo)
+            {
+                // Mark popup as active this frame and initialize open state.
+                _listPopupActiveThisFrame = true;
+                if (!_listPopupOpen)
+                {
+                    _listPopupOpen = true;
+                    _listPopupIndex = _currentIndex;
+                    _listPopupOriginalValue = _customize[_currentIndex];
+                    _listPopupSelectionMade = false;
+                }
+
                 for (var i = 1; i <= _currentCount; ++i)
                 {
                     if (ImGui.Selectable($"{_currentOption} #{i}##combo", i == current))
+                    {
                         UpdateValue((CustomizeValue)i);
+                        _listPopupSelectionMade = true;
+                    }
+
+                    // Track hovered option for previewing.
+                    if (ImGui.IsItemHovered())
+                    {
+                        _listPopupHoveredIndex = i;
+                        _listPopupHoveredValue = (CustomizeValue)i;
+                    }
+                    else if (_listPopupHoveredIndex == i)
+                    {
+                        _listPopupHoveredIndex = null;
+                    }
                 }
+            }
         }
 
         if (CaptureMouseWheel(ref current, 1, _currentCount))
@@ -305,5 +365,56 @@ public partial class CustomizationDrawer
     {
         _currentApply = !_currentApply;
         ChangeApply   = _currentApply ? ChangeApply | _currentFlag : ChangeApply & ~_currentFlag;
+    }
+
+    /// <summary>
+    /// Apply hover preview changes for list/dropdown popups (eyebrow, eye shape, etc.).
+    /// This will preview the hovered option immediately on hover, and restore
+    /// the original value when the popup closes or when not hovering.
+    /// </summary>
+    private void ApplyListHoverPreview(State.StateManager stateManager, State.ActorState state)
+    {
+        // If popup was active this frame, handle preview or restoration while open.
+        if (_listPopupActiveThisFrame)
+        {
+            // If hovering an option, apply preview.
+            if (_listPopupHoveredIndex.HasValue)
+            {
+                var current = state.ModelData.Customize[_listPopupIndex];
+                if (current != _listPopupHoveredValue)
+                    stateManager.ChangeCustomize(state, _listPopupIndex, _listPopupHoveredValue, Designs.ApplySettings.Manual);
+            }
+            else
+            {
+                // Not hovering: restore original while popup open if no selection was made.
+                if (!_listPopupSelectionMade)
+                {
+                    var current = state.ModelData.Customize[_listPopupIndex];
+                    if (current != _listPopupOriginalValue)
+                        stateManager.ChangeCustomize(state, _listPopupIndex, _listPopupOriginalValue, Designs.ApplySettings.Manual);
+                }
+            }
+
+            // Reset per-frame active marker for next frame.
+            _listPopupActiveThisFrame = false;
+            return;
+        }
+
+        // Popup was open previously but not active this frame -> it has been closed.
+        if (_listPopupOpen)
+        {
+            // If no selection was made inside the popup, restore original value.
+            if (!_listPopupSelectionMade)
+            {
+                var current = state.ModelData.Customize[_listPopupIndex];
+                if (current != _listPopupOriginalValue)
+                    stateManager.ChangeCustomize(state, _listPopupIndex, _listPopupOriginalValue, Designs.ApplySettings.Manual);
+            }
+
+            // Clear open state and hovered index.
+            _listPopupOpen = false;
+            _listPopupHoveredIndex = null;
+            _listPopupSelectionMade = false;
+        }
     }
 }
