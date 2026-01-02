@@ -377,6 +377,9 @@ public class SettingsTab(
         Checkbox("Allow Double-Clicking Designs to Apply"u8,
             "Tries to apply a design to the current player character When double-clicking it in the design selector."u8,
             config.AllowDoubleClickToApply, v => config.AllowDoubleClickToApply = v);
+        Checkbox("Preview Design on Hover (Hold Ctrl)"u8,
+            "When holding Ctrl and hovering over a design in the design selector, temporarily preview it on your character. The preview is reverted when you stop hovering."u8,
+            config.PreviewDesignOnHover, v => config.PreviewDesignOnHover = v);
         Checkbox("Show all Application Rule Checkboxes for Automation"u8,
             "Show multiple separate application rule checkboxes for automated designs, instead of a single box for enabling or disabling."u8,
             config.ShowAllAutomatedApplicationRules, v => config.ShowAllAutomatedApplicationRules = v);
