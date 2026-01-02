@@ -125,7 +125,8 @@ public static class StaticServiceManager
             .AddSingleton<AutoDesignApplier>()
             .AddSingleton<FixedDesignMigrator>()
             .AddSingleton<DesignConverter>()
-            .AddSingleton<DesignColors>();
+            .AddSingleton<DesignColors>()
+            .AddSingleton<DesignPreviewService>();
 
     private static ServiceManager AddState(this ServiceManager services)
         => services.AddSingleton<StateManager>()

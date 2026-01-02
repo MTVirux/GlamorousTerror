@@ -939,7 +939,7 @@ public class CharacterPopupMenu : IDisposable
                 RestoreToOriginalState();
             }
 
-            _state.ApplyDesign(state, design, ApplySettings.Manual with { IsFinal = false });
+            _state.ApplyDesign(state, design, ApplySettings.ManualWithLinks with { IsFinal = false });
             _isPreviewActive = true;
             _previewDesign = design;
             _previewIsAutomation = false;

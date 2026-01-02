@@ -17,6 +17,7 @@ public class DesignTab(DesignFileSystemSelector _selector, DesignPanel _panel, I
     public void DrawContent()
     {
         _selector.Draw();
+        _selector.ApplyHoverPreview();
         if (_importService.CreateCharaTarget(out var designBase, out var name))
         {
             var newDesign = _manager.CreateClone(designBase, name, true);

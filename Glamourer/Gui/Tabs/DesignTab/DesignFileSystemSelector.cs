@@ -18,17 +18,22 @@ namespace Glamourer.Gui.Tabs.DesignTab;
 
 public sealed class DesignFileSystemSelector : FileSystemSelector<Design, DesignFileSystemSelector.DesignState>
 {
-    private readonly DesignManager   _designManager;
-    private readonly DesignChanged   _event;
-    private readonly Configuration   _config;
-    private readonly DesignConverter _converter;
-    private readonly TabSelected     _selectionEvent;
-    private readonly DesignColors    _designColors;
-    private readonly DesignApplier   _designApplier;
+    private readonly DesignManager        _designManager;
+    private readonly DesignChanged        _event;
+    private readonly Configuration        _config;
+    private readonly DesignConverter      _converter;
+    private readonly TabSelected          _selectionEvent;
+    private readonly DesignColors         _designColors;
+    private readonly DesignApplier        _designApplier;
+    private readonly DesignPreviewService _previewService;
 
     private string? _clipboardText;
     private Design? _cloneDesign;
     private string  _newName = string.Empty;
+
+    // Hover preview tracking
+    private Design? _hoveredDesignThisFrame;
+    private Design? _hoveredDesignLastFrame;
 
     public bool IncognitoMode
     {
@@ -71,7 +76,7 @@ public sealed class DesignFileSystemSelector : FileSystemSelector<Design, Design
 
     public DesignFileSystemSelector(DesignManager designManager, DesignFileSystem fileSystem, IKeyState keyState, DesignChanged @event,
         Configuration config, DesignConverter converter, TabSelected selectionEvent, Logger log, DesignColors designColors,
-        DesignApplier designApplier)
+        DesignApplier designApplier, DesignPreviewService previewService)
         : base(fileSystem, keyState, log, allowMultipleSelection: true)
     {
         _designManager  = designManager;
@@ -81,6 +86,7 @@ public sealed class DesignFileSystemSelector : FileSystemSelector<Design, Design
         _selectionEvent = selectionEvent;
         _designColors   = designColors;
         _designApplier  = designApplier;
+        _previewService = previewService;
         _event.Subscribe(OnDesignChange, DesignChanged.Priority.DesignFileSystemSelector);
         _selectionEvent.Subscribe(OnTabSelected, TabSelected.Priority.DesignSelector);
         _designColors.ColorChanged += SetFilterDirty;
@@ -176,12 +182,57 @@ public sealed class DesignFileSystemSelector : FileSystemSelector<Design, Design
         var       name  = IncognitoMode ? leaf.Value.Incognito : leaf.Value.Name.Text;
         using var color = ImRaii.PushColor(ImGuiCol.Text, state.Color);
         using var _     = ImUtf8.TreeNode(name, flag);
+
+        // Track hover for preview - only when Ctrl is held
+        if (ImGui.IsItemHovered() && ImGui.GetIO().KeyCtrl)
+            _hoveredDesignThisFrame = leaf.Value;
+
         if (_config.AllowDoubleClickToApply && ImGui.IsItemHovered() && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
             _designApplier.ApplyToPlayer(leaf.Value);
     }
 
+    /// <summary>
+    /// Process hover preview changes. Call this at the end of each frame after drawing.
+    /// This applies or reverts the design preview based on what's currently being hovered.
+    /// </summary>
+    public void ApplyHoverPreview()
+    {
+        // Only process if preview on hover is enabled
+        if (!_config.PreviewDesignOnHover)
+        {
+            // If preview was active but setting was disabled, revert
+            if (_previewService.IsPreviewActive)
+                _previewService.RevertPreview();
+
+            _hoveredDesignThisFrame = null;
+            _hoveredDesignLastFrame = null;
+            return;
+        }
+
+        // Check if hovered design changed this frame
+        if (_hoveredDesignThisFrame != _hoveredDesignLastFrame)
+        {
+            if (_hoveredDesignThisFrame != null)
+            {
+                // Started hovering a new design - apply preview
+                _previewService.ApplyPreview(_hoveredDesignThisFrame);
+            }
+            else if (_hoveredDesignLastFrame != null)
+            {
+                // Stopped hovering any design - revert preview
+                _previewService.RevertPreview();
+            }
+        }
+
+        // Save current frame's hover state for next frame comparison
+        _hoveredDesignLastFrame = _hoveredDesignThisFrame;
+        _hoveredDesignThisFrame = null;
+    }
+
     public override void Dispose()
     {
+        // Revert any active preview before disposing
+        _previewService.RevertPreview();
         base.Dispose();
         _event.Unsubscribe(OnDesignChange);
         _selectionEvent.Unsubscribe(OnTabSelected);

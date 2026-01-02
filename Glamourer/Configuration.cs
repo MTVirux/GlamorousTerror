@@ -87,6 +87,7 @@ public class Configuration : IPluginConfiguration, ISavable
     public bool   AlwaysApplyAssociatedMods        { get; set; } = true;
     public bool   UseTemporarySettings             { get; set; } = true;
     public bool   AllowDoubleClickToApply          { get; set; } = false;
+    public bool   PreviewDesignOnHover             { get; set; } = true;
     public bool   RespectManualOnAutomationUpdate  { get; set; } = false;
     public bool   PreventRandomRepeats             { get; set; } = false;
     public string PcpFolder                        { get; set; } = "PCP";
