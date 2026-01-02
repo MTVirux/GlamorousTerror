@@ -149,17 +149,19 @@ public sealed class DesignPreviewService(
 
         try
         {
-            // Restore materials first
+            // Convert the original data back to a design and apply it
+            // Use ResetMaterials = true so ApplyDesign clears existing materials
+            var tempDesign = designConverter.Convert(_previewOriginalData, new StateMaterialManager(), ApplicationRules.All);
+            stateManager.ApplyDesign(_previewOriginalState, tempDesign, ApplySettings.Manual with { IsFinal = false, ResetMaterials = true });
+
+            // After ApplyDesign clears materials, manually restore the original materials
+            // This preserves the full MaterialValueState including Game and DrawData fields
+            // which would be lost if we converted through the design system
             if (_previewOriginalMaterials is { } materials)
             {
-                _previewOriginalState.Materials.Clear();
                 foreach (var (key, value) in materials.Values)
                     _previewOriginalState.Materials.AddOrUpdateValue(key, value);
             }
-
-            // Convert the original data back to a design and apply it
-            var tempDesign = designConverter.Convert(_previewOriginalData, _previewOriginalMaterials ?? new StateMaterialManager(), ApplicationRules.All);
-            stateManager.ApplyDesign(_previewOriginalState, tempDesign, ApplySettings.Manual with { IsFinal = false });
         }
         catch (Exception ex)
         {
