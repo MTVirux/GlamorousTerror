@@ -15,148 +15,6 @@ using Penumbra.GameData.Interop;
 namespace Glamourer.Gui;
 
 /// <summary>
-/// Represents the type of preview being shown.
-/// </summary>
-public enum PreviewType
-{
-    None,
-    Equipment,
-    Appearance,
-    Design,
-    FullDesignToSelf,
-    FullDesignToTarget,
-    Automation,
-    Reset,
-}
-
-/// <summary>
-/// Represents the current preview state, tracking what is being previewed and the original state to restore.
-/// </summary>
-public sealed class PreviewState
-{
-    /// <summary> Whether a preview is currently active. </summary>
-    public bool IsActive { get; private set; }
-
-    /// <summary> The type of preview being shown. </summary>
-    public PreviewType Type { get; private set; }
-
-    /// <summary> The actor state being modified by the preview. </summary>
-    public ActorState? TargetState { get; private set; }
-
-    /// <summary> The original DesignData before preview was applied. </summary>
-    public DesignData OriginalData { get; private set; }
-
-    /// <summary> The original materials before preview was applied. </summary>
-    public StateMaterialManager? OriginalMaterials { get; private set; }
-
-    /// <summary> Whether we're applying to self (true) or target (false). </summary>
-    public bool ToSelf { get; private set; }
-
-    // Type-specific tracking
-    public EquipSlot EquipSlot { get; private set; }
-    public bool IsBonusItem { get; private set; }
-    public CustomizeFlag AppearanceFlag { get; private set; }
-    public Design? Design { get; private set; }
-
-    /// <summary>
-    /// Starts a new preview, capturing the original state of the target.
-    /// </summary>
-    public void Start(ActorState state, PreviewType type, bool toSelf = false)
-    {
-        // If switching to a different actor, we should have already restored the previous one
-        if (IsActive && TargetState != state)
-            throw new InvalidOperationException("Cannot start preview on different actor without ending previous preview first");
-
-        if (!IsActive)
-        {
-            // Capture original state only on first preview
-            TargetState = state;
-            OriginalData = state.ModelData;
-            OriginalMaterials = state.Materials.Clone();
-        }
-
-        IsActive = true;
-        Type = type;
-        ToSelf = toSelf;
-
-        // Clear type-specific fields
-        EquipSlot = EquipSlot.Unknown;
-        IsBonusItem = false;
-        AppearanceFlag = 0;
-        Design = null;
-    }
-
-    /// <summary>
-    /// Starts an equipment preview.
-    /// </summary>
-    public void StartEquipment(ActorState state, EquipSlot slot, bool isBonusItem, bool toSelf)
-    {
-        Start(state, PreviewType.Equipment, toSelf);
-        EquipSlot = slot;
-        IsBonusItem = isBonusItem;
-    }
-
-    /// <summary>
-    /// Starts an appearance preview.
-    /// </summary>
-    public void StartAppearance(ActorState state, CustomizeFlag flag, bool toSelf)
-    {
-        Start(state, PreviewType.Appearance, toSelf);
-        AppearanceFlag = flag;
-    }
-
-    /// <summary>
-    /// Starts a design preview.
-    /// </summary>
-    public void StartDesign(ActorState state, Design design)
-    {
-        Start(state, PreviewType.Design, false);
-        Design = design;
-    }
-
-    /// <summary>
-    /// Checks if we're already previewing the same equipment.
-    /// </summary>
-    public bool IsSameEquipmentPreview(EquipSlot slot, bool isBonusItem, bool toSelf)
-        => IsActive && Type == PreviewType.Equipment && EquipSlot == slot && IsBonusItem == isBonusItem && ToSelf == toSelf;
-
-    /// <summary>
-    /// Checks if we're already previewing the same appearance.
-    /// </summary>
-    public bool IsSameAppearancePreview(CustomizeFlag flag, bool toSelf)
-        => IsActive && Type == PreviewType.Appearance && AppearanceFlag == flag && ToSelf == toSelf;
-
-    /// <summary>
-    /// Checks if we're already previewing the same design.
-    /// </summary>
-    public bool IsSameDesignPreview(Design design)
-        => IsActive && Type == PreviewType.Design && Design == design;
-
-    /// <summary>
-    /// Checks if we're already previewing the same type.
-    /// </summary>
-    public bool IsSameTypePreview(PreviewType type)
-        => IsActive && Type == type;
-
-    /// <summary>
-    /// Ends the preview, clearing all state. Does NOT restore original data - caller should do that first.
-    /// </summary>
-    public void End()
-    {
-        IsActive = false;
-        Type = PreviewType.None;
-        TargetState = null;
-        OriginalData = default;
-        OriginalMaterials = null;
-        ToSelf = false;
-        EquipSlot = EquipSlot.Unknown;
-        IsBonusItem = false;
-        AppearanceFlag = 0;
-        Design = null;
-    }
-}
-
-/// <summary>
 /// Custom ImGui-based popup menu for character context actions.
 /// Provides full control over menu positioning and appearance.
 /// </summary>
@@ -170,6 +28,7 @@ public class CharacterPopupMenu : IDisposable
     private readonly DesignFileSystem   _designFileSystem;
     private readonly DesignConverter    _designConverter;
     private readonly AutoDesignApplier  _autoDesignApplier;
+    private readonly PreviewService     _previewService;
     private readonly Configuration      _config;
     private readonly IUiBuilder         _uiBuilder;
 
@@ -179,9 +38,6 @@ public class CharacterPopupMenu : IDisposable
     private bool   _menuOpen;
     private bool   _shouldOpen;
     private Vector2 _menuPosition;
-
-    // Unified preview state
-    private readonly PreviewState _preview = new();
 
     // Equipment slot definitions (EquipSlot.Unknown used for "All")
     private static readonly (string Name, EquipSlot Slot, bool IsBonusItem)[] EquipmentSlots =
@@ -238,7 +94,8 @@ public class CharacterPopupMenu : IDisposable
         DesignManager designManager,
         DesignFileSystem designFileSystem,
         DesignConverter designConverter,
-        AutoDesignApplier autoDesignApplier)
+        AutoDesignApplier autoDesignApplier,
+        PreviewService previewService)
     {
         _items             = items;
         _state             = state;
@@ -248,6 +105,7 @@ public class CharacterPopupMenu : IDisposable
         _designFileSystem  = designFileSystem;
         _designConverter   = designConverter;
         _autoDesignApplier = autoDesignApplier;
+        _previewService    = previewService;
         _config            = config;
         _uiBuilder         = uiBuilder;
 
@@ -299,8 +157,8 @@ public class CharacterPopupMenu : IDisposable
         if (!popup)
         {
             // Popup closed - revert any active preview
-            if (_preview.IsActive)
-                EndPreview();
+            if (_previewService.IsPreviewActive)
+                _previewService.EndPreview();
             _menuOpen = false;
             return;
         }
@@ -356,8 +214,8 @@ public class CharacterPopupMenu : IDisposable
             if (ImGui.BeginMenu("Apply Target's Equipment to Self"))
             {
                 // Revert any non-equipment preview when entering this submenu
-                if (_preview.IsActive && _preview.Type != PreviewType.Equipment)
-                    EndPreview();
+                if (_previewService.IsPreviewActive && _previewService.State.Type != PreviewType.Equipment)
+                    _previewService.EndPreview();
                 DrawEquipmentSubmenu(ApplyEquipmentToSelf, toSelf: true);
                 ImGui.EndMenu();
                 anyPreviewSubmenuOpen = true;
@@ -367,8 +225,8 @@ public class CharacterPopupMenu : IDisposable
             if (ImGui.BeginMenu("Apply Target's Appearance to Self"))
             {
                 // Revert any equipment preview when entering this submenu
-                if (_preview.IsActive && _preview.Type == PreviewType.Equipment)
-                    EndPreview();
+                if (_previewService.IsPreviewActive && _previewService.State.Type == PreviewType.Equipment)
+                    _previewService.EndPreview();
                 DrawAppearanceSubmenu(ApplyAppearanceToSelf, toSelf: true);
                 ImGui.EndMenu();
                 anyPreviewSubmenuOpen = true;
@@ -392,8 +250,8 @@ public class CharacterPopupMenu : IDisposable
             if (ImGui.BeginMenu("Apply Current Equipment to Target"))
             {
                 // Revert any non-equipment preview when entering this submenu
-                if (_preview.IsActive && _preview.Type != PreviewType.Equipment)
-                    EndPreview();
+                if (_previewService.IsPreviewActive && _previewService.State.Type != PreviewType.Equipment)
+                    _previewService.EndPreview();
                 DrawEquipmentSubmenu(ApplyGearToTarget, toSelf: false);
                 ImGui.EndMenu();
                 anyPreviewSubmenuOpen = true;
@@ -403,8 +261,8 @@ public class CharacterPopupMenu : IDisposable
             if (ImGui.BeginMenu("Apply Current Appearance to Target"))
             {
                 // Revert any equipment preview when entering this submenu
-                if (_preview.IsActive && _preview.Type == PreviewType.Equipment)
-                    EndPreview();
+                if (_previewService.IsPreviewActive && _previewService.State.Type == PreviewType.Equipment)
+                    _previewService.EndPreview();
                 DrawAppearanceSubmenu(ApplyAppearanceToTarget, toSelf: false);
                 ImGui.EndMenu();
                 anyPreviewSubmenuOpen = true;
@@ -417,8 +275,8 @@ public class CharacterPopupMenu : IDisposable
         if (ImGui.BeginMenu("Apply Design to Target"))
         {
             // Revert any non-design preview when entering this submenu
-            if (_preview.IsActive && _preview.Type != PreviewType.Design)
-                EndPreview();
+            if (_previewService.IsPreviewActive && _previewService.State.Type != PreviewType.Design)
+                _previewService.EndPreview();
             DrawDesignSubmenu(_designFileSystem.Root);
             ImGui.EndMenu();
             anyPreviewSubmenuOpen = true;
@@ -488,16 +346,16 @@ public class CharacterPopupMenu : IDisposable
             if (ImGui.IsItemHovered())
             {
                 anyItemHovered = true;
-                if (!_preview.IsSameEquipmentPreview(slot, isBonusItem, toSelf))
+                if (!_previewService.State.IsSameEquipmentPreview(slot, isBonusItem, toSelf))
                 {
-                    StartEquipmentPreview(slot, isBonusItem, toSelf);
+                    _previewService.StartEquipmentPreview(_lastActor, slot, isBonusItem, toSelf);
                 }
             }
         }
 
         // Revert preview when not hovering any item (so user can see original by hovering off)
-        if (!anyItemHovered && _preview.IsActive && _preview.Type == PreviewType.Equipment)
-            EndPreview();
+        if (!anyItemHovered && _previewService.IsPreviewActive && _previewService.State.Type == PreviewType.Equipment)
+            _previewService.EndPreview();
     }
 
     private void DrawAppearanceSubmenu(Action<CustomizeFlag> action, bool toSelf)
@@ -521,16 +379,16 @@ public class CharacterPopupMenu : IDisposable
             if (ImGui.IsItemHovered())
             {
                 anyItemHovered = true;
-                if (!_preview.IsSameAppearancePreview(flag, toSelf))
+                if (!_previewService.State.IsSameAppearancePreview(flag, toSelf))
                 {
-                    StartAppearancePreview(flag, toSelf);
+                    _previewService.StartAppearancePreview(_lastActor, flag, toSelf);
                 }
             }
         }
 
         // Revert preview when not hovering any item (so user can see original by hovering off)
-        if (!anyItemHovered && _preview.IsActive && _preview.Type == PreviewType.Appearance)
-            EndPreview();
+        if (!anyItemHovered && _previewService.IsPreviewActive && _previewService.State.Type == PreviewType.Appearance)
+            _previewService.EndPreview();
     }
 
     private void DrawDesignSubmenu(DesignFileSystem.Folder folder)
@@ -564,17 +422,17 @@ public class CharacterPopupMenu : IDisposable
             if (ImGui.IsItemHovered())
             {
                 anyItemHovered = true;
-                if (!_preview.IsSameDesignPreview(design))
+                if (!_previewService.State.IsSameDesignPreview(design))
                 {
-                    StartDesignPreview(design);
+                    _previewService.ApplyDesignPreview(design);
                 }
             }
         }
 
         // Revert preview when not hovering any item (so user can see original by hovering off)
         // Only do this at the root level to avoid reverting when navigating subfolders
-        if (!anyItemHovered && _preview.IsActive && _preview.Type == PreviewType.Design)
-            EndPreview();
+        if (!anyItemHovered && _previewService.IsPreviewActive && _previewService.State.Type == PreviewType.Design)
+            _previewService.EndPreview();
     }
 
     #region Comparison and Preview Helpers
@@ -703,207 +561,11 @@ public class CharacterPopupMenu : IDisposable
     #region Preview System
 
     /// <summary>
-    /// Starts an equipment preview with proper state capture.
-    /// </summary>
-    private void StartEquipmentPreview(EquipSlot slot, bool isBonusItem, bool toSelf)
-    {
-        try
-        {
-            // Determine target state first
-            ActorState? state = null;
-            if (toSelf)
-            {
-                var (playerId, playerData) = _objects.PlayerData;
-                if (!playerData.Valid) return;
-                if (!_state.GetOrCreate(playerId, playerData.Objects[0], out state)) return;
-            }
-            else
-            {
-                if (!_lastActor.Valid) return;
-                if (!_state.GetOrCreate(_lastActor, out state)) return;
-            }
-
-            if (state == null) return;
-
-            // IMPORTANT: Restore any active preview BEFORE capturing source data
-            // This ensures we capture the original state, not a previewed state
-            if (_preview.IsActive && _preview.TargetState != state)
-            {
-                RestoreToOriginalState();
-                _preview.End();
-            }
-            else if (_preview.IsActive)
-            {
-                RestoreToOriginalState();
-            }
-
-            // Now capture source data after any previews have been reverted
-            DesignData sourceData;
-            if (toSelf)
-            {
-                sourceData = _state.FromActor(_lastActor, true, false);
-            }
-            else
-            {
-                var (playerId, playerData) = _objects.PlayerData;
-                if (!playerData.Valid) return;
-                sourceData = _state.FromActor(playerData.Objects[0], true, false);
-            }
-
-            ApplicationCollection collection;
-            if (isBonusItem)
-                collection = new ApplicationCollection(0, BonusItemFlag.Glasses, CustomizeFlag.BodyType, 0, 0, 0);
-            else if (slot == EquipSlot.Unknown)
-                collection = ApplicationCollection.Equipment;
-            else
-                collection = new ApplicationCollection(slot.ToBothFlags(), 0, CustomizeFlag.BodyType, 0, 0, 0);
-
-            var tempDesign = _designConverter.Convert(sourceData, new StateMaterialManager(),
-                new ApplicationRules(collection, false));
-
-            _preview.StartEquipment(state, slot, isBonusItem, toSelf);
-            _state.ApplyDesign(state, tempDesign, ApplySettings.Manual with { IsFinal = false, ResetMaterials = true });
-        }
-        catch (Exception ex)
-        {
-            Glamourer.Log.Debug($"Preview equipment failed: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Starts an appearance preview with proper state capture.
-    /// </summary>
-    private void StartAppearancePreview(CustomizeFlag flag, bool toSelf)
-    {
-        try
-        {
-            // Determine target state first
-            ActorState? state = null;
-            if (toSelf)
-            {
-                var (playerId, playerData) = _objects.PlayerData;
-                if (!playerData.Valid) return;
-                if (!_state.GetOrCreate(playerId, playerData.Objects[0], out state)) return;
-            }
-            else
-            {
-                if (!_lastActor.Valid) return;
-                if (!_state.GetOrCreate(_lastActor, out state)) return;
-            }
-
-            if (state == null) return;
-
-            // IMPORTANT: Restore any active preview BEFORE capturing source data
-            // This ensures we capture the original state, not a previewed state
-            if (_preview.IsActive && _preview.TargetState != state)
-            {
-                RestoreToOriginalState();
-                _preview.End();
-            }
-            else if (_preview.IsActive)
-            {
-                RestoreToOriginalState();
-            }
-
-            // Now capture source data after any previews have been reverted
-            DesignData sourceData;
-            if (toSelf)
-            {
-                sourceData = _state.FromActor(_lastActor, true, false);
-            }
-            else
-            {
-                var (playerId, playerData) = _objects.PlayerData;
-                if (!playerData.Valid) return;
-                sourceData = _state.FromActor(playerData.Objects[0], true, false);
-            }
-
-            var collection = flag == 0
-                ? ApplicationCollection.Customizations
-                : new ApplicationCollection(0, 0, flag, 0, 0, 0);
-
-            var tempDesign = _designConverter.Convert(sourceData, new StateMaterialManager(),
-                new ApplicationRules(collection, false));
-
-            _preview.StartAppearance(state, flag, toSelf);
-            _state.ApplyDesign(state, tempDesign, ApplySettings.Manual with { IsFinal = false, ResetMaterials = true });
-        }
-        catch (Exception ex)
-        {
-            Glamourer.Log.Debug($"Preview appearance failed: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Starts a design preview with proper state capture.
-    /// </summary>
-    private void StartDesignPreview(Design design)
-    {
-        try
-        {
-            if (!_lastActor.Valid) return;
-            if (!_state.GetOrCreate(_lastActor, out var state)) return;
-
-            // Handle actor switching: restore previous actor first if needed
-            if (_preview.IsActive && _preview.TargetState != state)
-            {
-                RestoreToOriginalState();
-                _preview.End();
-            }
-
-            // Restore to original before applying new preview if same actor
-            if (_preview.IsActive)
-                RestoreToOriginalState();
-
-            _preview.StartDesign(state, design);
-            // Use ResetMaterials = true to fully clear materials before applying the design's materials
-            // This prevents material conflicts when switching between designs
-            _state.ApplyDesign(state, design, ApplySettings.ManualWithLinks with { IsFinal = false, ResetMaterials = true });
-        }
-        catch (Exception ex)
-        {
-            Glamourer.Log.Debug($"Preview design failed: {ex.Message}");
-        }
-    }
-
-    /// <summary>
     /// Starts a full design to self preview.
     /// </summary>
     private void ApplyFullDesignToSelfPreview()
     {
-        if (_preview.IsSameTypePreview(PreviewType.FullDesignToSelf))
-            return;
-
-        try
-        {
-            var (playerId, playerData) = _objects.PlayerData;
-            if (!playerData.Valid) return;
-            if (!_state.GetOrCreate(playerId, playerData.Objects[0], out var playerState)) return;
-            if (!_lastActor.Valid) return;
-
-            // IMPORTANT: Restore any active preview BEFORE capturing source data
-            // This ensures we capture the original state, not a previewed state
-            if (_preview.IsActive && _preview.TargetState != playerState)
-            {
-                RestoreToOriginalState();
-                _preview.End();
-            }
-            else if (_preview.IsActive)
-            {
-                RestoreToOriginalState();
-            }
-
-            // Now capture source data after any previews have been reverted
-            var targetData = _state.FromActor(_lastActor, true, false);
-
-            _preview.Start(playerState, PreviewType.FullDesignToSelf, toSelf: true);
-            var tempDesign = _designConverter.Convert(targetData, new StateMaterialManager(), ApplicationRules.All);
-            _state.ApplyDesign(playerState, tempDesign, ApplySettings.Manual with { IsFinal = false, ResetMaterials = true });
-        }
-        catch (Exception ex)
-        {
-            Glamourer.Log.Debug($"Preview full design to self failed: {ex.Message}");
-        }
+        _previewService.StartFullDesignToSelfPreview(_lastActor);
     }
 
     /// <summary>
@@ -911,40 +573,7 @@ public class CharacterPopupMenu : IDisposable
     /// </summary>
     private void ApplyFullDesignToTargetPreview()
     {
-        if (_preview.IsSameTypePreview(PreviewType.FullDesignToTarget))
-            return;
-
-        try
-        {
-            if (!_lastActor.Valid) return;
-            if (!_state.GetOrCreate(_lastActor, out var targetState)) return;
-
-            var (playerId, playerData) = _objects.PlayerData;
-            if (!playerData.Valid) return;
-
-            // IMPORTANT: Restore any active preview BEFORE capturing source data
-            // This ensures we capture the original state, not a previewed state
-            if (_preview.IsActive && _preview.TargetState != targetState)
-            {
-                RestoreToOriginalState();
-                _preview.End();
-            }
-            else if (_preview.IsActive)
-            {
-                RestoreToOriginalState();
-            }
-
-            // Now capture source data after any previews have been reverted
-            var playerDesignData = _state.FromActor(playerData.Objects[0], true, false);
-
-            _preview.Start(targetState, PreviewType.FullDesignToTarget, toSelf: false);
-            var tempDesign = _designConverter.Convert(playerDesignData, new StateMaterialManager(), ApplicationRules.All);
-            _state.ApplyDesign(targetState, tempDesign, ApplySettings.Manual with { IsFinal = false, ResetMaterials = true });
-        }
-        catch (Exception ex)
-        {
-            Glamourer.Log.Debug($"Preview full design to target failed: {ex.Message}");
-        }
+        _previewService.StartFullDesignToTargetPreview(_lastActor);
     }
 
     /// <summary>
@@ -952,34 +581,7 @@ public class CharacterPopupMenu : IDisposable
     /// </summary>
     private void ApplyAutomationPreview()
     {
-        if (_preview.IsSameTypePreview(PreviewType.Automation))
-            return;
-
-        try
-        {
-            if (!_lastActor.Valid) return;
-            var targetIdentifier = _lastActor.GetIdentifier(_objects.Actors);
-            if (!_state.GetOrCreate(targetIdentifier, _lastActor, out var state)) return;
-
-            // Handle actor switching: restore previous actor first if needed
-            if (_preview.IsActive && _preview.TargetState != state)
-            {
-                RestoreToOriginalState();
-                _preview.End();
-            }
-
-            // Restore to original before applying new preview if same actor
-            if (_preview.IsActive)
-                RestoreToOriginalState();
-
-            _preview.Start(state, PreviewType.Automation);
-            _autoDesignApplier.ReapplyAutomation(_lastActor, targetIdentifier, state, true, false, out var forcedRedraw);
-            _state.ReapplyAutomationState(_lastActor, state, forcedRedraw, true, StateSource.Manual);
-        }
-        catch (Exception ex)
-        {
-            Glamourer.Log.Debug($"Preview automation failed: {ex.Message}");
-        }
+        _previewService.StartAutomationPreview(_lastActor);
     }
 
     /// <summary>
@@ -987,71 +589,7 @@ public class CharacterPopupMenu : IDisposable
     /// </summary>
     private void ApplyResetPreview()
     {
-        if (_preview.IsSameTypePreview(PreviewType.Reset))
-            return;
-
-        try
-        {
-            if (!_lastActor.Valid) return;
-            if (!_state.GetOrCreate(_lastActor, out var state)) return;
-
-            // Handle actor switching: restore previous actor first if needed
-            if (_preview.IsActive && _preview.TargetState != state)
-            {
-                RestoreToOriginalState();
-                _preview.End();
-            }
-
-            // Restore to original before applying new preview if same actor
-            if (_preview.IsActive)
-                RestoreToOriginalState();
-
-            _preview.Start(state, PreviewType.Reset);
-            _state.ResetState(state, StateSource.Manual, isFinal: false);
-        }
-        catch (Exception ex)
-        {
-            Glamourer.Log.Debug($"Preview reset failed: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Restores the character to their original state without clearing the stored original data.
-    /// Used when switching between different preview types on the same actor.
-    /// </summary>
-    private void RestoreToOriginalState()
-    {
-        if (_preview.TargetState == null || !_preview.IsActive)
-            return;
-
-        try
-        {
-            // Convert the original data back to a design and apply it with ResetMaterials
-            var tempDesign = _designConverter.Convert(_preview.OriginalData, _preview.OriginalMaterials ?? new StateMaterialManager(), ApplicationRules.All);
-            _state.ApplyDesign(_preview.TargetState, tempDesign, ApplySettings.Manual with { IsFinal = false, ResetMaterials = true });
-        }
-        catch (Exception ex)
-        {
-            Glamourer.Log.Debug($"Restore to original state failed: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Ends the preview, restoring the original state and clearing preview tracking.
-    /// </summary>
-    private void EndPreview()
-    {
-        if (!_preview.IsActive)
-            return;
-
-        try
-        {
-            RestoreToOriginalState();
-        }
-        finally
-        {
-            _preview.End();
-        }
+        _previewService.StartResetPreview(_lastActor);
     }
 
     /// <summary>
@@ -1059,9 +597,9 @@ public class CharacterPopupMenu : IDisposable
     /// </summary>
     private void CheckAndEndPreview()
     {
-        if (_preview.IsActive)
+        if (_previewService.IsPreviewActive)
         {
-            EndPreview();
+            _previewService.EndPreview();
         }
     }
 
@@ -1071,11 +609,7 @@ public class CharacterPopupMenu : IDisposable
     /// </summary>
     private void ApplyPreviewPermanently(Action applyAction)
     {
-        // Clear the preview state without restoring - the action will apply final changes
-        _preview.End();
-
-        // Now run the action which will apply with IsFinal=true
-        applyAction();
+        _previewService.ApplyPreviewPermanently(applyAction);
     }
 
     /// <summary>

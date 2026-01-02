@@ -1,4 +1,5 @@
 ﻿using Dalamud.Bindings.ImGui;
+using Glamourer.Services;
 using OtterGui;
 using OtterGui.Raii;
 using OtterGuiInternal;
@@ -9,14 +10,9 @@ namespace Glamourer.Gui.Customization;
 
 public partial class CustomizationDrawer
 {
-    // State for list combo popup hover preview
+    // State for list combo popup (only tracking popup open state, preview handled by PreviewService)
     private bool           _listPopupOpen;
-    private bool           _listPopupActiveThisFrame;
-    private bool           _listPopupSelectionMade;
     private CustomizeIndex _listPopupIndex;
-    private CustomizeValue _listPopupOriginalValue;
-    private int?           _listPopupHoveredIndex;
-    private CustomizeValue _listPopupHoveredValue;
 
     private void PercentageSelector(CustomizeIndex index)
     {
@@ -174,37 +170,41 @@ public partial class CustomizationDrawer
     {
         ImGui.SetNextItemWidth(_comboSelectorSize * ImGui.GetIO().FontGlobalScale);
         var current = (int)_currentByte.Value;
+        var previewState = _previewService.State;
         using (var combo = ImRaii.Combo("##combo", $"{_currentOption} #{current + 1}"))
         {
             if (combo)
             {
-                // Mark popup as active this frame and initialize open state.
-                _listPopupActiveThisFrame = true;
-                if (!_listPopupOpen)
+                // Mark popup as active this frame and initialize open state via PreviewService.
+                previewState.PopupActiveThisFrame = true;
+                previewState.ActivePopupType = PopupType.List;
+                
+                // Always update the popup index to current - if it changed, we need to reset the preview
+                if (_listPopupOpen && _listPopupIndex != _currentIndex)
                 {
-                    _listPopupOpen = true;
-                    _listPopupIndex = _currentIndex;
-                    _listPopupOriginalValue = _customize[_currentIndex];
-                    _listPopupSelectionMade = false;
+                    // Index changed - end previous preview before starting new one
+                    _previewService.State.End();
                 }
+                _listPopupOpen = true;
+                _listPopupIndex = _currentIndex;
 
                 for (var i = 0; i < _currentCount; ++i)
                 {
                     if (ImGui.Selectable($"{_currentOption} #{i + 1}##combo", i == current))
                     {
                         UpdateValue((CustomizeValue)i);
-                        _listPopupSelectionMade = true;
+                        previewState.PopupSelectionMade = true;
                     }
 
-                    // Track hovered option for previewing.
+                    // Track hovered option for previewing via PreviewService.
                     if (ImGui.IsItemHovered())
                     {
-                        _listPopupHoveredIndex = i;
-                        _listPopupHoveredValue = (CustomizeValue)i;
+                        previewState.PopupHoveredIndex = i;
+                        previewState.PopupHoveredValue = (CustomizeValue)i;
                     }
-                    else if (_listPopupHoveredIndex == i)
+                    else if (previewState.PopupHoveredIndex == i)
                     {
-                        _listPopupHoveredIndex = null;
+                        previewState.PopupHoveredIndex = null;
                     }
                 }
             }
@@ -233,37 +233,41 @@ public partial class CustomizationDrawer
     {
         ImGui.SetNextItemWidth(_comboSelectorSize * ImGui.GetIO().FontGlobalScale);
         var current = (int)_currentByte.Value;
+        var previewState = _previewService.State;
         using (var combo = ImRaii.Combo("##combo", $"{_currentOption} #{current}"))
         {
             if (combo)
             {
-                // Mark popup as active this frame and initialize open state.
-                _listPopupActiveThisFrame = true;
-                if (!_listPopupOpen)
+                // Mark popup as active this frame and initialize open state via PreviewService.
+                previewState.PopupActiveThisFrame = true;
+                previewState.ActivePopupType = PopupType.List;
+                
+                // Always update the popup index to current - if it changed, we need to reset the preview
+                if (_listPopupOpen && _listPopupIndex != _currentIndex)
                 {
-                    _listPopupOpen = true;
-                    _listPopupIndex = _currentIndex;
-                    _listPopupOriginalValue = _customize[_currentIndex];
-                    _listPopupSelectionMade = false;
+                    // Index changed - end previous preview before starting new one
+                    _previewService.State.End();
                 }
+                _listPopupOpen = true;
+                _listPopupIndex = _currentIndex;
 
                 for (var i = 1; i <= _currentCount; ++i)
                 {
                     if (ImGui.Selectable($"{_currentOption} #{i}##combo", i == current))
                     {
                         UpdateValue((CustomizeValue)i);
-                        _listPopupSelectionMade = true;
+                        previewState.PopupSelectionMade = true;
                     }
 
-                    // Track hovered option for previewing.
+                    // Track hovered option for previewing via PreviewService.
                     if (ImGui.IsItemHovered())
                     {
-                        _listPopupHoveredIndex = i;
-                        _listPopupHoveredValue = (CustomizeValue)i;
+                        previewState.PopupHoveredIndex = i;
+                        previewState.PopupHoveredValue = (CustomizeValue)i;
                     }
-                    else if (_listPopupHoveredIndex == i)
+                    else if (previewState.PopupHoveredIndex == i)
                     {
-                        _listPopupHoveredIndex = null;
+                        previewState.PopupHoveredIndex = null;
                     }
                 }
             }
@@ -374,47 +378,32 @@ public partial class CustomizationDrawer
     /// </summary>
     private void ApplyListHoverPreview(State.StateManager stateManager, State.ActorState state)
     {
-        // If popup was active this frame, handle preview or restoration while open.
-        if (_listPopupActiveThisFrame)
-        {
-            // If hovering an option, apply preview.
-            if (_listPopupHoveredIndex.HasValue)
-            {
-                var current = state.ModelData.Customize[_listPopupIndex];
-                if (current != _listPopupHoveredValue)
-                    stateManager.ChangeCustomize(state, _listPopupIndex, _listPopupHoveredValue, Designs.ApplySettings.Manual);
-            }
-            else
-            {
-                // Not hovering: restore original while popup open if no selection was made.
-                if (!_listPopupSelectionMade)
-                {
-                    var current = state.ModelData.Customize[_listPopupIndex];
-                    if (current != _listPopupOriginalValue)
-                        stateManager.ChangeCustomize(state, _listPopupIndex, _listPopupOriginalValue, Designs.ApplySettings.Manual);
-                }
-            }
+        var previewState = _previewService.State;
 
-            // Reset per-frame active marker for next frame.
-            _listPopupActiveThisFrame = false;
+        // Handle list popup preview via PreviewService (only if it's OUR popup that's active)
+        if (previewState.PopupActiveThisFrame && previewState.ActivePopupType == PopupType.List && _listPopupOpen)
+        {
+            // Start preview if not already active (list popups don't require CTRL)
+            if (!previewState.IsSingleCustomizationPreview(_listPopupIndex))
+                _previewService.StartSingleCustomizationPreview(state, _listPopupIndex, requiresCtrl: false);
+
+            // Handle preview via PreviewService
+            _previewService.HandleCustomizationPopupFrame(
+                state,
+                _listPopupIndex,
+                previewState.PopupHoveredIndex,
+                previewState.PopupHoveredValue,
+                ctrlHeld: true); // List popups don't require CTRL, so always pass true
+
+            // Note: PopupActiveThisFrame is reset in ApplyHoverPreview after all popup handlers
             return;
         }
 
         // Popup was open previously but not active this frame -> it has been closed.
-        if (_listPopupOpen)
+        if (_listPopupOpen && !previewState.PopupActiveThisFrame)
         {
-            // If no selection was made inside the popup, restore original value.
-            if (!_listPopupSelectionMade)
-            {
-                var current = state.ModelData.Customize[_listPopupIndex];
-                if (current != _listPopupOriginalValue)
-                    stateManager.ChangeCustomize(state, _listPopupIndex, _listPopupOriginalValue, Designs.ApplySettings.Manual);
-            }
-
-            // Clear open state and hovered index.
+            _previewService.EndCustomizationPopupFrame(state);
             _listPopupOpen = false;
-            _listPopupHoveredIndex = null;
-            _listPopupSelectionMade = false;
         }
     }
 }

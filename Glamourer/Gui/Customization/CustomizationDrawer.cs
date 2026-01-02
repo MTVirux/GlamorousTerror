@@ -17,7 +17,8 @@ public partial class CustomizationDrawer(
     CustomizeService _service,
     Configuration _config,
     FavoriteManager _favorites,
-    HeightService _heightService)
+    HeightService _heightService,
+    PreviewService _previewService)
     : IDisposable
 {
     private readonly Vector4              _redTint      = new(0.6f, 0.3f, 0.3f, 1f);
