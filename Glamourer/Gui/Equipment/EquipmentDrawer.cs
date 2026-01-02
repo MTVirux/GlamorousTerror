@@ -16,6 +16,7 @@ using Penumbra.GameData.Data;
 using Penumbra.GameData.DataContainers;
 using Penumbra.GameData.Enums;
 using Penumbra.GameData.Structs;
+using Glamourer.State;
 
 namespace Glamourer.Gui.Equipment;
 
@@ -35,6 +36,7 @@ public class EquipmentDrawer
     private readonly GPoseService                           _gPose;
     private readonly AdvancedDyePopup                       _advancedDyes;
     private readonly ItemCopyService                        _itemCopy;
+    private readonly PreviewService                         _previewService;
 
     private float _requiredComboWidthUnscaled;
     private float _requiredComboWidth;
@@ -43,18 +45,8 @@ public class EquipmentDrawer
     private EquipItemSlotCache _draggedItem;
     private EquipSlot          _dragTarget;
 
-    private EquipItem?        _originalItem;
-    private EquipSlot?        _originalSlot;
-    private BonusItemFlag?    _originalBonusSlot;
-    private bool              _isComboOpen;
-
-    private EquipSlot? _stainPreviewSlot;
-    private int        _stainPreviewIndex;
-    private StainIds   _stainPreviewOriginal;
-    private bool       _stainSelectionMade;
-
     public EquipmentDrawer(FavoriteManager favorites, IDataManager gameData, ItemManager items, ItemNameService itemNames, TextureService textures,
-        Configuration config, GPoseService gPose, AdvancedDyePopup advancedDyes, ItemCopyService itemCopy)
+        Configuration config, GPoseService gPose, AdvancedDyePopup advancedDyes, ItemCopyService itemCopy, PreviewService previewService)
     {
         _items          = items;
         _itemNames      = itemNames;
@@ -63,6 +55,7 @@ public class EquipmentDrawer
         _gPose          = gPose;
         _advancedDyes   = advancedDyes;
         _itemCopy       = itemCopy;
+        _previewService = previewService;
         _stainData      = items.Stains;
         _stainCombo     = new GlamourerColorCombo(DefaultWidth - 20, _stainData, favorites);
         _itemCombo      = EquipSlotExtensions.EqdpSlots.Select(e => new ItemCombo(gameData, items, itemNames, e, Glamourer.Log, favorites)).ToArray();
@@ -422,11 +415,15 @@ public class EquipmentDrawer
 
             if (_stainCombo.PopupActive && data.IsState)
             {
-                if (_stainPreviewSlot != data.Slot || _stainPreviewIndex != index)
+                // Track stain preview state using PreviewService
+                var state = _previewService.State;
+                if (!state.IsSingleStainPreview(data.Slot, index))
                 {
-                    _stainPreviewSlot     = data.Slot;
-                    _stainPreviewIndex    = index;
-                    _stainPreviewOriginal = data.CurrentStains;
+                    // New stain preview starting - store original
+                    state.OriginalStainSlot = data.Slot;
+                    state.OriginalStainIndex = index;
+                    state.OriginalStain = data.CurrentStains;
+                    state.StainSelectionMade = false;
                 }
 
                 if (_stainCombo.HoveredStain.HasValue)
@@ -435,14 +432,14 @@ public class EquipmentDrawer
                     if (data.CurrentStains[index] != hoveredStain)
                         data.SetStain(index, hoveredStain);
                 }
-                else if (data.CurrentStains[index] != _stainPreviewOriginal[index])
+                else if (data.CurrentStains[index] != state.OriginalStain[index])
                 {
-                    data.SetStain(index, _stainPreviewOriginal[index]);
+                    data.SetStain(index, state.OriginalStain[index]);
                 }
             }
 
             if (change && data.IsState)
-                _stainSelectionMade = true;
+                _previewService.State.StainSelectionMade = true;
 
             _itemCopy.HandleCopyPaste(data, index);
             if (!change)
@@ -737,16 +734,18 @@ public class EquipmentDrawer
 
     public void ApplyHoverPreview(State.StateManager stateManager, State.ActorState state)
     {
-        if (_stainCombo.PopupJustClosed && _stainPreviewSlot.HasValue)
+        // Handle stain preview restoration when combo closes
+        var stainState = _previewService.State;
+        if (_stainCombo.PopupJustClosed && stainState.OriginalStainSlot != EquipSlot.Unknown)
         {
-            if (!_stainSelectionMade)
+            if (!stainState.StainSelectionMade)
             {
-                var currentStains = state.ModelData.Stain(_stainPreviewSlot.Value);
-                if (currentStains != _stainPreviewOriginal)
-                    stateManager.ChangeStains(state, _stainPreviewSlot.Value, _stainPreviewOriginal, ApplySettings.Manual);
+                var currentStains = state.ModelData.Stain(stainState.OriginalStainSlot);
+                if (currentStains != stainState.OriginalStain)
+                    stateManager.ChangeStains(state, stainState.OriginalStainSlot, stainState.OriginalStain, ApplySettings.Manual);
             }
-            _stainPreviewSlot = null;
-            _stainSelectionMade = false;
+            stainState.OriginalStainSlot = EquipSlot.Unknown;
+            stainState.StainSelectionMade = false;
         }
 
         // End frame for stain combo state tracking
@@ -761,18 +760,13 @@ public class EquipmentDrawer
             if (combo.IsOpen)
             {
                 anyComboOpen = true;
-                if (!_isComboOpen)
-                {
-                    // Combo just opened, save original item
-                    _originalItem = state.ModelData.Item(slot);
-                    _originalSlot = slot;
-                    _originalBonusSlot = null;
-                    _isComboOpen = true;
-                }
+                // Start preview if not already active for this slot
+                if (!_previewService.State.IsSingleItemPreview(slot))
+                    _previewService.StartSingleItemPreview(state, slot);
 
-                if (combo.HoveredItem.HasValue && combo.HoveredItem.Value.ItemId != state.ModelData.Item(slot).ItemId)
+                if (combo.HoveredItem.HasValue)
                 {
-                    stateManager.ChangeItem(state, slot, combo.HoveredItem.Value, ApplySettings.Manual);
+                    _previewService.PreviewSingleItem(state, slot, combo.HoveredItem.Value);
                     return;
                 }
             }
@@ -785,18 +779,13 @@ public class EquipmentDrawer
             if (combo.IsOpen)
             {
                 anyComboOpen = true;
-                if (!_isComboOpen)
-                {
-                    // Combo just opened, save original item
-                    _originalItem = state.ModelData.BonusItem(slot);
-                    _originalSlot = null;
-                    _originalBonusSlot = slot;
-                    _isComboOpen = true;
-                }
+                // Start preview if not already active for this slot
+                if (!_previewService.State.IsSingleBonusItemPreview(slot))
+                    _previewService.StartSingleBonusItemPreview(state, slot);
 
-                if (combo.HoveredItem.HasValue && combo.HoveredItem.Value.Id != state.ModelData.BonusItem(slot).Id)
+                if (combo.HoveredItem.HasValue)
                 {
-                    stateManager.ChangeBonusItem(state, slot, combo.HoveredItem.Value, ApplySettings.Manual);
+                    _previewService.PreviewSingleBonusItem(state, slot, combo.HoveredItem.Value);
                     return;
                 }
             }
@@ -812,26 +801,21 @@ public class EquipmentDrawer
                 if (slot != EquipSlot.Unknown)
                 {
                     anyComboOpen = true;
-                    if (!_isComboOpen)
-                    {
-                        // Combo just opened, save original item
-                        _originalItem = state.ModelData.Item(slot);
-                        _originalSlot = slot;
-                        _originalBonusSlot = null;
-                        _isComboOpen = true;
-                    }
+                    // Start preview if not already active for this slot
+                    if (!_previewService.State.IsSingleItemPreview(slot))
+                        _previewService.StartSingleItemPreview(state, slot);
 
-                    if (combo.HoveredItem.HasValue && combo.HoveredItem.Value.ItemId != state.ModelData.Item(slot).ItemId)
+                    if (combo.HoveredItem.HasValue)
                     {
-                        stateManager.ChangeItem(state, slot, combo.HoveredItem.Value, ApplySettings.Manual);
+                        _previewService.PreviewSingleItem(state, slot, combo.HoveredItem.Value);
                         return;
                     }
                 }
             }
         }
 
-        // If combo was open but now closed without selection, restore original
-        if (!anyComboOpen && _isComboOpen && _originalItem.HasValue)
+        // If combo was open but now closed, finalize or restore
+        if (!anyComboOpen && _previewService.State.Type == PreviewType.SingleItem)
         {
             // Check if any combo had an item selected
             var wasItemSelected = false;
@@ -844,24 +828,7 @@ public class EquipmentDrawer
                 foreach (var combo in _weaponCombo.Values)
                     if (combo.ItemSelected) { wasItemSelected = true; break; }
 
-            // Only revert if no item was selected
-            if (!wasItemSelected)
-            {
-                if (_originalSlot.HasValue)
-                {
-                    var currentItem = state.ModelData.Item(_originalSlot.Value);
-                    if (currentItem.ItemId != _originalItem.Value.ItemId)
-                        stateManager.ChangeItem(state, _originalSlot.Value, _originalItem.Value, ApplySettings.Manual);
-                }
-                else if (_originalBonusSlot.HasValue)
-                {
-                    var currentItem = state.ModelData.BonusItem(_originalBonusSlot.Value);
-                    if (currentItem.Id != _originalItem.Value.Id)
-                        stateManager.ChangeBonusItem(state, _originalBonusSlot.Value, _originalItem.Value, ApplySettings.Manual);
-                }
-            }
-
-            // Reset ItemSelected flags after checking
+            // Reset selection flags
             foreach (var combo in _itemCombo)
                 combo.ResetSelection();
             foreach (var combo in _bonusItemCombo)
@@ -869,31 +836,21 @@ public class EquipmentDrawer
             foreach (var combo in _weaponCombo.Values)
                 combo.ResetSelection();
 
-            _isComboOpen = false;
-            _originalItem = null;
-            _originalSlot = null;
-            _originalBonusSlot = null;
+            // End the preview - restore if no selection was made
+            _previewService.EndSingleValuePreview(wasItemSelected);
         }
-        else if (anyComboOpen && _originalItem.HasValue)
+        else if (anyComboOpen && _previewService.State.Type == PreviewType.SingleItem)
         {
-            // Combo is still open, restore to original while hovering nothing
+            // Combo is still open but nothing hovered - restore to original
             var shouldRestore = true;
 
-            if (_originalSlot.HasValue)
+            if (_previewService.State.OriginalItemSlot.HasValue)
             {
-                var slot = _originalSlot.Value;
-                // Check if this is a weapon slot (uses _weaponCombo) or equipment slot (uses _itemCombo)
+                var slot = _previewService.State.OriginalItemSlot.Value;
                 if (slot == EquipSlot.MainHand || slot == EquipSlot.OffHand)
                 {
-                    // For weapon slots, check the _weaponCombo dictionary
                     foreach (var combo in _weaponCombo.Values)
-                    {
-                        if (combo.HoveredItem.HasValue)
-                        {
-                            shouldRestore = false;
-                            break;
-                        }
-                    }
+                        if (combo.HoveredItem.HasValue) { shouldRestore = false; break; }
                 }
                 else
                 {
@@ -902,28 +859,15 @@ public class EquipmentDrawer
                         shouldRestore = false;
                 }
             }
-            else if (_originalBonusSlot.HasValue)
+            else if (_previewService.State.OriginalBonusSlot.HasValue)
             {
-                var combo = _bonusItemCombo[_originalBonusSlot.Value.ToIndex()];
+                var combo = _bonusItemCombo[_previewService.State.OriginalBonusSlot.Value.ToIndex()];
                 if (combo.HoveredItem.HasValue)
                     shouldRestore = false;
             }
 
             if (shouldRestore)
-            {
-                if (_originalSlot.HasValue)
-                {
-                    var currentItem = state.ModelData.Item(_originalSlot.Value);
-                    if (currentItem.ItemId != _originalItem.Value.ItemId)
-                        stateManager.ChangeItem(state, _originalSlot.Value, _originalItem.Value, ApplySettings.Manual);
-                }
-                else if (_originalBonusSlot.HasValue)
-                {
-                    var currentItem = state.ModelData.BonusItem(_originalBonusSlot.Value);
-                    if (currentItem.Id != _originalItem.Value.Id)
-                        stateManager.ChangeBonusItem(state, _originalBonusSlot.Value, _originalItem.Value, ApplySettings.Manual);
-                }
-            }
+                _previewService.RestoreSingleValuePreview();
         }
     }
 }

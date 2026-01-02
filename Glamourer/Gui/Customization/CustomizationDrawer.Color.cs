@@ -1,6 +1,7 @@
 ﻿using Dalamud.Interface;
 using Dalamud.Interface.Utility;
 using Glamourer.GameData;
+using Glamourer.Services;
 using Dalamud.Bindings.ImGui;
 using OtterGui;
 using OtterGui.Raii;
@@ -18,14 +19,9 @@ public partial class CustomizationDrawer
     private       CustomizeValue _draggedColorValue;
     private       CustomizeIndex _draggedColorType;
 
-    // State for color picker popup hover preview
+    // State for color picker popup (only tracking popup open state, preview handled by PreviewService)
     private bool           _colorPopupOpen;
-    private bool           _colorPopupActiveThisFrame;
-    private bool           _colorPopupSelectionMade;
     private CustomizeIndex _colorPopupIndex;
-    private CustomizeValue _colorPopupOriginalValue;
-    private int?           _colorPopupHoveredIndex;
-    private CustomizeValue _colorPopupHoveredValue;
 
 
     private void DrawDragDropSource(CustomizeIndex index, CustomizeData custom)
@@ -146,15 +142,19 @@ public partial class CustomizationDrawer
         if (!popup)
             return;
 
-        // Mark popup as active this frame and initialize open state.
-        _colorPopupActiveThisFrame = true;
-        if (!_colorPopupOpen)
+        // Mark popup as active this frame and initialize open state via PreviewService.
+        var previewState = _previewService.State;
+        previewState.PopupActiveThisFrame = true;
+        previewState.ActivePopupType = PopupType.Color;
+        
+        // Always update the popup index to current - if it changed, we need to reset the preview
+        if (_colorPopupOpen && _colorPopupIndex != _currentIndex)
         {
-            _colorPopupOpen = true;
-            _colorPopupIndex = _currentIndex;
-            _colorPopupOriginalValue = _customize[_currentIndex];
-            _colorPopupSelectionMade = false;
+            // Index changed - end previous preview before starting new one
+            _previewService.State.End();
         }
+        _colorPopupOpen = true;
+        _colorPopupIndex = _currentIndex;
 
         using var style = ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, Vector2.Zero)
             .Push(ImGuiStyleVar.FrameRounding, 0);
@@ -173,21 +173,21 @@ public partial class CustomizationDrawer
                 {
                     UpdateValue(custom.Value);
                     // Mark that a selection was made inside the popup so we don't revert on close.
-                    _colorPopupSelectionMade = true;
+                    previewState.PopupSelectionMade = true;
                     ImGui.CloseCurrentPopup();
                 }
             }
 
-            // Track hovered option for previewing.
+            // Track hovered option for previewing via PreviewService.
             if (ImGui.IsItemHovered())
             {
-                _colorPopupHoveredIndex = i;
-                _colorPopupHoveredValue = custom.Value;
+                previewState.PopupHoveredIndex = i;
+                previewState.PopupHoveredValue = custom.Value;
                 ImGuiUtil.HoverTooltip("Hold CTRL to preview on actor.");
             }
-            else if (_colorPopupHoveredIndex == i)
+            else if (previewState.PopupHoveredIndex == i)
             {
-                _colorPopupHoveredIndex = null;
+                previewState.PopupHoveredIndex = null;
             }
 
             if (i == current)
@@ -219,47 +219,32 @@ public partial class CustomizationDrawer
     /// </summary>
     private void ApplyColorHoverPreview(State.StateManager stateManager, State.ActorState state)
     {
-        // If popup was active this frame, handle preview or restoration while open.
-        if (_colorPopupActiveThisFrame)
-        {
-            // If hovering an option and Ctrl is held, apply preview.
-            if (_colorPopupHoveredIndex.HasValue && ImGui.GetIO().KeyCtrl)
-            {
-                var current = state.ModelData.Customize[_colorPopupIndex];
-                if (current != _colorPopupHoveredValue)
-                    stateManager.ChangeCustomize(state, _colorPopupIndex, _colorPopupHoveredValue, Designs.ApplySettings.Manual);
-            }
-            else
-            {
-                // Not hovering or Ctrl not held: restore original while popup open if no selection was made.
-                if (!_colorPopupSelectionMade)
-                {
-                    var current = state.ModelData.Customize[_colorPopupIndex];
-                    if (current != _colorPopupOriginalValue)
-                        stateManager.ChangeCustomize(state, _colorPopupIndex, _colorPopupOriginalValue, Designs.ApplySettings.Manual);
-                }
-            }
+        var previewState = _previewService.State;
 
-            // Reset per-frame active marker for next frame.
-            _colorPopupActiveThisFrame = false;
+        // Handle color popup preview via PreviewService (only if it's OUR popup that's active)
+        if (previewState.PopupActiveThisFrame && previewState.ActivePopupType == PopupType.Color && _colorPopupOpen)
+        {
+            // Start preview if not already active (color popups require CTRL)
+            if (!previewState.IsSingleCustomizationPreview(_colorPopupIndex))
+                _previewService.StartSingleCustomizationPreview(state, _colorPopupIndex, requiresCtrl: true);
+
+            // Handle preview via PreviewService
+            _previewService.HandleCustomizationPopupFrame(
+                state,
+                _colorPopupIndex,
+                previewState.PopupHoveredIndex,
+                previewState.PopupHoveredValue,
+                ImGui.GetIO().KeyCtrl);
+
+            // Note: PopupActiveThisFrame is reset in ApplyHoverPreview after all popup handlers
             return;
         }
 
         // Popup was open previously but not active this frame -> it has been closed.
-        if (_colorPopupOpen)
+        if (_colorPopupOpen && !previewState.PopupActiveThisFrame)
         {
-            // If no selection was made inside the popup, restore original value.
-            if (!_colorPopupSelectionMade)
-            {
-                var current = state.ModelData.Customize[_colorPopupIndex];
-                if (current != _colorPopupOriginalValue)
-                    stateManager.ChangeCustomize(state, _colorPopupIndex, _colorPopupOriginalValue, Designs.ApplySettings.Manual);
-            }
-
-            // Clear open state and hovered index.
+            _previewService.EndCustomizationPopupFrame(state);
             _colorPopupOpen = false;
-            _colorPopupHoveredIndex = null;
-            _colorPopupSelectionMade = false;
         }
     }
 }

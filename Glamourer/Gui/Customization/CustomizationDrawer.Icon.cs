@@ -2,6 +2,7 @@
 using Glamourer.GameData;
 using Glamourer.Unlocks;
 using Glamourer.Designs;
+using Glamourer.Services;
 using Dalamud.Bindings.ImGui;
 using OtterGui;
 using OtterGui.Extensions;
@@ -15,14 +16,9 @@ public partial class CustomizationDrawer
 {
     private const string IconSelectorPopup = "Style Picker";
 
-    // State for icon popup hover preview
+    // State for icon popup (only tracking popup open state, preview handled by PreviewService)
     private bool           _iconPopupOpen;
-    private bool           _iconPopupActiveThisFrame;
-    private bool           _iconPopupSelectionMade;
     private CustomizeIndex _iconPopupIndex;
-    private CustomizeValue _iconPopupOriginalValue;
-    private int?           _iconPopupHoveredIndex;
-    private CustomizeValue _iconPopupHoveredValue;
 
     private void DrawIconSelector(CustomizeIndex index)
     {
@@ -85,15 +81,19 @@ public partial class CustomizationDrawer
         if (!popup)
             return;
 
-        // Mark popup as active this frame and initialize open state.
-        _iconPopupActiveThisFrame = true;
-        if (!_iconPopupOpen)
+        // Mark popup as active this frame and initialize open state via PreviewService.
+        var previewState = _previewService.State;
+        previewState.PopupActiveThisFrame = true;
+        previewState.ActivePopupType = PopupType.Icon;
+        
+        // Always update the popup index to current - if it changed, we need to reset the preview
+        if (_iconPopupOpen && _iconPopupIndex != _currentIndex)
         {
-            _iconPopupOpen = true;
-            _iconPopupIndex = _currentIndex;
-            _iconPopupOriginalValue = _customize[_currentIndex];
-            _iconPopupSelectionMade = false;
+            // Index changed - end previous preview before starting new one
+            _previewService.State.End();
         }
+        _iconPopupOpen = true;
+        _iconPopupIndex = _currentIndex;
 
         using var style = ImRaii.PushStyle(ImGuiStyleVar.ItemSpacing, Vector2.Zero)
             .Push(ImGuiStyleVar.FrameRounding, 0);
@@ -121,7 +121,7 @@ public partial class CustomizationDrawer
                     {
                         UpdateValue(custom.Value);
                         // Mark that a selection was made inside the popup so we don't revert on close.
-                        _iconPopupSelectionMade = true;
+                        previewState.PopupSelectionMade = true;
                         // For non-face/hairstyle/facepaint selectors, close the popup after selecting
                         // a new option. For face/hairstyle/facepaint, keep it open to allow multiple picks.
                         if (_currentIndex is not (Penumbra.GameData.Enums.CustomizeIndex.Face
@@ -130,15 +130,15 @@ public partial class CustomizationDrawer
                             ImGui.CloseCurrentPopup();
                     }
                 }
-                // Track hovered option for previewing.
+                // Track hovered option for previewing via PreviewService.
                 if (ImGui.IsItemHovered())
                 {
-                    _iconPopupHoveredIndex = i;
-                    _iconPopupHoveredValue = custom.Value;
+                    previewState.PopupHoveredIndex = i;
+                    previewState.PopupHoveredValue = custom.Value;
                 }
-                else if (_iconPopupHoveredIndex == i)
+                else if (previewState.PopupHoveredIndex == i)
                 {
-                    _iconPopupHoveredIndex = null;
+                    previewState.PopupHoveredIndex = null;
                 }
                 if (ImGui.IsItemClicked(ImGuiMouseButton.Right))
                     if (isFavorite)
@@ -298,48 +298,34 @@ public partial class CustomizationDrawer
         // Handle list/dropdown popup preview (eyebrow, eye shape, etc.)
         ApplyListHoverPreview(stateManager, state);
 
-        // If popup was active this frame, handle preview or restoration while open.
-        if (_iconPopupActiveThisFrame)
+        var previewState = _previewService.State;
+
+        // Handle icon popup preview via PreviewService (only if it's OUR popup that's active)
+        if (previewState.PopupActiveThisFrame && previewState.ActivePopupType == PopupType.Icon && _iconPopupOpen)
         {
-            // If hovering an option and Ctrl is held, and this is a previewable index, apply it.
-            if (_iconPopupHoveredIndex.HasValue && ImGui.GetIO().KeyCtrl
-                && (_iconPopupIndex is CustomizeIndex.Face or CustomizeIndex.Hairstyle or CustomizeIndex.FacePaint))
-            {
-                var current = state.ModelData.Customize[_iconPopupIndex];
-                if (current != _iconPopupHoveredValue)
-                    stateManager.ChangeCustomize(state, _iconPopupIndex, _iconPopupHoveredValue, ApplySettings.Manual);
-            }
-            else
-            {
-                // Not hovering or Ctrl not held: restore original while popup open if no selection was made.
-                if (!_iconPopupSelectionMade)
-                {
-                    var current = state.ModelData.Customize[_iconPopupIndex];
-                    if (current != _iconPopupOriginalValue)
-                        stateManager.ChangeCustomize(state, _iconPopupIndex, _iconPopupOriginalValue, ApplySettings.Manual);
-                }
-            }
+            // Start preview if not already active
+            var requiresCtrl = _iconPopupIndex is CustomizeIndex.Face or CustomizeIndex.Hairstyle or CustomizeIndex.FacePaint;
+            if (!previewState.IsSingleCustomizationPreview(_iconPopupIndex))
+                _previewService.StartSingleCustomizationPreview(state, _iconPopupIndex, requiresCtrl);
+
+            // Handle preview via PreviewService
+            _previewService.HandleCustomizationPopupFrame(
+                state,
+                _iconPopupIndex,
+                previewState.PopupHoveredIndex,
+                previewState.PopupHoveredValue,
+                ImGui.GetIO().KeyCtrl);
 
             // Reset per-frame active marker for next frame.
-            _iconPopupActiveThisFrame = false;
+            previewState.PopupActiveThisFrame = false;
             return;
         }
 
         // Popup was open previously but not active this frame -> it has been closed.
         if (_iconPopupOpen)
         {
-            // If no selection was made inside the popup, restore original value.
-            if (!_iconPopupSelectionMade)
-            {
-                var current = state.ModelData.Customize[_iconPopupIndex];
-                if (current != _iconPopupOriginalValue)
-                    stateManager.ChangeCustomize(state, _iconPopupIndex, _iconPopupOriginalValue, ApplySettings.Manual);
-            }
-
-            // Clear open state and hovered index.
+            _previewService.EndCustomizationPopupFrame(state);
             _iconPopupOpen = false;
-            _iconPopupHoveredIndex = null;
-            _iconPopupSelectionMade = false;
         }
     }
 }

@@ -2,18 +2,20 @@ using Glamourer.Designs;
 using Glamourer.Interop.Material;
 using Glamourer.State;
 using OtterGui.Services;
+using Penumbra.GameData.Actors;
 using Penumbra.GameData.Interop;
 
 namespace Glamourer.Services;
 
 /// <summary>
 /// Service to handle temporary design preview state.
-/// This is used when hovering over designs in the UI to preview them on the player
+/// This is used when hovering over designs in the UI to preview them on the current target
 /// without making permanent changes.
 /// </summary>
 public sealed class DesignPreviewService(
     StateManager stateManager,
     ActorObjectManager objects,
+    ActorManager actorManager,
     DesignConverter designConverter) : IService
 {
     // Preview tracking state
@@ -35,7 +37,7 @@ public sealed class DesignPreviewService(
     public Design? PreviewedDesign => _previewedDesign;
 
     /// <summary>
-    /// Apply a design preview to the player character.
+    /// Apply a design preview to the current in-game target.
     /// If the same design is already being previewed, this does nothing.
     /// If a different design is being previewed, the original state is restored first.
     /// </summary>
@@ -49,11 +51,16 @@ public sealed class DesignPreviewService(
 
         try
         {
-            var (playerId, playerData) = objects.PlayerData;
-            if (!playerData.Valid)
+            // Get the current in-game target
+            var target = objects.Target;
+            if (!target.Valid)
                 return false;
 
-            if (!stateManager.GetOrCreate(playerId, playerData.Objects[0], out var state))
+            var identifier = actorManager.FromObject(target, out _, true, false, false);
+            if (!identifier.IsValid)
+                return false;
+
+            if (!stateManager.GetOrCreate(identifier, target, out var state))
                 return false;
 
             // If we have original data but for a different actor, restore that actor first then capture new original
