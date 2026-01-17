@@ -197,18 +197,6 @@ public sealed class DesignFileSystemSelector : FileSystemSelector<Design, Design
     /// </summary>
     public void ApplyHoverPreview()
     {
-        // Only process if preview on hover is enabled
-        if (!_config.PreviewDesignOnHover)
-        {
-            // If preview was active but setting was disabled, revert
-            if (_previewService.IsPreviewActive)
-                _previewService.RevertPreview();
-
-            _hoveredDesignThisFrame = null;
-            _hoveredDesignLastFrame = null;
-            return;
-        }
-
         // Check if hovered design changed this frame
         if (_hoveredDesignThisFrame != _hoveredDesignLastFrame)
         {
