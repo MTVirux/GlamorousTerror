@@ -3,6 +3,7 @@ using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using Glamourer.Config;
 using Glamourer.Designs;
+using Glamourer.Gui;
 using Glamourer.Services;
 using Glamourer.State;
 using Luna;
@@ -16,22 +17,27 @@ public sealed class ContextMenuService : IDisposable, IRequiredService
 {
     public const int ChatLogContextItemId = 0x958;
 
-    private readonly ItemManager        _items;
-    private readonly IContextMenu       _contextMenu;
-    private readonly StateManager       _state;
-    private readonly ActorObjectManager _objects;
-    private          EquipItem          _lastItem;
-    private readonly StainId[]          _lastStains = new StainId[StainId.NumStains];
+    private readonly ItemManager         _items;
+    private readonly IContextMenu        _contextMenu;
+    private readonly StateManager        _state;
+    private readonly ActorObjectManager  _objects;
+    private readonly CharacterPopupMenu  _popupMenu;
+    private          EquipItem           _lastItem;
+    private readonly StainId[]           _lastStains = new StainId[StainId.NumStains];
+    private          Actor               _lastCharacterActor;
+    private          string              _lastCharacterName = string.Empty;
 
     private readonly MenuItem _inventoryItem;
+    private readonly MenuItem _characterItem;
 
     public ContextMenuService(ItemManager items, StateManager state, ActorObjectManager objects, Configuration config,
-        IContextMenu context)
+        IContextMenu context, CharacterPopupMenu popupMenu)
     {
         _contextMenu = context;
         _items       = items;
         _state       = state;
         _objects     = objects;
+        _popupMenu   = popupMenu;
         if (config.EnableGameContextMenu)
             Enable();
 
@@ -42,6 +48,16 @@ public sealed class ContextMenuService : IDisposable, IRequiredService
             PrefixChar  = 'G',
             Name        = "Try On",
             OnClicked   = OnClick,
+            IsSubmenu   = false,
+            PrefixColor = 541,
+        };
+        _characterItem = new MenuItem
+        {
+            IsEnabled   = true,
+            IsReturn    = false,
+            PrefixChar  = 'G',
+            Name        = "Glamorous Terror",
+            OnClicked   = OnCharacterClick,
             IsSubmenu   = false,
             PrefixColor = 541,
         };
@@ -61,6 +77,16 @@ public sealed class ContextMenuService : IDisposable, IRequiredService
         }
         else
         {
+            var target = (MenuTargetDefault)args.Target;
+
+            // Character context menu: show "Glamorous Terror" entry when targeting a player character.
+            if (target.TargetObjectId != 0 && target.TargetObject is { } gameObject && gameObject.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Player)
+            {
+                _lastCharacterActor   = (nint)gameObject.Address;
+                _lastCharacterName    = target.TargetName;
+                args.AddMenuItem(_characterItem);
+            }
+
             switch (args.AddonName)
             {
                 case "ItemSearch" when args.AgentPtr != nint.Zero:
@@ -127,6 +153,9 @@ public sealed class ContextMenuService : IDisposable, IRequiredService
 
     public void Dispose()
         => Disable();
+
+    private void OnCharacterClick(IMenuItemClickedArgs _)
+        => _popupMenu.Open(_lastCharacterActor, _lastCharacterName);
 
     private void OnClick(IMenuItemClickedArgs _)
     {
