@@ -21,8 +21,10 @@ namespace Glamourer.Services;
 
 public class CommandService : IDisposable, IApiService
 {
-    private const string MainCommandString  = "/glamourer";
-    private const string ApplyCommandString = "/glamour";
+    private const string MainCommandString    = "/glamourer";
+    private const string MainCommandAlias     = "/glam";
+    private const string MainCommandAlias2    = "/glamorous";
+    private const string ApplyCommandString   = "/glamour";
 
     private readonly ICommandManager    _commands;
     private readonly MainWindow         _mainWindow;
@@ -65,6 +67,8 @@ public class CommandService : IDisposable, IApiService
         _penumbra          = penumbra;
 
         _commands.AddHandler(MainCommandString, new CommandInfo(OnGlamourer) { HelpMessage = "Open or close the Glamourer window." });
+        _commands.AddHandler(MainCommandAlias, new CommandInfo(OnGlamourer) { HelpMessage = "Open or close the Glamourer window." });
+        _commands.AddHandler(MainCommandAlias2, new CommandInfo(OnGlamourer) { HelpMessage = "Open or close the Glamourer window." });
         _commands.AddHandler(ApplyCommandString,
             new CommandInfo(OnGlamour) { HelpMessage = "Use Glamourer Functions. Use with 'help' or '?' for extended help." });
     }
@@ -72,6 +76,8 @@ public class CommandService : IDisposable, IApiService
     public void Dispose()
     {
         _commands.RemoveHandler(MainCommandString);
+        _commands.RemoveHandler(MainCommandAlias);
+        _commands.RemoveHandler(MainCommandAlias2);
         _commands.RemoveHandler(ApplyCommandString);
     }
 
