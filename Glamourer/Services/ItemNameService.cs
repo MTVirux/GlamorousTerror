@@ -1,9 +1,9 @@
 using Dalamud.Game;
 using Dalamud.Plugin.Services;
+using Glamourer.Config;
 using Lumina.Excel;
 using Lumina.Excel.Sheets;
-using OtterGui.Classes;
-using OtterGui.Services;
+using Luna;
 using Penumbra.GameData.Structs;
 
 namespace Glamourer.Services;
@@ -172,14 +172,14 @@ public sealed class ItemNameService : IService
     /// <param name="item">The equipment item to check.</param>
     /// <param name="filter">The filter string to match against.</param>
     /// <returns>True if the filter matches the item name in any language.</returns>
-    public bool MatchesAnyLanguage(in EquipItem item, LowerString filter)
+    public bool MatchesAnyLanguage(in EquipItem item, string filter)
     {
         // If cross-language search is disabled, only match in the selected language
         if (!_config.CrossLanguageEquipmentSearch)
-            return filter.IsContained(GetItemName(item));
+            return GetItemName(item).Contains(filter, StringComparison.OrdinalIgnoreCase);
 
         // First check the display name (most common case)
-        if (filter.IsContained(GetItemName(item)))
+        if (GetItemName(item).Contains(filter, StringComparison.OrdinalIgnoreCase))
             return true;
 
         var itemId = item.ItemId.Id;
@@ -196,11 +196,48 @@ public sealed class ItemNameService : IService
         // Check if filter matches any language
         foreach (var name in allNames)
         {
-            if (!string.IsNullOrEmpty(name) && filter.IsContained(name))
+            if (!string.IsNullOrEmpty(name) && name.Contains(filter, StringComparison.OrdinalIgnoreCase))
                 return true;
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Checks if all filter parts match the item's name in any supported language.
+    /// Each part must match in at least one language (possibly different languages).
+    /// Returns false if cross-language search is disabled.
+    /// </summary>
+    public bool PartwiseMatchesAnyLanguage(in EquipItem item, string[] parts)
+    {
+        if (!_config.CrossLanguageEquipmentSearch || parts.Length == 0)
+            return false;
+
+        var itemId = item.ItemId.Id;
+        if (itemId == 0 || itemId >= uint.MaxValue - 512)
+            return false;
+
+        var allNames = GetAllLanguageNames(itemId);
+        if (allNames == null)
+            return false;
+
+        foreach (var part in parts)
+        {
+            var partMatches = false;
+            foreach (var name in allNames)
+            {
+                if (!string.IsNullOrEmpty(name) && name.Contains(part, StringComparison.OrdinalIgnoreCase))
+                {
+                    partMatches = true;
+                    break;
+                }
+            }
+
+            if (!partMatches)
+                return false;
+        }
+
+        return true;
     }
 
     /// <summary>
