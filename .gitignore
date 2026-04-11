@@ -3,3 +3,5 @@ obj/
 .vs/
 Glamourer.json
 private/
+.github/
+!/.github/workflows/
