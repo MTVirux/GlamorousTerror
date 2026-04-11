@@ -8,8 +8,8 @@ using Penumbra.GameData.Structs;
 
 namespace Glamourer.Gui.Equipment;
 
-public sealed class WeaponCombo(FavoriteManager favorites, ItemManager items, Configuration config, FullEquipType slot)
-    : BaseItemCombo(favorites, items, config)
+public sealed class WeaponCombo(FavoriteManager favorites, ItemManager items, Configuration config, ItemNameService itemNames, FullEquipType slot)
+    : BaseItemCombo(favorites, items, config, itemNames)
 {
     public override StringU8      Label { get; } = GetLabel(slot);
     public readonly FullEquipType Slot = slot;

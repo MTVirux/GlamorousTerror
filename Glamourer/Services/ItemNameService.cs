@@ -204,6 +204,43 @@ public sealed class ItemNameService : IService
     }
 
     /// <summary>
+    /// Checks if all filter parts match the item's name in any supported language.
+    /// Each part must match in at least one language (possibly different languages).
+    /// Returns false if cross-language search is disabled.
+    /// </summary>
+    public bool PartwiseMatchesAnyLanguage(in EquipItem item, string[] parts)
+    {
+        if (!_config.CrossLanguageEquipmentSearch || parts.Length == 0)
+            return false;
+
+        var itemId = item.ItemId.Id;
+        if (itemId == 0 || itemId >= uint.MaxValue - 512)
+            return false;
+
+        var allNames = GetAllLanguageNames(itemId);
+        if (allNames == null)
+            return false;
+
+        foreach (var part in parts)
+        {
+            var partMatches = false;
+            foreach (var name in allNames)
+            {
+                if (!string.IsNullOrEmpty(name) && name.Contains(part, StringComparison.OrdinalIgnoreCase))
+                {
+                    partMatches = true;
+                    break;
+                }
+            }
+
+            if (!partMatches)
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Gets the item names in all supported languages.
     /// </summary>
     private string[]? GetAllLanguageNames(uint itemId)

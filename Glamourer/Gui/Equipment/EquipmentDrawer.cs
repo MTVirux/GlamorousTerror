@@ -33,7 +33,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
     private EquipSlot          _dragTarget;
 
     public EquipmentDrawer(FavoriteManager favorites, IDataManager gameData, ItemManager items, TextureService textures,
-        Configuration config, GPoseService gPose, AdvancedDyePopup advancedDyes, ItemCopyService itemCopy)
+        Configuration config, GPoseService gPose, AdvancedDyePopup advancedDyes, ItemCopyService itemCopy, ItemNameService itemNames)
     {
         _items          = items;
         _textures       = textures;
@@ -43,16 +43,16 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         _itemCopy       = itemCopy;
         _stainData      = items.Stains;
         _stainCombo     = new GlamourerColorCombo(_stainData, favorites, config);
-        _equipCombo     = EquipSlotExtensions.EqdpSlots.Select(e => new EquipCombo(favorites, items, config, gameData, e)).ToArray();
-        _bonusItemCombo = BonusExtensions.AllFlags.Select(f => new BonusItemCombo(favorites, items, config, gameData, f)).ToArray();
+        _equipCombo     = EquipSlotExtensions.EqdpSlots.Select(e => new EquipCombo(favorites, items, config, itemNames, gameData, e)).ToArray();
+        _bonusItemCombo = BonusExtensions.AllFlags.Select(f => new BonusItemCombo(favorites, items, config, itemNames, gameData, f)).ToArray();
         _weaponCombo    = new Dictionary<FullEquipType, WeaponCombo>(FullEquipTypeExtensions.WeaponTypes.Count * 2);
         foreach (var type in FullEquipType.Values)
         {
             if (type.ToSlot() is EquipSlot.MainHand or EquipSlot.OffHand)
-                _weaponCombo.TryAdd(type, new WeaponCombo(favorites, items, config, type));
+                _weaponCombo.TryAdd(type, new WeaponCombo(favorites, items, config, itemNames, type));
         }
 
-        _weaponCombo.Add(FullEquipType.Unknown, new WeaponCombo(favorites, items, config, FullEquipType.Unknown));
+        _weaponCombo.Add(FullEquipType.Unknown, new WeaponCombo(favorites, items, config, itemNames, FullEquipType.Unknown));
     }
 
     private Vector2 _iconSize;

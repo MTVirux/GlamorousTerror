@@ -11,15 +11,16 @@ public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, 
     private readonly Im.StyleDisposable _style = new();
     public abstract  StringU8           Label { get; }
 
-    protected readonly FavoriteManager Favorites;
-    protected readonly ItemManager     Items;
-    protected readonly Configuration   Config;
-    protected          EquipItem       CurrentItem;
-    protected          PrimaryId       CustomSetId;
-    protected          SecondaryId     CustomWeaponId;
-    protected          Variant         CustomVariant;
+    protected readonly FavoriteManager  Favorites;
+    protected readonly ItemManager      Items;
+    protected readonly Configuration    Config;
+    protected readonly ItemNameService  ItemNames;
+    protected          EquipItem        CurrentItem;
+    protected          PrimaryId        CustomSetId;
+    protected          SecondaryId      CustomWeaponId;
+    protected          Variant          CustomVariant;
 
-    protected BaseItemCombo(FavoriteManager favorites, ItemManager items, Configuration config)
+    protected BaseItemCombo(FavoriteManager favorites, ItemManager items, Configuration config, ItemNameService itemNames)
         : base(new ItemFilter(), ConfigData.Default with
         {
             ComputeWidth = true,
@@ -30,6 +31,8 @@ public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, 
         Favorites = favorites;
         Items     = items;
         Config    = config;
+        ItemNames = itemNames;
+        ((ItemFilter)Filter).ItemNames = itemNames;
 
         Config.KeepItemComboFilterChanged += OnKeepItemComboFilterChanged;
     }
@@ -73,11 +76,22 @@ public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, 
 
     protected sealed class ItemFilter : PartwiseFilterBase<CacheItem>
     {
+        internal ItemNameService? ItemNames;
+
         public override bool WouldBeVisible(in CacheItem item, int globalIndex)
-            => base.WouldBeVisible(in item, globalIndex) || WouldBeVisible(item.Model.Utf16);
+        {
+            if (base.WouldBeVisible(in item, globalIndex) || WouldBeVisible(item.Model.Utf16))
+                return true;
+
+            // Cross-language search: check each filter part against all language names.
+            if (ItemNames == null || Parts.Length == 0)
+                return false;
+
+            return ItemNames.PartwiseMatchesAnyLanguage(in item.Item, Parts);
+        }
 
         protected override string ToFilterString(in CacheItem item, int globalIndex)
-            => item.Name.Utf16;
+            => ItemNames?.GetItemName(in item.Item) ?? item.Name.Utf16;
     }
 
     protected override FilterComboBaseCache<CacheItem> CreateCache()

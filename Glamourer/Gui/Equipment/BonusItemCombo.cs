@@ -9,8 +9,8 @@ using Addon = Lumina.Excel.Sheets.Addon;
 
 namespace Glamourer.Gui.Equipment;
 
-public sealed class BonusItemCombo(FavoriteManager favorites, ItemManager items, Configuration config, IDataManager gameData, BonusItemFlag slot)
-    : BaseItemCombo(favorites, items, config)
+public sealed class BonusItemCombo(FavoriteManager favorites, ItemManager items, Configuration config, ItemNameService itemNames, IDataManager gameData, BonusItemFlag slot)
+    : BaseItemCombo(favorites, items, config, itemNames)
 {
     public override StringU8      Label { get; } = GetLabel(gameData, slot);
     public readonly BonusItemFlag Slot = slot;
