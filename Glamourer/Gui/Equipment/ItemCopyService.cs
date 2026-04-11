@@ -1,13 +1,12 @@
 ﻿using Glamourer.Services;
-using Dalamud.Bindings.ImGui;
-using OtterGui.Services;
+using ImSharp;
 using Penumbra.GameData.DataContainers;
 using Penumbra.GameData.Enums;
 using Penumbra.GameData.Structs;
 
 namespace Glamourer.Gui.Equipment;
 
-public class ItemCopyService(ItemManager items, DictStain stainData) : IUiService
+public class ItemCopyService(ItemManager items, DictStain stainData) : Luna.IUiService
 {
     public EquipItem? Item  { get; private set; }
     public Stain?     Stain { get; private set; }
@@ -24,33 +23,37 @@ public class ItemCopyService(ItemManager items, DictStain stainData) : IUiServic
             setter(which, stain.RowIndex);
     }
 
-    public void Paste(FullEquipType type, Action<EquipItem> setter)
+    public bool Paste(FullEquipType type, out EquipItem ret)
     {
         if (Item is not { } item)
-            return;
+        {
+            ret = default;
+            return false;
+        }
 
         if (type != item.Type)
         {
             if (type.IsBonus())
-                item = items.Identify(type.ToBonus(), item.PrimaryId, item.Variant);
+                ret = items.Identify(type.ToBonus(), item.PrimaryId, item.Variant);
             else if (type.IsEquipment() || type.IsAccessory())
-                item = items.Identify(type.ToSlot(), item.PrimaryId, item.Variant);
+                ret = items.Identify(type.ToSlot(), item.PrimaryId, item.Variant);
             else
-                item = items.Identify(type.ToSlot(), item.PrimaryId, item.SecondaryId, item.Variant);
+                ret = items.Identify(type.ToSlot(), item.PrimaryId, item.SecondaryId, item.Variant);
         }
+        else
+            ret = item;
 
-        if (item.Valid && item.Type == type)
-            setter(item);
+        return item.Valid && item.Type == type;
     }
 
     public void HandleCopyPaste(in EquipDrawData data)
     {
-        if (ImGui.GetIO().KeyCtrl)
+        if (Im.Io.KeyControl)
         {
-            if (ImGui.IsItemHovered() && ImGui.IsMouseClicked(ImGuiMouseButton.Middle))
-                Paste(data.CurrentItem.Type, data.SetItem);
+            if (Im.Item.Hovered() && Im.Mouse.IsClicked(MouseButton.Middle) && Paste(data.CurrentItem.Type, out var item))
+                data.SetItem(item);
         }
-        else if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled) && ImGui.IsMouseClicked(ImGuiMouseButton.Middle))
+        else if (Im.Item.Hovered(HoveredFlags.AllowWhenDisabled) && Im.Mouse.IsClicked(MouseButton.Middle))
         {
             Copy(data.CurrentItem);
         }
@@ -58,13 +61,13 @@ public class ItemCopyService(ItemManager items, DictStain stainData) : IUiServic
 
     public void HandleCopyPaste(in EquipDrawData data, int which)
     {
-        if (ImGui.GetIO().KeyCtrl)
+        if (Im.Io.KeyControl)
         {
-            if (ImGui.IsItemHovered() && ImGui.IsMouseClicked(ImGuiMouseButton.Middle))
-                Paste(which, data.SetStain);
+            if (Im.Item.Hovered() && Im.Mouse.IsClicked(MouseButton.Middle) && Paste(data.CurrentItem.Type, out var item))
+                data.SetItem(item);
         }
-        else if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled)
-              && ImGui.IsMouseClicked(ImGuiMouseButton.Middle)
+        else if (Im.Item.Hovered(HoveredFlags.AllowWhenDisabled)
+              && Im.Mouse.IsClicked(MouseButton.Middle)
               && stainData.TryGetValue(data.CurrentStains[which].Id, out var stain))
         {
             Copy(stain);

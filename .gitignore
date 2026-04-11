@@ -1,8 +1,5 @@
 bin/
 obj/
 .vs/
+Glamourer.json
 private/
-scripts/
-.vscode/
-.github/*
-!.github/workflows

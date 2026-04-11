@@ -1,14 +1,14 @@
 ﻿using Dalamud.Plugin;
 using Glamourer.Api;
 using Glamourer.Automation;
+using Glamourer.Config;
 using Glamourer.Designs;
 using Glamourer.Gui;
 using Glamourer.Interop;
 using Glamourer.Services;
 using Glamourer.State;
-using OtterGui.Classes;
-using OtterGui.Log;
-using OtterGui.Services;
+using ImSharp;
+using Luna;
 using Penumbra.GameData.Interop;
 
 namespace Glamourer;
@@ -24,7 +24,7 @@ public class Glamourer : IDalamudPlugin
         Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "Unknown";
 
 
-    public static readonly Logger         Log = new();
+    public static readonly MainLogger     Log = new("Glamourer");
     public static          MessageService Messager { get; private set; } = null!;
     public static          DynamisIpc     Dynamis  { get; private set; } = null!;
 
@@ -37,6 +37,9 @@ public class Glamourer : IDalamudPlugin
             _services = StaticServiceManager.CreateProvider(pluginInterface, Log, this);
             Messager  = _services.GetService<MessageService>();
             Dynamis   = _services.GetService<DynamisIpc>();
+            foreach (var _ in _services.GetServicesImplementing<IHookService>())
+                ;
+            _ = _services.GetService<ImSharpDalamudContext>();
             _services.EnsureRequiredServices();
 
             _services.GetService<VisorService>();
@@ -44,7 +47,6 @@ public class Glamourer : IDalamudPlugin
             _services.GetService<ScalingService>();
             _services.GetService<StateListener>();         // Initialize State Listener.
             _services.GetService<GlamourerWindowSystem>(); // initialize ui.
-            _services.GetService<CharacterPopupMenu>();    // initialize custom popup menu.
             _services.GetService<CommandService>();        // initialize commands.
             _services.GetService<IpcProviders>();          // initialize IPC.
             Log.Information($"Glamourer v{Version} loaded successfully.");
@@ -59,17 +61,19 @@ public class Glamourer : IDalamudPlugin
     public string GatherSupportInformation()
     {
         var sb     = new StringBuilder(10240);
+        var pi     = _services.GetService<IDalamudPluginInterface>();
         var config = _services.GetService<Configuration>();
         sb.AppendLine("**Settings**");
         sb.Append($"> **`Plugin Version:       `** {Version}\n");
         sb.Append($"> **`Commit Hash:          `** {CommitHash}\n");
+        sb.Append($"> **`Load Reason:          `** {pi.Reason} at {pi.LoadTimeUTC:g} ({pi.LoadTimeDelta:g})\n");
         sb.Append($"> **`Enable Auto Designs:  `** {config.EnableAutoDesigns}\n");
         sb.Append($"> **`Gear Protection:      `** {config.UseRestrictedGearProtection}\n");
         sb.Append($"> **`Item Restriction:     `** {config.UnlockedItemMode}\n");
         sb.Append($"> **`Keep Manual Changes:  `** {config.RespectManualOnAutomationUpdate}\n");
         sb.Append($"> **`Auto-Reload Gear:     `** {config.AutoRedrawEquipOnChanges}\n");
         sb.Append($"> **`Revert on Zone Change:`** {config.RevertManualChangesOnZoneChange}\n");
-        sb.Append($"> **`Festival Easter-Eggs: `** {config.DisableFestivals}\n");
+        sb.Append($"> **`Festival Easter Eggs: `** {config.FestivalMode} ({config.LastFestivalPopup:d})\n");
         sb.Append($"> **`Apply Entire Weapon:  `** {config.ChangeEntireItem}\n");
         sb.Append($"> **`Apply Associated Mods:`** {config.AlwaysApplyAssociatedMods}\n");
         sb.Append($"> **`Attach to PCP:        `** {config.AttachToPcp}\n");
@@ -111,7 +115,7 @@ public class Glamourer : IDalamudPlugin
             sb.AppendLine("**State**");
             foreach (var (ident, state) in states)
             {
-                var sources = Enum.GetValues<StateSource>().Select(s => (0, s)).ToArray();
+                var sources = StateSource.Values.Select(s => (0, s)).ToArray();
                 foreach (var source in StateIndex.All.Select(s => state.Sources[s]))
                     ++sources[(int)source].Item1;
                 foreach (var material in state.Materials.Values)

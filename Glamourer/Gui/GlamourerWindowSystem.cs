@@ -1,29 +1,27 @@
 ﻿using Dalamud.Interface;
-using Dalamud.Interface.Windowing;
+using Glamourer.Config;
 using Glamourer.Gui.Tabs.UnlocksTab;
+using Luna;
 
 namespace Glamourer.Gui;
 
-public class GlamourerWindowSystem : IDisposable
+public sealed class GlamourerWindowSystem : IDisposable, IUiService
 {
-    private readonly WindowSystem               _windowSystem = new("Glamourer");
-    private readonly IUiBuilder                 _uiBuilder;
-    private readonly MainWindow                 _ui;
-    private readonly PenumbraChangedItemTooltip _penumbraTooltip;
+    private readonly WindowSystem _windowSystem;
+    private readonly IUiBuilder   _uiBuilder;
+    private readonly MainWindow   _ui;
 
-    public GlamourerWindowSystem(IUiBuilder uiBuilder, MainWindow ui, GenericPopupWindow popups, PenumbraChangedItemTooltip penumbraTooltip,
-        Configuration config, UnlocksTab unlocksTab, GlamourerChangelog changelog, DesignQuickBar quick)
+    public GlamourerWindowSystem(IUiBuilder uiBuilder, MainWindow ui, Configuration config, UnlocksTab unlocksTab, GlamourerChangelog changelog,
+        DesignQuickBar quick)
     {
-        _uiBuilder       = uiBuilder;
-        _ui              = ui;
-        _penumbraTooltip = penumbraTooltip;
+        _uiBuilder    = uiBuilder;
+        _ui           = ui;
+        _windowSystem = WindowSystem.Create(uiBuilder, "Glamourer");
         _windowSystem.AddWindow(ui);
-        _windowSystem.AddWindow(popups);
         _windowSystem.AddWindow(unlocksTab);
         _windowSystem.AddWindow(changelog.Changelog);
         _windowSystem.AddWindow(quick);
         _uiBuilder.OpenMainUi            += _ui.Toggle;
-        _uiBuilder.Draw                  += _windowSystem.Draw;
         _uiBuilder.OpenConfigUi          += _ui.OpenSettings;
         _uiBuilder.DisableCutsceneUiHide =  !config.HideWindowInCutscene;
         _uiBuilder.DisableUserUiHide     =  config.ShowWindowWhenUiHidden;
@@ -32,7 +30,7 @@ public class GlamourerWindowSystem : IDisposable
     public void Dispose()
     {
         _uiBuilder.OpenMainUi   -= _ui.Toggle;
-        _uiBuilder.Draw         -= _windowSystem.Draw;
         _uiBuilder.OpenConfigUi -= _ui.OpenSettings;
+        _windowSystem.Dispose();
     }
 }

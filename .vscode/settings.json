@@ -1,0 +1,8 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^git checkout -b backup/pre-upstream-merge$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

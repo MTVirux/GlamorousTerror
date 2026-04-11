@@ -1,21 +1,21 @@
 ﻿using Dalamud.Interface.ImGuiNotification;
+using Dalamud.Plugin;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
+using Glamourer.Config;
 using Glamourer.Designs;
 using Glamourer.GameData;
 using Glamourer.Gui;
 using Glamourer.Services;
-using Dalamud.Bindings.ImGui;
-using OtterGui;
-using OtterGui.Classes;
-using OtterGui.Extensions;
+using ImSharp;
 using Penumbra.GameData.Enums;
 using Penumbra.GameData.Interop;
 using Penumbra.GameData.Structs;
 using CustomizeIndex = Penumbra.GameData.Enums.CustomizeIndex;
+using Luna;
 
 namespace Glamourer.State;
 
-public unsafe class FunModule : IDisposable
+public sealed unsafe class FunModule : IDisposable, IRequiredService
 {
     public enum FestivalType
     {
@@ -25,19 +25,20 @@ public unsafe class FunModule : IDisposable
         AprilFirst,
     }
 
-    private readonly WorldSets          _worldSets = new();
-    private readonly ItemManager        _items;
-    private readonly CustomizeService   _customizations;
-    private readonly Configuration      _config;
-    private readonly CodeService        _codes;
-    private readonly Random             _rng;
-    private readonly GenericPopupWindow _popupWindow;
-    private readonly StateManager       _stateManager;
-    private readonly DesignConverter    _designConverter;
-    private readonly DesignManager      _designManager;
-    private readonly ActorObjectManager _objects;
-    private readonly NpcCustomizeSet    _npcs;
-    private readonly StainId[]          _stains;
+    private readonly IDalamudPluginInterface _pluginInterface;
+    private readonly WorldSets               _worldSets = new();
+    private readonly ItemManager             _items;
+    private readonly CustomizeService        _customizations;
+    private readonly Configuration           _config;
+    private readonly CodeService             _codes;
+    private readonly Random                  _rng;
+    private readonly StateManager            _stateManager;
+    private readonly DesignConverter         _designConverter;
+    private readonly DesignManager           _designManager;
+    private readonly ActorObjectManager      _objects;
+    private readonly NpcCustomizeSet         _npcs;
+    private readonly StainId[]               _stains;
+    private readonly FestivalNotification    _notification;
 
     public  FestivalType CurrentFestival { get; private set; } = FestivalType.None;
     private FunEquipSet? _festivalSet;
@@ -54,34 +55,46 @@ public unsafe class FunModule : IDisposable
             (01, 11) => FestivalType.Halloween,
             _        => FestivalType.None,
         };
-        _festivalSet                   = FunEquipSet.GetSet(CurrentFestival);
-        _popupWindow.OpenFestivalPopup = _festivalSet != null && _config.DisableFestivals == 1;
+        _festivalSet = FunEquipSet.GetSet(CurrentFestival);
+        if (_festivalSet is null)
+            return;
+
+        var askFestival = _config.FestivalMode is FestivalSetting.Undefined
+         || _config.FestivalMode is FestivalSetting.AskYes or FestivalSetting.AskNo
+         && _config.LastFestivalPopup < DateOnly.FromDateTime(DateTime.Now).AddMonths(-1);
+        if (askFestival)
+            _notification.Update();
     }
 
     internal void ForceFestival(FestivalType type)
     {
-        CurrentFestival                = type;
-        _festivalSet                   = FunEquipSet.GetSet(CurrentFestival);
-        _popupWindow.OpenFestivalPopup = _festivalSet != null && _config.DisableFestivals == 1;
+        CurrentFestival = type;
+        _festivalSet    = FunEquipSet.GetSet(CurrentFestival);
+        if (_festivalSet is not null && _config.FestivalMode is FestivalSetting.Undefined
+         || _config.FestivalMode is FestivalSetting.AskYes or FestivalSetting.AskNo
+         && _config.LastFestivalPopup < DateOnly.FromDateTime(DateTime.Now).AddMonths(-1))
+            _notification.Update();
     }
 
     internal void ResetFestival()
         => OnDayChange(DateTime.Now.Day, DateTime.Now.Month, DateTime.Now.Year);
 
-    public FunModule(CodeService codes, CustomizeService customizations, ItemManager items, Configuration config,
-        GenericPopupWindow popupWindow, StateManager stateManager, ActorObjectManager objects, DesignConverter designConverter,
-        DesignManager designManager, NpcCustomizeSet npcs)
+    public FunModule(IDalamudPluginInterface pi, CodeService codes, CustomizeService customizations, ItemManager items, Configuration config,
+        StateManager stateManager, ActorObjectManager objects, DesignConverter designConverter,
+        DesignManager designManager, NpcCustomizeSet npcs, IDalamudPluginInterface pluginInterface, FestivalNotification festivalNotification,
+        FestivalNotification notification)
     {
         _codes           = codes;
         _customizations  = customizations;
         _items           = items;
         _config          = config;
-        _popupWindow     = popupWindow;
         _stateManager    = stateManager;
         _objects         = objects;
         _designConverter = designConverter;
         _designManager   = designManager;
         _npcs            = npcs;
+        _pluginInterface = pluginInterface;
+        _notification    = notification;
         _rng             = new Random();
         _stains          = _items.Stains.Keys.Prepend((StainId)0).ToArray();
         ResetFestival();
@@ -92,7 +105,9 @@ public unsafe class FunModule : IDisposable
         => DayChangeTracker.DayChanged -= OnDayChange;
 
     private bool IsInFestival
-        => _config.DisableFestivals == 0 && _festivalSet != null;
+        => _pluginInterface.AllowSeasonalEvents
+         && _config.FestivalMode is FestivalSetting.AskYes or FestivalSetting.NeverAskYes
+         && _festivalSet is not null;
 
     public void ApplyFunToSlot(Actor actor, ref CharacterArmor armor, EquipSlot slot)
     {
@@ -145,7 +160,7 @@ public unsafe class FunModule : IDisposable
 
         public PrioritizedList(params (T Item, int Priority)[] list)
         {
-            if (list.Length == 0)
+            if (list.Length is 0)
                 return;
 
             AddRange(list.Where(p => p.Priority > 0).OrderByDescending(p => p.Priority).Select(p => (p.Item, _cumulative += p.Priority)));
@@ -246,13 +261,13 @@ public unsafe class FunModule : IDisposable
             _                                                                                    => (NpcId)0,
         };
 
-        if (id.Id == 0 || !_npcs.FindFirst(n => n.Id == id, out var npc))
+        if (id.Id is 0 || !_npcs.FindFirst(n => n.Id == id, out var npc))
             return false;
 
         customize = npc.Customize;
         var idx = 0;
         foreach (ref var a in armor)
-            a = npc.Equip[idx++];
+            a = npc.Item(idx++);
         return true;
     }
 
@@ -290,7 +305,7 @@ public unsafe class FunModule : IDisposable
         switch (_codes.Masked(CodeService.GearCodes))
         {
             case CodeService.CodeFlag.Emperor:
-                foreach (var (slot, idx) in EquipSlotExtensions.EqdpSlots.WithIndex())
+                foreach (var (idx, slot) in EquipSlotExtensions.EqdpSlots.Index())
                     SetRandomItem(slot, ref armor[idx]);
                 break;
             case CodeService.CodeFlag.Elephants:
@@ -327,7 +342,7 @@ public unsafe class FunModule : IDisposable
         => actor.IsCharacter
          && actor.AsObject->ObjectKind is ObjectKind.Pc
          && !actor.IsTransformed
-         && actor.AsCharacter->ModelContainer.ModelCharaId == 0;
+         && actor.AsCharacter->ModelContainer.ModelCharaId is 0;
 
     private static void KeepOldArmor(Actor actor, EquipSlot slot, ref CharacterArmor armor)
         => armor = actor.Model.Valid ? actor.Model.GetArmor(slot) : armor;
@@ -417,18 +432,10 @@ public unsafe class FunModule : IDisposable
 
     private void SetGender(ref CustomizeArray customize)
     {
-        if (_codes.Enabled(CodeService.CodeFlag.AllMale))
-        {
-            _customizations.ChangeGender(ref customize, Gender.Male);
-        }
-        else if (_codes.Enabled(CodeService.CodeFlag.AllFemale))
-        {
-            _customizations.ChangeGender(ref customize, Gender.Female);
-        }
-        else if (_codes.Enabled(CodeService.CodeFlag.SixtyThree))
-        {
-            _customizations.ChangeGender(ref customize, customize.Gender is Gender.Male ? Gender.Female : Gender.Male);
-        }
+        if (!_codes.Enabled(CodeService.CodeFlag.SixtyThree))
+            return;
+
+        _customizations.ChangeGender(ref customize, customize.Gender is Gender.Male ? Gender.Female : Gender.Male);
     }
 
     private void RandomizeCustomize(ref CustomizeArray customize)
@@ -437,7 +444,7 @@ public unsafe class FunModule : IDisposable
             return;
 
         var set = _customizations.Manager.GetSet(customize.Clan, customize.Gender);
-        foreach (var index in Enum.GetValues<CustomizeIndex>())
+        foreach (var index in CustomizeIndex.Values)
         {
             if (index is CustomizeIndex.Face || !set.IsAvailable(index))
                 continue;
@@ -481,7 +488,7 @@ public unsafe class FunModule : IDisposable
             var tmp = _designManager.CreateTemporary();
             tmp.SetDesignData(_customizations, _stateManager.FromActor(actor, true, true));
             var data = _designConverter.ShareBase64(tmp);
-            ImGui.SetClipboardText(data);
+            Im.Clipboard.Set(data);
             Glamourer.Messager.NotificationMessage($"Copied current actual design of {actor.Utf8Name} to clipboard.", NotificationType.Info,
                 false);
         }
