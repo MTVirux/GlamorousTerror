@@ -10,6 +10,7 @@ using Newtonsoft.Json.Linq;
 using Penumbra.GameData.Actors;
 using Penumbra.GameData.Enums;
 using Penumbra.GameData.Structs;
+using Penumbra.String;
 using Luna;
 
 namespace Glamourer.Automation;
@@ -33,6 +34,56 @@ public sealed class AutoDesignManager : ISavable, IReadOnlyList<AutoDesignSet>, 
 
     public IReadOnlyDictionary<ActorIdentifier, AutoDesignSet> EnabledSets
         => _enabled;
+
+    /// <summary>
+    /// Try to get an automation set that matches the given identifier, including wildcard patterns.
+    /// First tries exact match, then tries wildcard patterns from enabled sets.
+    /// </summary>
+    public bool TryGetSetWithWildcard(ActorIdentifier identifier, [NotNullWhen(true)] out AutoDesignSet? set)
+    {
+        // First try exact match
+        if (_enabled.TryGetValue(identifier, out set))
+            return true;
+
+        // Then try wildcard matching against all enabled sets
+        foreach (var (_, enabledSet) in _enabled)
+        {
+            foreach (var setId in enabledSet.Identifiers)
+            {
+                // Use wildcard-aware matching when the stored identifier contains a wildcard pattern in the name.
+                if (!setId.PlayerName.IsEmpty && setId.PlayerName.IndexOf((byte)'*') >= 0)
+                {
+                    var sameType = identifier.Type == setId.Type;
+                    if (!sameType)
+                        continue;
+
+                    var worldMatches = identifier.Type switch
+                    {
+                        IdentifierType.Player => identifier.HomeWorld == setId.HomeWorld || identifier.HomeWorld == WorldId.AnyWorld || setId.HomeWorld == WorldId.AnyWorld,
+                        IdentifierType.Owned  => identifier.HomeWorld == setId.HomeWorld || identifier.HomeWorld == WorldId.AnyWorld || setId.HomeWorld == WorldId.AnyWorld,
+                        _ => true,
+                    };
+
+                    if (!worldMatches)
+                        continue;
+
+                    if (AutoDesignApplier.MatchesWildcard(identifier.PlayerName, setId.PlayerName))
+                    {
+                        set = enabledSet;
+                        return true;
+                    }
+                }
+                else if (identifier.Matches(setId))
+                {
+                    set = enabledSet;
+                    return true;
+                }
+            }
+        }
+
+        set = null;
+        return false;
+    }
 
     public AutoDesignManager(JobService jobs, ActorManager actors, SaveService saveService, DesignManager designs, AutomationChanged @event,
         FixedDesignMigrator migrator, DesignFileSystem fileSystem, DesignChanged designEvent, RandomDesignGenerator randomDesigns,
@@ -710,19 +761,29 @@ public sealed class AutoDesignManager : ISavable, IReadOnlyList<AutoDesignSet>, 
         {
             IdentifierType.Player =>
             [
-                identifier.CreatePermanent(),
+                (IsWildcardName(identifier.PlayerName)
+                    ? _actors.CreatePlayerUnchecked(identifier.PlayerName, identifier.HomeWorld).CreatePermanent()
+                    : identifier.CreatePermanent()),
             ],
             IdentifierType.Retainer =>
             [
-                _actors.CreateRetainer(identifier.PlayerName,
-                    identifier.Retainer == ActorIdentifier.RetainerType.Mannequin
-                        ? ActorIdentifier.RetainerType.Mannequin
-                        : ActorIdentifier.RetainerType.Bell).CreatePermanent(),
+                (IsWildcardName(identifier.PlayerName)
+                    ? _actors.CreateRetainerUnchecked(identifier.PlayerName,
+                        identifier.Retainer == ActorIdentifier.RetainerType.Mannequin
+                            ? ActorIdentifier.RetainerType.Mannequin
+                            : ActorIdentifier.RetainerType.Bell)
+                    : _actors.CreateRetainer(identifier.PlayerName,
+                        identifier.Retainer == ActorIdentifier.RetainerType.Mannequin
+                            ? ActorIdentifier.RetainerType.Mannequin
+                            : ActorIdentifier.RetainerType.Bell)).CreatePermanent(),
             ],
             IdentifierType.Npc   => CreateNpcs(_actors, identifier),
             IdentifierType.Owned => CreateNpcs(_actors, identifier),
             _                    => [],
         };
+
+        static bool IsWildcardName(ByteString name)
+            => name.IndexOf((byte)'*') >= 0;
 
         static ActorIdentifier[] CreateNpcs(ActorManager manager, ActorIdentifier identifier)
         {

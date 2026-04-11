@@ -83,7 +83,7 @@ public class CharacterPopupMenu : IDisposable
         ("Face Paint", CustomizeFlag.FacePaint | CustomizeFlag.FacePaintReversed | CustomizeFlag.FacePaintColor),
     ];
 
-    private static ReadOnlySpan<byte> MainPopupId => "GlamorousTerrorPopup"u8;
+    private const string MainPopupId = "GlamorousTerrorPopup";
 
     public CharacterPopupMenu(
         ItemManager items,
@@ -132,7 +132,7 @@ public class CharacterPopupMenu : IDisposable
         _lastCharacterName = characterName;
 
         // Get mouse position and offset to the right to avoid overlap
-        _menuPosition = Im.Mouse.Position + new Vector2(15, 0);
+        _menuPosition = ImGui.GetMousePos() + new Vector2(15, 0);
 
         // Mark that we should open the popup on next draw
         _shouldOpen = true;
@@ -143,7 +143,7 @@ public class CharacterPopupMenu : IDisposable
 
         if (_shouldOpen)
         {
-            Im.Popup.Open(MainPopupId);
+            ImGui.OpenPopup(MainPopupId);
             _shouldOpen = false;
             _menuOpen   = true;
         }
@@ -152,7 +152,7 @@ public class CharacterPopupMenu : IDisposable
             return;
 
         // Position the popup at the stored mouse position
-        Im.Window.SetNextPosition(_menuPosition, Condition.Appearing);
+        ImGui.SetNextWindowPos(_menuPosition, ImGuiCond.Appearing);
 
         using var popup = Im.Popup.Begin(MainPopupId, WindowFlags.NoTitleBar | WindowFlags.NoResize);
         if (!popup)
@@ -172,20 +172,20 @@ public class CharacterPopupMenu : IDisposable
         // Header with character name
         using (ImGuiColor.Text.Push(0xFF00CFFF)) // Light blue/gold color
         {
-            Im.Text($"Glamorous Terror - {_lastCharacterName}");
+            ImGui.TextUnformatted($"Glamorous Terror - {_lastCharacterName}");
         }
         using (ImGuiColor.Text.Push(0xFF888888))
         {
-            Im.Text("Hold Shift to keep menu open"u8);
+            ImGui.TextUnformatted("Hold Shift to keep menu open");
         }
-        Im.Separator();
+        ImGui.Separator();
 
         // Check if target is the same as self
         var (playerId, playerData) = _objects.PlayerData;
         var isSameActor = playerData.Valid && _lastActor.Valid && playerData.Objects[0] == _lastActor;
 
         // Import as Design
-        if (Im.Selectable("Import as Design"u8, false, SelectableFlags.NoAutoClosePopups))
+        if (ImGui.Selectable("Import as Design", false, ImGuiSelectableFlags.DontClosePopups))
         {
             OnImportAsDesign();
             ClosePopupIfNotHoldingShift();
@@ -197,127 +197,117 @@ public class CharacterPopupMenu : IDisposable
         // Only show "Apply to Self" options if target is different from self
         if (!isSameActor)
         {
-            Im.Separator();
+            ImGui.Separator();
 
             // Apply Target's Design to Self (full design transfer)
-            if (Im.Selectable("Apply Target's Design to Self"u8, false, SelectableFlags.NoAutoClosePopups))
+            if (ImGui.Selectable("Apply Target's Design to Self", false, ImGuiSelectableFlags.DontClosePopups))
             {
                 ApplyPreviewPermanently(() => OnApplyFullDesignToSelf());
                 ClosePopupIfNotHoldingShift();
             }
-            if (Im.Item.Hovered())
+            if (ImGui.IsItemHovered())
             {
                 ApplyFullDesignToSelfPreview();
                 anyPreviewSubmenuOpen = true;
             }
 
             // Apply Equipment to Self submenu
-            using (var menu1 = Im.Menu.Begin("Apply Target's Equipment to Self"u8))
+            if (ImGui.BeginMenu("Apply Target's Equipment to Self"))
             {
-                if (menu1)
-                {
-                    // Revert any non-equipment preview when entering this submenu
-                    if (_previewService.IsPreviewActive && _previewService.State.Type != PreviewType.Equipment)
-                        _previewService.EndPreview();
-                    DrawEquipmentSubmenu(ApplyEquipmentToSelf, toSelf: true);
-                    anyPreviewSubmenuOpen = true;
-                }
+                // Revert any non-equipment preview when entering this submenu
+                if (_previewService.IsPreviewActive && _previewService.State.Type != PreviewType.Equipment)
+                    _previewService.EndPreview();
+                DrawEquipmentSubmenu(ApplyEquipmentToSelf, toSelf: true);
+                ImGui.EndMenu();
+                anyPreviewSubmenuOpen = true;
             }
 
             // Apply Appearance to Self submenu
-            using (var menu2 = Im.Menu.Begin("Apply Target's Appearance to Self"u8))
+            if (ImGui.BeginMenu("Apply Target's Appearance to Self"))
             {
-                if (menu2)
-                {
-                    // Revert any equipment preview when entering this submenu
-                    if (_previewService.IsPreviewActive && _previewService.State.Type == PreviewType.Equipment)
-                        _previewService.EndPreview();
-                    DrawAppearanceSubmenu(ApplyAppearanceToSelf, toSelf: true);
-                    anyPreviewSubmenuOpen = true;
-                }
+                // Revert any equipment preview when entering this submenu
+                if (_previewService.IsPreviewActive && _previewService.State.Type == PreviewType.Equipment)
+                    _previewService.EndPreview();
+                DrawAppearanceSubmenu(ApplyAppearanceToSelf, toSelf: true);
+                ImGui.EndMenu();
+                anyPreviewSubmenuOpen = true;
             }
 
-            Im.Separator();
+            ImGui.Separator();
 
             // Apply Current Design to Target (full design transfer)
-            if (Im.Selectable("Apply Current Design to Target"u8, false, SelectableFlags.NoAutoClosePopups))
+            if (ImGui.Selectable("Apply Current Design to Target", false, ImGuiSelectableFlags.DontClosePopups))
             {
                 ApplyPreviewPermanently(() => OnApplyFullDesignToTarget());
                 ClosePopupIfNotHoldingShift();
             }
-            if (Im.Item.Hovered())
+            if (ImGui.IsItemHovered())
             {
                 ApplyFullDesignToTargetPreview();
                 anyPreviewSubmenuOpen = true;
             }
 
             // Apply Current Gear to Target submenu
-            using (var menu3 = Im.Menu.Begin("Apply Current Equipment to Target"u8))
+            if (ImGui.BeginMenu("Apply Current Equipment to Target"))
             {
-                if (menu3)
-                {
-                    // Revert any non-equipment preview when entering this submenu
-                    if (_previewService.IsPreviewActive && _previewService.State.Type != PreviewType.Equipment)
-                        _previewService.EndPreview();
-                    DrawEquipmentSubmenu(ApplyGearToTarget, toSelf: false);
-                    anyPreviewSubmenuOpen = true;
-                }
+                // Revert any non-equipment preview when entering this submenu
+                if (_previewService.IsPreviewActive && _previewService.State.Type != PreviewType.Equipment)
+                    _previewService.EndPreview();
+                DrawEquipmentSubmenu(ApplyGearToTarget, toSelf: false);
+                ImGui.EndMenu();
+                anyPreviewSubmenuOpen = true;
             }
 
             // Apply Current Appearance to Target submenu
-            using (var menu4 = Im.Menu.Begin("Apply Current Appearance to Target"u8))
+            if (ImGui.BeginMenu("Apply Current Appearance to Target"))
             {
-                if (menu4)
-                {
-                    // Revert any equipment preview when entering this submenu
-                    if (_previewService.IsPreviewActive && _previewService.State.Type == PreviewType.Equipment)
-                        _previewService.EndPreview();
-                    DrawAppearanceSubmenu(ApplyAppearanceToTarget, toSelf: false);
-                    anyPreviewSubmenuOpen = true;
-                }
-            }
-        }
-
-        Im.Separator();
-
-        // Apply Design to Target submenu
-        using (var menuDesign = Im.Menu.Begin("Apply Design to Target"u8))
-        {
-            if (menuDesign)
-            {
-                // Revert any non-design preview when entering this submenu
-                if (_previewService.IsPreviewActive && _previewService.State.Type != PreviewType.Design)
+                // Revert any equipment preview when entering this submenu
+                if (_previewService.IsPreviewActive && _previewService.State.Type == PreviewType.Equipment)
                     _previewService.EndPreview();
-                DrawDesignSubmenu(_designFileSystem.Root);
+                DrawAppearanceSubmenu(ApplyAppearanceToTarget, toSelf: false);
+                ImGui.EndMenu();
                 anyPreviewSubmenuOpen = true;
             }
         }
 
-        Im.Separator();
+        ImGui.Separator();
+
+        // Apply Design to Target submenu
+        if (ImGui.BeginMenu("Apply Design to Target"))
+        {
+            // Revert any non-design preview when entering this submenu
+            if (_previewService.IsPreviewActive && _previewService.State.Type != PreviewType.Design)
+                _previewService.EndPreview();
+            DrawDesignSubmenu(_designFileSystem.Root);
+            ImGui.EndMenu();
+            anyPreviewSubmenuOpen = true;
+        }
+
+        ImGui.Separator();
 
         // Revert to Automation State
         var automationEnabled = _config.EnableAutoDesigns;
         using (Im.Disabled(!automationEnabled))
         {
-            if (Im.Selectable("Revert to Automation State"u8, false, SelectableFlags.NoAutoClosePopups))
+            if (ImGui.Selectable("Revert to Automation State", false, ImGuiSelectableFlags.DontClosePopups))
             {
                 ApplyPreviewPermanently(() => OnRevertToAutomation());
                 ClosePopupIfNotHoldingShift();
             }
         }
-        if (Im.Item.Hovered() && automationEnabled)
+        if (ImGui.IsItemHovered() && automationEnabled)
         {
             ApplyAutomationPreview();
             anyPreviewSubmenuOpen = true;
         }
 
         // Reset to Game State
-        if (Im.Selectable("Reset to Game State"u8, false, SelectableFlags.NoAutoClosePopups))
+        if (ImGui.Selectable("Reset to Game State", false, ImGuiSelectableFlags.DontClosePopups))
         {
             ApplyPreviewPermanently(() => OnResetToGameState());
             ClosePopupIfNotHoldingShift();
         }
-        if (Im.Item.Hovered())
+        if (ImGui.IsItemHovered())
         {
             ApplyResetPreview();
             anyPreviewSubmenuOpen = true;
@@ -347,14 +337,14 @@ public class CharacterPopupMenu : IDisposable
             // Check if items match
             var matches = CheckEquipmentMatch(playerState, targetState, slot, isBonusItem);
 
-            if (Im.Selectable(name, matches, SelectableFlags.NoAutoClosePopups))
+            if (ImGui.Selectable(name, matches, ImGuiSelectableFlags.DontClosePopups))
             {
                 ApplyPreviewPermanently(() => action(slot, isBonusItem));
                 ClosePopupIfNotHoldingShift();
             }
 
             // Handle preview on hover
-            if (Im.Item.Hovered())
+            if (ImGui.IsItemHovered())
             {
                 anyItemHovered = true;
                 if (!_previewService.State.IsSameEquipmentPreview(slot, isBonusItem, toSelf))
@@ -380,14 +370,14 @@ public class CharacterPopupMenu : IDisposable
             // Check if appearance matches
             var matches = CheckAppearanceMatch(playerState, targetState, flag);
 
-            if (Im.Selectable(name, matches, SelectableFlags.NoAutoClosePopups))
+            if (ImGui.Selectable(name, matches, ImGuiSelectableFlags.DontClosePopups))
             {
                 ApplyPreviewPermanently(() => action(flag));
                 ClosePopupIfNotHoldingShift();
             }
 
             // Handle preview on hover
-            if (Im.Item.Hovered())
+            if (ImGui.IsItemHovered())
             {
                 anyItemHovered = true;
                 if (!_previewService.State.IsSameAppearancePreview(flag, toSelf))
@@ -409,33 +399,31 @@ public class CharacterPopupMenu : IDisposable
         // First draw subfolders
         foreach (var subFolder in folder.GetSubFolders().OrderBy(f => f.Name.ToString()))
         {
-            using (var subMenu = Im.Menu.Begin($"{subFolder.Name}"))
+            if (ImGui.BeginMenu(subFolder.Name.ToString()))
             {
-                if (subMenu)
-                {
-                    DrawDesignSubmenu(subFolder);
-                }
+                DrawDesignSubmenu(subFolder);
+                ImGui.EndMenu();
             }
             // Subfolder menus count as hovered when open
-            if (Im.Item.Hovered())
+            if (ImGui.IsItemHovered())
                 anyItemHovered = true;
         }
 
         // Then draw designs (leaves)
-        foreach (var leaf in folder.GetLeaves().OrderBy(l => (l.Value as Design)?.Name ?? string.Empty))
+        foreach (var leaf in folder.GetLeaves().OrderBy(l => (l.Value as Design)?.Name.Text ?? string.Empty))
         {
             var design = leaf.Value as Design;
             if (design == null)
                 continue;
                 
-            if (Im.Selectable(design.Name, false, SelectableFlags.NoAutoClosePopups))
+            if (ImGui.Selectable(design.Name.Text, false, ImGuiSelectableFlags.DontClosePopups))
             {
                 ApplyPreviewPermanently(() => OnApplyDesignToTarget(design));
                 ClosePopupIfNotHoldingShift();
             }
 
             // Handle preview on hover
-            if (Im.Item.Hovered())
+            if (ImGui.IsItemHovered())
             {
                 anyItemHovered = true;
                 if (!_previewService.State.IsSameDesignPreview(design))
@@ -527,10 +515,11 @@ public class CharacterPopupMenu : IDisposable
             if (flag == (CustomizeFlag)0)
             {
                 // "All Appearance" - check if all customize values match
-                for (var i = 0; i < 32; i++)
+                foreach (var cf in Enum.GetValues<CustomizeFlag>())
                 {
-                    var cf = (CustomizeFlag)(1ul << i);
-                    if ((cf & CustomizeFlagExtensions.All) == 0) continue;
+                    if (cf == 0) continue;
+                    // Skip combined flags - only check single flags
+                    if (!Enum.IsDefined(cf)) continue;
                     if (!CompareCustomizeFlag(playerState, targetState, cf))
                         return false;
                 }
@@ -539,10 +528,9 @@ public class CharacterPopupMenu : IDisposable
             else
             {
                 // Handle combined flags by iterating through all individual flags
-                for (var i = 0; i < 32; i++)
+                foreach (var cf in Enum.GetValues<CustomizeFlag>())
                 {
-                    var cf = (CustomizeFlag)(1ul << i);
-                    if ((cf & CustomizeFlagExtensions.All) == 0) continue;
+                    if (cf == 0 || !Enum.IsDefined(cf)) continue;
                     if ((flag & cf) == cf)
                     {
                         if (!CompareCustomizeFlag(playerState, targetState, cf))
@@ -634,9 +622,9 @@ public class CharacterPopupMenu : IDisposable
     /// </summary>
     private void ClosePopupIfNotHoldingShift()
     {
-        if (!Im.Io.KeyShift)
+        if (!ImGui.GetIO().KeyShift)
         {
-            Im.Popup.CloseCurrent();
+            ImGui.CloseCurrentPopup();
         }
     }
 

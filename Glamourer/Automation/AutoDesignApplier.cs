@@ -1,4 +1,5 @@
-﻿using Dalamud.Plugin.Services;
+﻿using System.Runtime.CompilerServices;
+using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using Glamourer.Config;
 using Glamourer.Designs;
@@ -13,6 +14,7 @@ using Penumbra.GameData.DataContainers;
 using Penumbra.GameData.Enums;
 using Penumbra.GameData.Interop;
 using Penumbra.GameData.Structs;
+using Penumbra.String;
 
 namespace Glamourer.Automation;
 
@@ -314,28 +316,64 @@ public sealed class AutoDesignApplier : IDisposable, IRequiredService
         switch (identifier.Type)
         {
             case IdentifierType.Player:
-                if (_manager.EnabledSets.TryGetValue(identifier, out set))
+                if (TryGettingSetExactOrWildcard(identifier, out set))
                     return true;
 
                 identifier = _actors.CreatePlayer(identifier.PlayerName, WorldId.AnyWorld);
-                return _manager.EnabledSets.TryGetValue(identifier, out set);
+                if (TryGettingSetExactOrWildcard(identifier, out set))
+                    return true;
+
+                return false;
             case IdentifierType.Retainer:
             case IdentifierType.Npc:
-                return _manager.EnabledSets.TryGetValue(identifier, out set);
+                return TryGettingSetExactOrWildcard(identifier, out set);
             case IdentifierType.Owned:
-                if (_manager.EnabledSets.TryGetValue(identifier, out set))
+                if (TryGettingSetExactOrWildcard(identifier, out set))
                     return true;
 
                 identifier = _actors.CreateOwned(identifier.PlayerName, WorldId.AnyWorld, identifier.Kind, identifier.DataId);
-                if (_manager.EnabledSets.TryGetValue(identifier, out set))
+                if (TryGettingSetExactOrWildcard(identifier, out set))
                     return true;
 
                 identifier = _actors.CreateNpc(identifier.Kind, identifier.DataId);
-                return _manager.EnabledSets.TryGetValue(identifier, out set);
+                return TryGettingSetExactOrWildcard(identifier, out set);
             default:
                 set = null;
                 return false;
         }
+    }
+
+    /// <summary> Try to get a set matching exactly or via wildcard pattern. </summary>
+    private bool TryGettingSetExactOrWildcard(ActorIdentifier identifier, [NotNullWhen(true)] out AutoDesignSet? set)
+    {
+        // First try exact match
+        if (_manager.EnabledSets.TryGetValue(identifier, out set))
+            return true;
+
+        // Then try wildcard matches
+        foreach (var (key, value) in _manager.EnabledSets)
+        {
+            // Use wildcard-aware matching when the stored identifier contains a wildcard pattern in the name.
+            if (!key.PlayerName.IsEmpty && key.PlayerName.IndexOf((byte)'*') >= 0)
+            {
+                if (key.Type != identifier.Type)
+                    continue;
+
+                if (MatchesWildcard(identifier.PlayerName, key.PlayerName))
+                {
+                    set = value;
+                    return true;
+                }
+            }
+            else if (identifier.Matches(key))
+            {
+                set = value;
+                return true;
+            }
+        }
+
+        set = null;
+        return false;
     }
 
     internal static int NewGearsetId = -1;
@@ -372,4 +410,55 @@ public sealed class AutoDesignApplier : IDisposable, IRequiredService
 
         return check == module->CurrentGearsetIndex;
     }
+
+    /// <summary>
+    /// Matches a UTF8 ByteString against a wildcard pattern containing '*' characters.
+    /// Does not transcode to UTF16, operates directly on UTF8 bytes for efficiency.
+    /// </summary>
+    internal static unsafe bool MatchesWildcard(ByteString name, ByteString pattern)
+    {
+        return MatchesWildcardInternal(name.Path, name.Length, pattern.Path, pattern.Length);
+    }
+
+    private static unsafe bool MatchesWildcardInternal(byte* name, int nameLen, byte* pattern, int patternLen)
+    {
+        int nameIdx = 0;
+        int patternIdx = 0;
+        int starIdx = -1;
+        int matchIdx = 0;
+
+        while (nameIdx < nameLen)
+        {
+            if (patternIdx < patternLen && pattern[patternIdx] == '*')
+            {
+                starIdx = patternIdx;
+                matchIdx = nameIdx;
+                patternIdx++;
+            }
+            else if (patternIdx < patternLen && (pattern[patternIdx] == name[nameIdx] || AsciiToLower(pattern[patternIdx]) == AsciiToLower(name[nameIdx])))
+            {
+                nameIdx++;
+                patternIdx++;
+            }
+            else if (starIdx != -1)
+            {
+                patternIdx = starIdx + 1;
+                matchIdx++;
+                nameIdx = matchIdx;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        while (patternIdx < patternLen && pattern[patternIdx] == '*')
+            patternIdx++;
+
+        return patternIdx == patternLen;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static byte AsciiToLower(byte b)
+        => b is >= (byte)'A' and <= (byte)'Z' ? (byte)(b + 32) : b;
 }

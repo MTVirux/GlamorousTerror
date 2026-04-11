@@ -2,7 +2,7 @@ using Glamourer.Automation;
 using Glamourer.Designs;
 using Glamourer.Interop.Material;
 using Glamourer.State;
-using OtterGui.Services;
+using Luna;
 using Penumbra.GameData.Actors;
 using Penumbra.GameData.Enums;
 using Penumbra.GameData.Interop;

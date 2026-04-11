@@ -75,6 +75,10 @@ public sealed partial class Configuration : IPluginConfiguration, ISavable, ISer
 
     public RoughnessSetting RoughnessSetting { get; set; } = RoughnessSetting.AsIs;
 
+    // GlamorousTerror custom properties
+    public EquipmentNameLanguage EquipmentNameLanguage      { get; set; } = EquipmentNameLanguage.GameDefault;
+    public bool                  CrossLanguageEquipmentSearch { get; set; } = false;
+
     public DesignPanelFlag HideDesignPanel       { get; set; } = 0;
     public DesignPanelFlag AutoExpandDesignPanel { get; set; } = 0;
 

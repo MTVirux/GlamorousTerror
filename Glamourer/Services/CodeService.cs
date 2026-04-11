@@ -28,15 +28,17 @@ public sealed class CodeService : IService
         OopsViera    = 0x001000,
 
         //Artisan      = 0x002000,
-        SixtyThree  = 0x004000,
-        Shirts      = 0x008000,
-        World       = 0x010000,
-        Elephants   = 0x020000,
-        Crown       = 0x040000,
-        Dolphins    = 0x080000,
-        Face        = 0x100000,
-        Manderville = 0x200000,
-        Smiles      = 0x400000,
+        AllMale     = 0x002000,
+        AllFemale   = 0x004000,
+        SixtyThree  = 0x008000,
+        Shirts      = 0x010000,
+        World       = 0x020000,
+        Elephants   = 0x040000,
+        Crown       = 0x080000,
+        Dolphins    = 0x100000,
+        Face        = 0x200000,
+        Manderville = 0x400000,
+        Smiles      = 0x800000,
     }
 
     public static readonly CodeFlag AllHintCodes =
@@ -56,6 +58,8 @@ public sealed class CodeService : IService
       | CodeFlag.OopsAuRa
       | CodeFlag.OopsHrothgar
       | CodeFlag.OopsViera;
+
+    public const CodeFlag GenderCodes = CodeFlag.AllMale | CodeFlag.AllFemale | CodeFlag.SixtyThree;
 
     public const CodeFlag FullCodes = CodeFlag.Face | CodeFlag.Manderville | CodeFlag.Smiles;
 
