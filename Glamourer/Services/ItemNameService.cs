@@ -1,9 +1,9 @@
 using Dalamud.Game;
 using Dalamud.Plugin.Services;
+using Glamourer.Config;
 using Lumina.Excel;
 using Lumina.Excel.Sheets;
-using OtterGui.Classes;
-using OtterGui.Services;
+using Luna;
 using Penumbra.GameData.Structs;
 
 namespace Glamourer.Services;
@@ -172,14 +172,14 @@ public sealed class ItemNameService : IService
     /// <param name="item">The equipment item to check.</param>
     /// <param name="filter">The filter string to match against.</param>
     /// <returns>True if the filter matches the item name in any language.</returns>
-    public bool MatchesAnyLanguage(in EquipItem item, LowerString filter)
+    public bool MatchesAnyLanguage(in EquipItem item, string filter)
     {
         // If cross-language search is disabled, only match in the selected language
         if (!_config.CrossLanguageEquipmentSearch)
-            return filter.IsContained(GetItemName(item));
+            return GetItemName(item).Contains(filter, StringComparison.OrdinalIgnoreCase);
 
         // First check the display name (most common case)
-        if (filter.IsContained(GetItemName(item)))
+        if (GetItemName(item).Contains(filter, StringComparison.OrdinalIgnoreCase))
             return true;
 
         var itemId = item.ItemId.Id;
@@ -196,7 +196,7 @@ public sealed class ItemNameService : IService
         // Check if filter matches any language
         foreach (var name in allNames)
         {
-            if (!string.IsNullOrEmpty(name) && filter.IsContained(name))
+            if (!string.IsNullOrEmpty(name) && name.Contains(filter, StringComparison.OrdinalIgnoreCase))
                 return true;
         }
 

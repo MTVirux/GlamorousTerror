@@ -13,6 +13,23 @@ using ErrorEventArgs = Newtonsoft.Json.Serialization.ErrorEventArgs;
 
 namespace Glamourer.Config;
 
+/// <summary>
+/// Language override for equipment item names.
+/// </summary>
+public enum EquipmentNameLanguage
+{
+    /// <summary> Use the game's current language setting. </summary>
+    GameDefault,
+    /// <summary> Display equipment names in English. </summary>
+    English,
+    /// <summary> Display equipment names in Japanese. </summary>
+    Japanese,
+    /// <summary> Display equipment names in German. </summary>
+    German,
+    /// <summary> Display equipment names in French. </summary>
+    French,
+}
+
 public sealed partial class Configuration : IPluginConfiguration, ISavable, IService
 {
     public const int CurrentVersion = 13;
@@ -56,6 +73,9 @@ public sealed partial class Configuration : IPluginConfiguration, ISavable, ISer
     public bool            AllowDoubleClickToApply          { get; set; } = false;
     public bool            RespectManualOnAutomationUpdate  { get; set; } = false;
     public bool            PreventRandomRepeats             { get; set; } = false;
+
+    public EquipmentNameLanguage EquipmentNameLanguage        { get; set; } = EquipmentNameLanguage.GameDefault;
+    public bool                  CrossLanguageEquipmentSearch { get; set; } = false;
 
     [ConfigProperty]
     private bool _groupUnlocksByModel;
