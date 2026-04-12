@@ -33,7 +33,8 @@ public sealed class SettingsTab(
     AutoRedrawChanged autoRedraw,
     PredefinedTagManager predefinedTags,
     PcpService pcpService,
-    IgnoredMods ignoredMods)
+    IgnoredMods ignoredMods,
+    ItemNameService itemNameService)
     : ITab<MainTabType>
 {
     private readonly VirtualKey[] _validKeys = keys.GetValidVirtualKeys().Prepend(VirtualKey.NO_KEY).ToArray();
@@ -65,6 +66,7 @@ public sealed class SettingsTab(
             DrawDesignDefaultSettings();
             DrawInterfaceSettings();
             DrawColorSettings();
+            DrawEquipmentLanguageSettings();
             DrawPredefinedTags();
             overrides.Draw();
             DrawIgnoredMods();
@@ -562,6 +564,50 @@ public sealed class SettingsTab(
 
         LunaStyle.DrawAlignedHelpMarkerLabel("Rename Fields in Design Context Menu"u8,
             "Select which of the two renaming input fields are visible when opening the right-click context menu of a design in the design selector."u8);
+    }
+
+    private static readonly (EquipmentNameLanguage Language, string Label)[] _equipmentLanguages =
+    [
+        (EquipmentNameLanguage.GameDefault, "Game Default"),
+        (EquipmentNameLanguage.English,     "English"),
+        (EquipmentNameLanguage.German,      "German"),
+        (EquipmentNameLanguage.French,      "French"),
+        (EquipmentNameLanguage.Japanese,    "Japanese"),
+    ];
+
+    private void DrawEquipmentLanguageSettings()
+    {
+        if (!Im.Tree.Header("Equipment Language Settings"u8))
+            return;
+
+        var currentLang = config.EquipmentNameLanguage;
+        var currentLabel = _equipmentLanguages.FirstOrDefault(l => l.Language == currentLang).Label ?? currentLang.ToString();
+
+        Im.Item.SetNextWidthScaled(300);
+        using (var combo = Im.Combo.Begin("##equipLangCombo"u8, currentLabel))
+        {
+            if (combo)
+                foreach (var (lang, label) in _equipmentLanguages)
+                {
+                    if (Im.Selectable(label, lang == currentLang))
+                    {
+                        config.EquipmentNameLanguage = lang;
+                        config.Save();
+                        itemNameService.ClearCache();
+                    }
+                }
+        }
+
+        LunaStyle.DrawAlignedHelpMarkerLabel("Equipment Name Language"u8,
+            "Override the display language used for equipment item names. Requires a UI reload to take full effect."u8);
+
+        Checkbox("Cross-Language Equipment Search"u8,
+            "When enabled, equipment combo searches will match item names in all available languages, not just the selected display language."u8,
+            config.CrossLanguageEquipmentSearch, v =>
+            {
+                config.CrossLanguageEquipmentSearch = v;
+                itemNameService.ClearCache();
+            });
     }
 
     private void DrawHeightUnitSettings()

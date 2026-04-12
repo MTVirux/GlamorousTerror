@@ -1,4 +1,5 @@
-﻿using Dalamud.Interface;
+﻿using Glamourer.Services;
+using Dalamud.Interface;
 using Glamourer.GameData;
 using Penumbra.GameData.Enums;
 using Penumbra.GameData.Structs;
@@ -16,6 +17,11 @@ public partial class CustomizationDrawer
 
     private CustomizeValue _draggedColorValue;
     private CustomizeIndex _draggedColorType;
+
+    private bool           _colorPopupOpen;
+    private CustomizeIndex _colorPopupIndex;
+    private CustomizeValue _colorHoveredValue;
+    private bool           _colorSelectionMade;
 
 
     private void DrawDragDropSource(CustomizeIndex index, CustomizeData custom)
@@ -132,7 +138,14 @@ public partial class CustomizationDrawer
     {
         using var popup = Im.Popup.Begin(ColorPickerPopupName, WindowFlags.AlwaysAutoResize);
         if (!popup)
+        {
+            _colorPopupOpen = false;
             return;
+        }
+
+        _colorPopupOpen    = true;
+        _colorPopupIndex   = _currentIndex;
+        _colorHoveredValue = default;
 
         using var style = ImStyleDouble.ItemSpacing.Push(Vector2.Zero)
             .Push(ImStyleSingle.FrameRounding, 0);
@@ -142,8 +155,12 @@ public partial class CustomizationDrawer
             if (Im.Color.Button($"{custom.Value}", custom.Color) && !_locked)
             {
                 UpdateValue(custom.Value);
+                _colorSelectionMade = true;
                 Im.Popup.CloseCurrent();
             }
+
+            if (Im.Item.Hovered())
+                _colorHoveredValue = custom.Value;
 
             if (i == current)
             {
@@ -164,5 +181,29 @@ public partial class CustomizationDrawer
             return (current, new CustomizeData(index, _customize[index]));
 
         return (current, custom!.Value);
+    }
+
+    private void ApplyColorHoverPreview(State.StateManager stateManager, State.ActorState state)
+    {
+        if (_colorPopupOpen)
+        {
+            previewService.StartSingleCustomizationPreview(state, _colorPopupIndex);
+
+            if (_colorHoveredValue.Value != 0)
+                previewService.HandleCustomizationPopupFrame(state, _colorPopupIndex, (int)_colorHoveredValue.Value, _colorHoveredValue, false);
+            else
+                previewService.HandleCustomizationPopupFrame(state, _colorPopupIndex, null, default, false);
+
+            if (_colorSelectionMade)
+            {
+                previewService.MarkPopupSelectionMade();
+                previewService.EndSingleValuePreview(wasSelectionMade: true);
+                _colorSelectionMade = false;
+            }
+        }
+        else
+        {
+            previewService.EndCustomizationPopupFrame(state);
+        }
     }
 }

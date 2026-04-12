@@ -37,19 +37,33 @@ public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, 
     public void Dispose()
         => Config.KeepItemComboFilterChanged -= OnKeepItemComboFilterChanged;
 
+    public EquipItem? HoveredItem   { get; private set; }
+    public bool       IsPopupOpen   { get; private set; }
+    public bool       ItemSelected  { get; private set; }
+
+    public void ResetSelection()
+        => ItemSelected = false;
+
     public bool Draw(in EquipItem item, out EquipItem newItem, float width)
     {
+        IsPopupOpen = false;
+        HoveredItem = null;
+
         using var id = Im.Id.Push(Label);
         CurrentItem   = item;
         CustomVariant = 0;
         if (Draw(StringU8.Empty, item.Name, StringU8.Empty, width, out var cache))
         {
-            newItem = cache.Item;
+            newItem      = cache.Item;
+            ItemSelected = true;
             return true;
         }
 
         if (CustomVariant.Id is not 0 && Identify(out newItem))
+        {
+            ItemSelected = true;
             return true;
+        }
 
         newItem = item;
         return false;
@@ -57,6 +71,7 @@ public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, 
 
     protected override void PreDrawList()
     {
+        IsPopupOpen = true;
         _style.PushY(ImStyleDouble.ItemSpacing, 0)
             .PushY(ImStyleDouble.SelectableTextAlign, 0.5f);
     }
@@ -111,6 +126,8 @@ public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, 
         Im.Line.Same();
         Im.Cursor.Y -= Im.Style.FramePadding.Y;
         var ret = Im.Selectable(item.Name.Utf8, selected, SelectableFlags.None, new Vector2(0, Im.Style.FrameHeight));
+        if (Im.Item.Hovered())
+            HoveredItem = item.Item;
         Im.Line.Same();
         using var color = ImGuiColor.Text.Push(Rgba32.Gray);
         ImEx.TextRightAligned(item.Model.Utf8);

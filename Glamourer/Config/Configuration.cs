@@ -120,6 +120,8 @@ public sealed partial class Configuration : IPluginConfiguration, ISavable, ISer
 
     public List<(string Code, bool Enabled)> Codes { get; set; } = [];
 
+    public Services.CodeService.CodeFlag EnabledCheats { get; set; } = 0;
+
 #if DEBUG
     public bool DebugMode { get; set; } = true;
 #else

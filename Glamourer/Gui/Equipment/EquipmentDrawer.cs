@@ -4,6 +4,7 @@ using Glamourer.Designs;
 using Glamourer.Events;
 using Glamourer.Gui.Materials;
 using Glamourer.Services;
+using Glamourer.State;
 using Glamourer.Unlocks;
 using ImSharp;
 using Luna;
@@ -30,6 +31,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
     private readonly ItemCopyService                        _itemCopy;
     private readonly DesignApplier                          _designApplier;
     private readonly DesignConverter                        _converter;
+    private readonly PreviewService                        _previewService;
 
     private Stain?             _draggedStain;
     private EquipItemSlotCache _draggedItem;
@@ -37,7 +39,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
 
     public EquipmentDrawer(FavoriteManager favorites, IDataManager gameData, ItemManager items, TextureService textures,
         Configuration config, GPoseService gPose, AdvancedDyePopup advancedDyes, ItemCopyService itemCopy, DesignApplier designApplier,
-        DesignConverter converter)
+        DesignConverter converter, PreviewService previewService)
     {
         _items          = items;
         _textures       = textures;
@@ -47,6 +49,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         _itemCopy       = itemCopy;
         _designApplier  = designApplier;
         _converter      = converter;
+        _previewService = previewService;
         _stainData      = items.Stains;
         _stainCombo     = new GlamourerColorCombo(_stainData, favorites, config);
         _equipCombo     = EquipSlotExtensions.EqdpSlots.Select(e => new EquipCombo(favorites, items, config, gameData, e)).ToArray();
@@ -739,5 +742,92 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         Im.Separator();
         Im.Cursor.Y += Im.Style.ItemInnerSpacing.Y;
         Im.Text("This design has advanced dyes setup for this slot."u8);
+    }
+
+    public void ApplyHoverPreview(State.StateManager stateManager, State.ActorState state)
+    {
+        // Equipment combos
+        for (var i = 0; i < _equipCombo.Length; i++)
+        {
+            var combo = _equipCombo[i];
+            if (combo.IsPopupOpen)
+            {
+                var slot = EquipSlotExtensions.EqdpSlots[i];
+                if (combo.HoveredItem is { } hoveredItem)
+                    _previewService.PreviewSingleItem(state, slot, hoveredItem);
+                else
+                    _previewService.StartSingleItemPreview(state, slot);
+
+                if (combo.ItemSelected)
+                {
+                    _previewService.EndSingleValuePreview(wasSelectionMade: true);
+                    combo.ResetSelection();
+                }
+
+                return;
+            }
+
+            if (combo.ItemSelected)
+            {
+                _previewService.EndSingleValuePreview(wasSelectionMade: true);
+                combo.ResetSelection();
+            }
+        }
+
+        // Bonus item combos
+        foreach (var (combo, slot) in _bonusItemCombo.Zip(BonusExtensions.AllFlags))
+        {
+            if (combo.IsPopupOpen)
+            {
+                if (combo.HoveredItem is { } hoveredItem)
+                    _previewService.PreviewSingleBonusItem(state, slot, hoveredItem);
+                else
+                    _previewService.StartSingleBonusItemPreview(state, slot);
+
+                if (combo.ItemSelected)
+                {
+                    _previewService.EndSingleValuePreview(wasSelectionMade: true);
+                    combo.ResetSelection();
+                }
+
+                return;
+            }
+
+            if (combo.ItemSelected)
+            {
+                _previewService.EndSingleValuePreview(wasSelectionMade: true);
+                combo.ResetSelection();
+            }
+        }
+
+        // Weapon combos
+        foreach (var (type, combo) in _weaponCombo)
+        {
+            if (combo.IsPopupOpen)
+            {
+                var slot = type.ToSlot();
+                if (combo.HoveredItem is { } hoveredItem)
+                    _previewService.PreviewSingleItem(state, slot, hoveredItem);
+                else
+                    _previewService.StartSingleItemPreview(state, slot);
+
+                if (combo.ItemSelected)
+                {
+                    _previewService.EndSingleValuePreview(wasSelectionMade: true);
+                    combo.ResetSelection();
+                }
+
+                return;
+            }
+
+            if (combo.ItemSelected)
+            {
+                _previewService.EndSingleValuePreview(wasSelectionMade: true);
+                combo.ResetSelection();
+            }
+        }
+
+        // No popup open — restore if needed
+        _previewService.RestoreSingleValuePreview();
     }
 }

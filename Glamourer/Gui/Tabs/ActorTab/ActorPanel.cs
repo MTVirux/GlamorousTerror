@@ -154,6 +154,7 @@ public sealed class ActorPanel : IPanel
 
         EquipmentDrawer.DrawMetaToggle(ToggleDrawData.FromState(MetaIndex.Wetness, _stateManager, _selection.State));
         Im.Dummy(new Vector2(Im.Style.TextHeight / 2));
+        _customizationDrawer.ApplyHoverPreview(_stateManager, _selection.State!);
     }
 
     private void DrawEquipmentHeader()
@@ -189,6 +190,7 @@ public sealed class ActorPanel : IPanel
         DrawEquipmentMetaToggles();
         Im.Dummy(new Vector2(Im.Style.TextHeight / 2));
         _equipmentDrawer.DrawDragDropTooltip();
+        _equipmentDrawer.ApplyHoverPreview(_stateManager, _selection.State!);
     }
 
     private void DrawParameterHeader()

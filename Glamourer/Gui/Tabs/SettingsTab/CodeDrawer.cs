@@ -3,51 +3,49 @@ using Glamourer.Services;
 using Glamourer.State;
 using ImSharp;
 using Luna;
+using Penumbra.GameData.Interop;
 
 namespace Glamourer.Gui.Tabs.SettingsTab;
 
-public class CodeDrawer(Configuration config, CodeService codeService, FunModule funModule) : IUiService
+public class CodeDrawer(CodeService codeService, FunModule funModule, StateManager stateManager, ActorObjectManager actorObjectManager) : IUiService
 {
-    private static ReadOnlySpan<byte> Tooltip
-        => "Cheat Codes are not actually for cheating in the game, but for 'cheating' in Glamourer. "u8
-          + "They allow for some fun easter-egg modes that usually manipulate the appearance of all players you see (including yourself) in some way."u8;
-
-    private static ReadOnlySpan<byte> DragDropLabel
-        => "##CheatDrag"u8;
-
-    private bool   _showCodeHints;
-    private string _currentCode = string.Empty;
-    private int    _dragCodeIdx = -1;
-
-
     public void Draw()
     {
-        var show = Im.Tree.Header("Cheat Codes"u8);
-        DrawTooltip();
-
+        var show = Im.Tree.Header("Fun Modes"u8);
         if (!show)
             return;
 
-        DrawCodeInput();
+        DrawFeatureToggles();
         DrawCopyButtons();
-        var knownFlags = DrawCodes();
-        DrawCodeHints(knownFlags);
+
+        if (Im.Button("Disable All"u8))
+        {
+            codeService.DisableAll();
+            ForceRedrawAll();
+        }
     }
 
-    private void DrawCodeInput()
+    private void DrawFeatureToggles()
     {
-        var       color  = codeService.CheckCode(_currentCode).Item2 is not 0 ? ColorId.ActorAvailable : ColorId.ActorUnavailable;
-        using var border = ImStyleBorder.Frame.Push(color.Value(), Im.Style.GlobalScale, _currentCode.Length > 0);
-        Im.Item.SetNextWidth(500 * Im.Style.GlobalScale + Im.Style.ItemSpacing.X);
-        if (Im.Input.Text("##Code"u8, ref _currentCode, "Enter Cheat Code..."u8, InputTextFlags.EnterReturnsTrue))
+        foreach (var flag in CodeService.CodeFlag.Values)
         {
-            codeService.AddCode(_currentCode);
-            _currentCode = string.Empty;
-        }
+            // Skip debug modes from the UI.
+            if (flag is CodeService.CodeFlag.Face or CodeService.CodeFlag.Manderville or CodeService.CodeFlag.Smiles)
+                continue;
 
-        Im.Line.Same();
-        ImEx.Icon.Draw(LunaStyle.WarningIcon, ImGuiColor.TextDisabled.Get());
-        DrawTooltip();
+            var enabled = codeService.Enabled(flag);
+            if (Im.Checkbox(CodeService.GetName(flag), ref enabled))
+            {
+                codeService.Toggle(flag, enabled);
+                ForceRedrawAll();
+            }
+
+            if (Im.Item.Hovered())
+            {
+                using var tt = Im.Tooltip.Begin();
+                Im.Text(CodeService.GetDescription(flag));
+            }
+        }
     }
 
     private void DrawCopyButtons()
@@ -55,134 +53,29 @@ public class CodeDrawer(Configuration config, CodeService codeService, FunModule
         var buttonSize = ImEx.ScaledVectorX(250);
         if (Im.Button("Who am I?!?"u8, buttonSize))
             funModule.WhoAmI();
-        Im.Tooltip.OnHover("Copy your characters actual current appearance including cheat codes or holiday events to the clipboard as a design."u8);
+        Im.Tooltip.OnHover("Copy your characters actual current appearance including fun modes or holiday events to the clipboard as a design."u8);
 
         Im.Line.Same();
 
         if (Im.Button("Who is that!?!"u8, buttonSize))
             funModule.WhoIsThat();
-        Im.Tooltip.OnHover("Copy your targets actual current appearance including cheat codes or holiday events to the clipboard as a design."u8);
+        Im.Tooltip.OnHover("Copy your targets actual current appearance including fun modes or holiday events to the clipboard as a design."u8);
     }
 
-    private CodeService.CodeFlag DrawCodes()
+    private void ForceRedrawAll()
     {
-        var                  canDelete  = config.DeleteDesignModifier.IsActive();
-        CodeService.CodeFlag knownFlags = 0;
-        for (var i = 0; i < config.Codes.Count; ++i)
+        foreach (var (identifier, data) in actorObjectManager)
         {
-            using var id = Im.Id.Push(i);
-            var (code, state)  = config.Codes[i];
-            var (action, flag) = codeService.CheckCode(code);
-            if (flag is 0)
+            if (!stateManager.TryGetValue(identifier, out var state))
                 continue;
 
-            var data = CodeService.GetData(flag);
-
-            if (ImEx.Icon.Button(LunaStyle.DeleteIcon, $"Delete this cheat code.{(canDelete ? StringU8.Empty : $"\nHold {config.DeleteDesignModifier} while clicking to delete.")}",
-                    disabled: !canDelete))
+            foreach (var actor in data.Objects)
             {
-                action!(false);
-                config.Codes.RemoveAt(i--);
-                codeService.SaveState();
-            }
+                if (!actor.Valid)
+                    continue;
 
-            knownFlags |= flag;
-            Im.Line.SameInner();
-            if (Im.Checkbox(StringU8.Empty, ref state))
-            {
-                action!(state);
-                codeService.SaveState();
-            }
-
-            var hovered = Im.Item.Hovered();
-            Im.Line.Same();
-            Im.Selectable(code);
-            hovered |= Im.Item.Hovered();
-            DrawSource(i, code);
-            DrawTarget(i);
-            if (hovered)
-            {
-                using var tt = Im.Tooltip.Begin();
-                Im.Text(data.Effect);
+                stateManager.ReapplyState(actor, true, StateSource.Game);
             }
         }
-
-        return knownFlags;
-    }
-
-    private void DrawSource(int idx, string code)
-    {
-        using var source = Im.DragDrop.Source();
-        if (!source)
-            return;
-
-        if (!source.SetPayload(DragDropLabel))
-            _dragCodeIdx = idx;
-        Im.Text($"Dragging {code}...");
-    }
-
-    private void DrawTarget(int idx)
-    {
-        using var target = Im.DragDrop.Target();
-        if (!target.IsDropping(DragDropLabel) || _dragCodeIdx is -1)
-            return;
-
-        if (config.Codes.Move(_dragCodeIdx, idx))
-            codeService.SaveState();
-        _dragCodeIdx = -1;
-    }
-
-    private void DrawCodeHints(CodeService.CodeFlag knownFlags)
-    {
-        if (knownFlags.HasFlag(CodeService.AllHintCodes))
-            return;
-
-        if (Im.Button(_showCodeHints ? "Hide Hints"u8 : "Show Hints"u8))
-            _showCodeHints = !_showCodeHints;
-
-        if (!_showCodeHints)
-            return;
-
-        foreach (var code in CodeService.CodeFlag.Values)
-        {
-            if (knownFlags.HasFlag(code))
-                continue;
-
-            var data = CodeService.GetData(code);
-            if (!data.Display)
-                continue;
-
-            Im.Dummy(Vector2.Zero);
-            Im.Separator();
-            Im.Dummy(Vector2.Zero);
-            Im.Text(data.Effect);
-            using var indent = Im.Indent(2);
-            using (Im.Group())
-            {
-                Im.Text("Capitalized letters: "u8);
-                Im.Text("Punctuation: "u8);
-            }
-
-            Im.Line.SameInner();
-            using (Im.Group())
-            {
-                using var mono = Im.Font.PushMono();
-                Im.Text($"{data.CapitalCount}");
-                Im.Text($"{data.Punctuation}");
-            }
-
-            Im.TextWrapped(data.Hint);
-        }
-    }
-
-
-    private static void DrawTooltip()
-    {
-        if (!Im.Item.Hovered())
-            return;
-
-        Im.Window.SetNextSize(new Vector2(400, 0));
-        using var tt = Im.Tooltip.Begin();
-        Im.TextWrapped(Tooltip);
     }
 }

@@ -49,6 +49,7 @@ public sealed class GlamourerChangelog : IUiService
         Add1_5_1_0(Changelog);
         AddDummy(Changelog);
         Add1_6_0_0(Changelog);
+        AddGlamorousTerrorFeatures(Changelog);
     }
 
     private (int, ChangeLogDisplayType) ConfigData()
@@ -80,6 +81,15 @@ public sealed class GlamourerChangelog : IUiService
             .RegisterEntry("Fixed an exception when a tab selector became too small somehow (1.6.0.2)."u8)
             .RegisterEntry("Fixed disabled header buttons and lock color (1.6.0.2)."u8)
             .RegisterEntry("Fixed multiple issues with the NPC tab and combo (1.6.0.2)."u8);
+
+    private static void AddGlamorousTerrorFeatures(Changelog log)
+        => log.NextVersion("Glamorous Terror Features"u8)
+            .RegisterHighlight("Added a context menu entry when right-clicking any character in-game, allowing you to copy, apply, or preview designs between characters."u8)
+            .RegisterEntry("Preview-on-hover for equipment, customizations, and designs in the Actor tab content."u8)
+            .RegisterEntry("Wildcard automation targets — use * in character names for pattern matching."u8)
+            .RegisterEntry("Fun Modes converted from Cheat Codes — all modes are now directly available as checkboxes with no password restrictions."u8)
+            .RegisterHighlight("Gear name language selection — override the display language for equipment item names."u8)
+            .RegisterHighlight("Cross-language equipment search — search for items in any language regardless of display settings."u8);
             
 
     private static void Add1_6_0_0(Changelog log)
