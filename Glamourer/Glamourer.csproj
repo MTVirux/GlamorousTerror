@@ -1,9 +1,9 @@
-﻿<Project Sdk="Dalamud.NET.Sdk/14.0.2">
+<Project Sdk="Dalamud.NET.Sdk/14.0.2">
   <PropertyGroup>
     <RootNamespace>Glamourer</RootNamespace>
     <AssemblyName>GlamorousTerror</AssemblyName>
-    <FileVersion>9.0.0.1</FileVersion>
-    <AssemblyVersion>9.0.0.1</AssemblyVersion>
+    <FileVersion>1.6.0.7</FileVersion>
+    <AssemblyVersion>1.6.0.7</AssemblyVersion>
     <Product>Glamourer</Product>
     <Copyright>Copyright © 2025</Copyright>
     <WarningLevel>4</WarningLevel>
