@@ -89,9 +89,10 @@ When hovering over items in any UI combo or popup, the character's appearance **
 | Equipment slot combos (Head, Body, etc.) | Single item | All 14 equipment slots |
 | Bonus item combos (Glasses, etc.) | Single bonus item | All bonus item flags |
 | Weapon combos (Main Hand, Off Hand) | Single item | Both weapon slots |
+| Stain/dye combos | Single stain | All slots, per-stain-index. Immediate on hover |
 | Customization icon popups (Face, Hairstyle, Face Paint) | Single customization | Requires CTRL held |
-| Customization list combos (Eye shape, Nose, etc.) | Single customization | Immediate on hover |
-| Customization color popups (Hair color, Eye color, etc.) | Single customization | Immediate on hover |
+| Customization list combos (Eye shape, Nose, etc.) | Single customization | Requires CTRL held |
+| Customization color popups (Hair color, Eye color, etc.) | Single customization | Requires CTRL held |
 | Context menu equipment/appearance items | Equipment/Appearance | See [Context Menu](#1-context-menu) |
 | Context menu design tree | Full design | Previews entire saved design |
 
@@ -118,17 +119,20 @@ The central preview engine in `Glamourer/Services/PreviewService.cs` contains tw
 
 **`PreviewService`** — Methods organized by lifecycle:
 
-- **Start**: `StartSingleItemPreview()`, `StartSingleBonusItemPreview()`, `StartSingleCustomizationPreview()`, `StartSingleStainPreview()`
-- **Apply**: `PreviewSingleItem()`, `PreviewSingleBonusItem()`, `HandleCustomizationPopupFrame()`
-- **Restore**: `RestoreSingleValuePreview()`, `EndSingleValuePreview()`, `EndCustomizationPopupFrame()`
-- **Query**: `IsSingleItemPreview(slot)`, `IsSingleBonusItemPreview(slot)`, `IsSingleCustomizationPreview(index)`
+- **Start**: `StartSingleItemPreview()`, `StartSingleBonusItemPreview()`, `StartSingleCustomizationPreview(state, index, requiresCtrl)`, `StartSingleStainPreview()`
+- **Apply**: `PreviewSingleItem()`, `PreviewSingleBonusItem()`, `PreviewSingleStain()`, `HandleCustomizationPopupFrame(state, index, hoveredIndex, hoveredValue, ctrlHeld)`
+- **Restore**: `RestoreSingleValuePreview()`, `EndSingleValuePreview(wasSelectionMade)`, `EndCustomizationPopupFrame()`
+- **Query**: `IsSingleItemPreview(slot)`, `IsSingleBonusItemPreview(slot)`, `IsSingleCustomizationPreview(index)`, `IsSingleStainPreview(slot, stainIndex)`
+
+**Key implementation detail for `IsSingleStainPreview`**: Must check `IsActive && Type == PreviewType.SingleStain` (not just slot/index match). Without this, stale values after `End()` can falsely match.
 
 ### Implementation — Equipment Drawer
 
 | File | Key Addition |
 |------|-------------|
 | `Glamourer/Gui/Equipment/BaseItemCombo.cs` | `HoveredItem`, `IsPopupOpen`, `ItemSelected`, `ResetSelection()` properties |
-| `Glamourer/Gui/Equipment/EquipmentDrawer.cs` | `ApplyHoverPreview(StateManager, ActorState)` method (~100 lines) |
+| `Glamourer/Gui/Equipment/GlamourerColorCombo.cs` | `HoveredStain`, `IsPopupOpen`, `StainSelected`, `ResetSelection()`, `ResetFrameState()` properties |
+| `Glamourer/Gui/Equipment/EquipmentDrawer.cs` | `ApplyHoverPreview(StateManager, ActorState)` method (~130 lines), stain slot tracking fields |
 
 **BaseItemCombo** tracks hover state per combo:
 
@@ -136,36 +140,98 @@ The central preview engine in `Glamourer/Services/PreviewService.cs` contains tw
 - `IsPopupOpen` (`bool`) — set to `true` in `PreDrawList()` (which is only called when the popup is actually rendering), reset to `false` at the start of each `Draw()` call
 - `ItemSelected` (`bool`) — set to `true` when an item is clicked
 
+**GlamourerColorCombo** tracks hover state for stain/dye previews:
+
+- `HoveredStain` (`StainId?`) — set in overridden `DrawItem()` when `Im.Item.Hovered()` is true after the button
+- `IsPopupOpen` (`bool`) — set to `true` in overridden `PreDrawList()`, **NOT** reset per `Draw()` call
+- `StainSelected` (`bool`) — set to `true` when `Draw()` returns `true` (selection made)
+- `ResetFrameState()` — **must be called once per frame** from `EquipmentDrawer.Prepare()` to clear `IsPopupOpen` and `HoveredStain`
+
+**CRITICAL: Stain combo clobbering pattern** — There is only **one** `_stainCombo` instance shared across all equipment slots. `Draw()` is called many times per frame (once per stain index per slot). If `IsPopupOpen` were reset in `Draw()`, the slot that has its popup open would set `true`, then the next slot's `Draw()` would immediately reset it to `false`. Solution: `ResetFrameState()` resets once at start of frame in `Prepare()`, and `PreDrawList()` only ever sets `true`.
+
+**EquipmentDrawer stain slot tracking**:
+
+- `_stainPreviewSlot` (`EquipSlot`) — which equipment slot the stain popup belongs to
+- `_stainPreviewIndex` (`int`) — which stain index within that slot (for multi-stain items)
+- `_stainPreviewValid` (`bool`) — whether the above values are meaningful (guards against "Dye All Slots" combo)
+
+In `DrawStain()`, slot/index are captured on the **false→true transition** of `_stainCombo.IsPopupOpen` (not just when `IsPopupOpen` is true). This prevents later `DrawStain()` calls for other slots from overwriting the values. `_stainPreviewValid` is set `true` only in `DrawStain()`, not in `DrawAllStain()`.
+
 **EquipmentDrawer.ApplyHoverPreview()** runs every frame after drawing equipment:
 
-1. Iterates all equipment combos, bonus combos, and weapon combos
-2. For any combo with `IsPopupOpen == true`:
-   - Calls `PreviewService.StartSingleItemPreview(state, slot)` if not already previewing that slot
-   - If `HoveredItem.HasValue`, calls `PreviewService.PreviewSingleItem(state, slot, item)`
-3. If no combo is open and a single-item preview is active:
-   - Checks if any combo had `ItemSelected` (user clicked)
-   - Calls `EndSingleValuePreview(wasSelectionMade)` — restores original if no selection was made
-4. If a combo is open but nothing is hovered: calls `RestoreSingleValuePreview()`
+1. Iterates all equipment combos — if any combo's popup is open, starts/applies item preview, `return`s early
+2. Iterates all bonus combos — same pattern with bonus item preview, `return`s early if open
+3. Iterates all weapon combos — same pattern, `return`s early if open
+4. Checks stain combo — if `_stainCombo.IsPopupOpen && _stainPreviewValid`:
+   - Calls `StartSingleStainPreview(state, slot, stainIndex)` then `PreviewSingleStain()` if hovering
+   - Handles `StainSelected` → `EndSingleValuePreview(wasSelectionMade: true)`
+   - `return`s early
+5. **Fall-through** (no popup open): Only ends preview if `State.Type is PreviewType.SingleItem or PreviewType.SingleStain` — **must NOT end `SingleCustomization` previews** since the customization drawer manages those separately
+
+**CRITICAL: Cross-drawer interference** — `EquipmentDrawer.ApplyHoverPreview()` runs AFTER `CustomizationDrawer.ApplyHoverPreview()` in `ActorPanel`. If the equipment drawer's fall-through unconditionally called `RestoreSingleValuePreview()`, it would kill any active customization preview every frame. The type guard prevents this.
 
 ### Implementation — Customization Drawer
 
 | File | Key Addition |
 |------|-------------|
-| `CustomizationDrawer.cs` | `PreviewService` constructor param, public `ApplyHoverPreview()` dispatcher |
-| `CustomizationDrawer.Icon.cs` | `_iconPopupOpen/Index` state, hover tracking in `DrawIconPickerPopup()`, `ApplyIconHoverPreview()` |
-| `CustomizationDrawer.Simple.cs` | `_listPopupOpen/Index` state, hover tracking in `ListCombo0()`/`ListCombo1()`, `ApplyListHoverPreview()` |
-| `CustomizationDrawer.Color.cs` | `_colorPopupOpen/Index` state, hover tracking in `DrawColorPickerPopup()`, `ApplyColorHoverPreview()` |
+| `CustomizationDrawer.cs` | `PreviewService` constructor param, public `ApplyHoverPreview()` dispatcher, popup flag reset in `DrawInternal()` |
+| `CustomizationDrawer.Icon.cs` | `_iconPopupOpen/Index/HoveredValue/SelectionMade` state, hover tracking in `DrawIconPickerPopup()`, `ApplyIconHoverPreview()` |
+| `CustomizationDrawer.Simple.cs` | `_listPopupOpen/Index/HoveredValue/SelectionMade` state, hover tracking in `ListCombo0()`/`ListCombo1()`, `ApplyListHoverPreview()` |
+| `CustomizationDrawer.Color.cs` | `_colorPopupOpen/Index/HoveredValue/SelectionMade` state, hover tracking in `DrawColorPickerPopup()`, `ApplyColorHoverPreview()` |
 
-Each popup type follows the same pattern:
+**CRITICAL: Popup flag clobbering pattern** — Multiple icon selectors (Face, Hairstyle, etc.) and multiple color pickers are drawn in a loop. Each popup draw method was originally setting `_iconPopupOpen = false` when *its* popup wasn't open. If Face's popup was open, Face's draw set `true`, then Hairstyle's draw immediately set `false`. Solution:
 
-1. **When popup opens**: Set `previewState.PopupActiveThisFrame = true`, set `ActivePopupType`, track `_*PopupOpen = true` and `_*PopupIndex = _currentIndex`
-2. **Per item in popup**: After drawing selectable/button, check `Im.Item.Hovered()` → set `previewState.PopupHoveredIndex` and `PopupHoveredValue`
-3. **On selection**: Set `previewState.PopupSelectionMade = true`
-4. **ApplyXHoverPreview()**: If `PopupActiveThisFrame` and popup type matches:
-   - Ensure `StartSingleCustomizationPreview()` is called for the correct index
-   - Call `HandleCustomizationPopupFrame(state, index, hoveredIndex, hoveredValue, ctrlHeld)` — applies preview if hovering (and CTRL held for face/hairstyle/facepaint)
-   - Clear `PopupActiveThisFrame` flag
-5. **On popup close**: `_*PopupOpen` is still true but `PopupActiveThisFrame` is false → call `EndCustomizationPopupFrame()` → restore original, reset state
+- **Reset all three flags once** at the start of `DrawInternal()`: `_iconPopupOpen = false; _listPopupOpen = false; _colorPopupOpen = false;`
+- **Popup draw methods only set `true`**, never `false` — when `Im.Popup.Begin()` returns false, the method just `return`s without touching the flag
+
+Each popup type tracks 4 fields: `_xxxPopupOpen` (bool), `_xxxPopupIndex` (CustomizeIndex), `_xxxHoveredValue` (CustomizeValue), `_xxxSelectionMade` (bool).
+
+**Drawing popups** (same pattern for Icon, List, Color):
+
+1. **When popup renders**: Set `_xxxPopupOpen = true` and `_xxxPopupIndex = _currentIndex`. Reset `_xxxHoveredValue = default`
+2. **Per item in popup**: After drawing selectable/button, check `Im.Item.Hovered()` → set `_xxxHoveredValue`
+3. **On selection**: Set `_xxxSelectionMade = true`, call `Im.Popup.CloseCurrent()`/`UpdateValue()`
+
+**ApplyHoverPreview() dispatcher** — Uses `if/else if/else` to call exactly ONE sub-method:
+
+```csharp
+if (_iconPopupOpen)
+    ApplyIconHoverPreview(stateManager, state);
+else if (_listPopupOpen)
+    ApplyListHoverPreview(stateManager, state);
+else if (_colorPopupOpen)
+    ApplyColorHoverPreview(stateManager, state);
+else
+    previewService.EndCustomizationPopupFrame(state);
+```
+
+**CRITICAL: Only one EndCustomizationPopupFrame call** — If all three sub-methods were called sequentially with `else { End() }` branches, the two inactive ones would each call `End`, which resets `PopupActiveThisFrame = false`. The third call would then see `false` and **kill the active preview**. The `if/else if/else` pattern ensures exactly one code path runs per frame.
+
+**ApplyXxxHoverPreview()** sub-method pattern (Icon/List/Color are identical except field names):
+
+```csharp
+if (_xxxPopupOpen)
+{
+    previewService.StartSingleCustomizationPreview(state, _xxxPopupIndex, requiresCtrl: true);
+
+    if (_xxxHoveredValue.Value != 0)
+        previewService.HandleCustomizationPopupFrame(state, _xxxPopupIndex, (int)_xxxHoveredValue.Value, _xxxHoveredValue, Im.Io.KeyControl);
+    else
+        previewService.HandleCustomizationPopupFrame(state, _xxxPopupIndex, null, default, Im.Io.KeyControl);
+
+    if (_xxxSelectionMade)
+    {
+        previewService.MarkPopupSelectionMade();
+        previewService.EndSingleValuePreview(wasSelectionMade: true);
+        _xxxSelectionMade = false;
+    }
+}
+```
+
+Key parameters:
+- `requiresCtrl: true` — All customization previews require CTRL to be held
+- `Im.Io.KeyControl` — Passes actual CTRL key state each frame to `HandleCustomizationPopupFrame`
+- `HandleCustomizationPopupFrame` logic: if hovering AND (`!RequiresCtrl || ctrlHeld`) → apply preview; otherwise restore original
 
 ### Wiring in ActorPanel
 
@@ -187,28 +253,75 @@ Equipment combo opened
   → User moves mouse to different item
     → HoveredItem changes → PreviewSingleItem with new item
   → User moves off all items
-    → HoveredItem = null → RestoreSingleValuePreview() → restore to saved original
+    → HoveredItem = null → StartSingleItemPreview keeps state but no change applied
   → User clicks item
     → BaseItemCombo returns true, ItemSelected = true, IsPopupOpen = false
     → Next frame: EndSingleValuePreview(wasSelectionMade=true) → keep new value
+  → User closes popup without selecting
+    → IsPopupOpen = false, ItemSelected = false
+    → Fall-through: EndSingleValuePreview(wasSelectionMade=false) → restore original
+```
+
+### Data Flow (Stain/Dye Example)
+
+```
+EquipmentDrawer.Prepare() runs at start of frame
+  → _stainCombo.ResetFrameState() → IsPopupOpen=false, HoveredStain=null
+  → _stainPreviewValid = false
+
+Stain combo opened for Head slot, stain index 0
+  → GlamourerColorCombo.PreDrawList() → IsPopupOpen = true
+  → DrawStain() detects false→true transition → _stainPreviewSlot=Head, _stainPreviewIndex=0, _stainPreviewValid=true
+  → All subsequent DrawStain() calls for other slots: IsPopupOpen already true, no transition, slot NOT overwritten
+  → User hovers a color → DrawItem() → Im.Item.Hovered() → HoveredStain = stainId
+  → ApplyHoverPreview() → _stainCombo.IsPopupOpen && _stainPreviewValid
+    → PreviewService.StartSingleStainPreview(state, Head, 0)
+    → PreviewService.PreviewSingleStain(state, Head, 0, hoveredStain)
+      → StateManager.ChangeStains(state, Head, newStains, Manual) → game memory
+  → User clicks color
+    → Draw() returns true → StainSelected = true
+    → ApplyHoverPreview() → EndSingleValuePreview(wasSelectionMade=true)
+  → Popup closes without selection
+    → IsPopupOpen = false next frame (ResetFrameState)
+    → Fall-through: EndSingleValuePreview(wasSelectionMade=false) → restore original stain
 ```
 
 ### Data Flow (Customization Example)
 
 ```
+CustomizationDrawer.DrawInternal() starts
+  → _iconPopupOpen = false; _listPopupOpen = false; _colorPopupOpen = false
+
 Icon popup opened (e.g. hairstyle)
-  → DrawIconPickerPopup() → previewState.PopupActiveThisFrame = true
-  → _iconPopupOpen = true, _iconPopupIndex = currentIndex
-  → User hovers icon button → Im.Item.Hovered() → PopupHoveredIndex/Value set
-  → ApplyIconHoverPreview() detects popup active for icon type
+  → DrawIconPickerPopup() → popup renders → _iconPopupOpen = true, _iconPopupIndex = currentIndex
+  → Other icon selectors' draw methods → their popup is not open → return without touching _iconPopupOpen
+  → User hovers icon button → Im.Item.Hovered() → _iconHoveredValue = custom.Value
+  → ApplyHoverPreview() → _iconPopupOpen is true → calls ApplyIconHoverPreview()
     → StartSingleCustomizationPreview(state, index, requiresCtrl=true)
     → HandleCustomizationPopupFrame(state, index, hoveredIndex, value, ctrlHeld=Im.Io.KeyControl)
       → If CTRL held: ChangeCustomize(state, index, value) → game memory
-      → If CTRL not held: RestoreSingleValuePreview()
+      → If CTRL not held: restore original value
+  → List and Color sub-methods NOT called (if/else if/else)
+  → EndCustomizationPopupFrame NOT called (popup is still open)
   → Popup closes (Im.Popup.CloseCurrent or user clicks outside)
-    → _iconPopupOpen still true, but PopupActiveThisFrame = false
-    → ApplyIconHoverPreview() → EndCustomizationPopupFrame() → restore + End()
+    → Next frame: DrawInternal resets _iconPopupOpen = false
+    → ApplyHoverPreview() → all three flags false → else branch → EndCustomizationPopupFrame()
+      → Checks PopupActiveThisFrame (false) → restores original + End()
 ```
+
+### Known Pitfalls (for future upstream merges)
+
+These bugs were discovered and fixed during integration. Document them to prevent regression:
+
+1. **Popup flag clobbering**: Multiple selectors drawn in a loop each reset the popup flag. Flags must be reset ONCE before the draw loop, and popup methods must only set `true`, never `false`.
+
+2. **Cross-drawer preview interference**: `EquipmentDrawer.ApplyHoverPreview()` runs after `CustomizationDrawer.ApplyHoverPreview()`. Its fall-through must ONLY end equipment-related previews (`SingleItem`, `SingleStain`), not `SingleCustomization`.
+
+3. **Stain combo shared instance**: One `GlamourerColorCombo` is used for all slots. `ResetFrameState()` must run once per frame from `Prepare()`. Slot tracking must use false→true transition detection to capture the correct slot.
+
+4. **`IsSingleStainPreview` must check `IsActive && Type`**: Unlike simple field comparisons, all query methods must gate on `IsActive` and `Type` to prevent stale values from matching after `End()` clears state.
+
+5. **`requiresCtrl: true` and `Im.Io.KeyControl`**: All customization previews pass `requiresCtrl: true` to `StartSingleCustomizationPreview` and pass `Im.Io.KeyControl` (not hardcoded `false`) to `HandleCustomizationPopupFrame`.
 
 ---
 
@@ -476,12 +589,17 @@ All GlamorousTerror-specific properties in `Glamourer/Config/Configuration.cs`:
 │  ┌──────────────┐  ┌────────────┐  ┌──────────────┐ │
 │  │ ActorPanel   │  │ContextMenu │  │ CodeDrawer   │ │
 │  │ (Equipment + │  │ Service +  │  │ (Fun Modes   │ │
-│  │  Customize)  │  │ PopupMenu  │  │  Settings)   │ │
+│  │  Customize + │  │ PopupMenu  │  │  Settings)   │ │
+│  │  Stain)      │  │            │  │              │ │
 │  └──────┬───────┘  └─────┬──────┘  └──────┬───────┘ │
 │         │                │                 │         │
 │  ┌──────▼────────────────▼─────┐  ┌───────▼───────┐ │
 │  │      PreviewService         │  │  CodeService   │ │
 │  │  (Live preview state mgmt)  │  │  (Flag toggle) │ │
+│  │  Types: SingleItem,         │  │               │ │
+│  │   SingleCustomization,      │  │               │ │
+│  │   SingleStain, Equipment,   │  │               │ │
+│  │   Appearance, Design        │  │               │ │
 │  └──────┬──────────────────────┘  └───────┬───────┘ │
 │         │                                 │         │
 │  ┌──────▼─────────────────────────────────▼───────┐ │
