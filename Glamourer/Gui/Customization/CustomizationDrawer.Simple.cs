@@ -338,12 +338,12 @@ public partial class CustomizationDrawer
     {
         if (_listPopupOpen)
         {
-            previewService.StartSingleCustomizationPreview(state, _listPopupIndex);
+            previewService.StartSingleCustomizationPreview(state, _listPopupIndex, requiresCtrl: true);
 
             if (_listHoveredValue.Value != 0)
-                previewService.HandleCustomizationPopupFrame(state, _listPopupIndex, (int)_listHoveredValue.Value, _listHoveredValue, false);
+                previewService.HandleCustomizationPopupFrame(state, _listPopupIndex, (int)_listHoveredValue.Value, _listHoveredValue, Im.Io.KeyControl);
             else
-                previewService.HandleCustomizationPopupFrame(state, _listPopupIndex, null, default, false);
+                previewService.HandleCustomizationPopupFrame(state, _listPopupIndex, null, default, Im.Io.KeyControl);
 
             if (_listSelectionMade)
             {
@@ -351,12 +351,6 @@ public partial class CustomizationDrawer
                 previewService.EndSingleValuePreview(wasSelectionMade: true);
                 _listSelectionMade = false;
             }
-
-            _listPopupOpen = false;
-        }
-        else
-        {
-            previewService.EndCustomizationPopupFrame(state);
         }
     }
 }

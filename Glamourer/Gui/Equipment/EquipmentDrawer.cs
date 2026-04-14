@@ -37,6 +37,11 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
     private EquipItemSlotCache _draggedItem;
     private EquipSlot          _dragTarget;
 
+    // Stain hover preview tracking
+    private EquipSlot _stainPreviewSlot;
+    private int       _stainPreviewIndex;
+    private bool      _stainPreviewValid;
+
     public EquipmentDrawer(FavoriteManager favorites, IDataManager gameData, ItemManager items, TextureService textures,
         Configuration config, GPoseService gPose, AdvancedDyePopup advancedDyes, ItemCopyService itemCopy, DesignApplier designApplier,
         DesignConverter converter, PreviewService previewService)
@@ -74,6 +79,8 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         _comboLength           = DefaultWidth * Im.Style.GlobalScale;
         _advancedMaterialColor = ColorId.AdvancedDyeActive.Value();
         _dragTarget            = EquipSlot.Unknown;
+        _stainCombo.ResetFrameState();
+        _stainPreviewValid = false;
     }
 
     private bool VerifyRestrictedGear(EquipDrawData data)
@@ -394,9 +401,19 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         {
             id.Push(index);
             var found = _stainData.TryGetValue(stainId, out var stain);
+            var wasPopupOpen = _stainCombo.IsPopupOpen;
             var change = small
                 ? _stainCombo.Draw("##stain"u8, stain, out var newStain, Im.Style.FrameHeight)
                 : _stainCombo.Draw("##stain"u8, stain, out newStain,     width);
+
+            // Track which slot/index the stain popup is open for.
+            // Only capture on the false→true transition to avoid clobbering by later Draw calls.
+            if (!wasPopupOpen && _stainCombo.IsPopupOpen)
+            {
+                _stainPreviewSlot  = data.Slot;
+                _stainPreviewIndex = index;
+                _stainPreviewValid = true;
+            }
 
             _itemCopy.HandleCopyPaste(data, index);
             if (!change)
@@ -827,7 +844,32 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
             }
         }
 
-        // No popup open — restore if needed
-        _previewService.RestoreSingleValuePreview();
+        // Stain combo
+        if (_stainCombo.IsPopupOpen && _stainPreviewValid)
+        {
+            _previewService.StartSingleStainPreview(state, _stainPreviewSlot, _stainPreviewIndex);
+
+            if (_stainCombo.HoveredStain is { } hoveredStain)
+                _previewService.PreviewSingleStain(state, _stainPreviewSlot, _stainPreviewIndex, hoveredStain);
+
+            if (_stainCombo.StainSelected)
+            {
+                _previewService.EndSingleValuePreview(wasSelectionMade: true);
+                _stainCombo.ResetSelection();
+            }
+
+            return;
+        }
+
+        if (_stainCombo.StainSelected)
+        {
+            _previewService.EndSingleValuePreview(wasSelectionMade: true);
+            _stainCombo.ResetSelection();
+        }
+
+        // No equipment popup open — end only if the active preview is equipment-related
+        if (_previewService.State.IsActive &&
+            _previewService.State.Type is PreviewType.SingleItem or PreviewType.SingleStain)
+            _previewService.EndSingleValuePreview();
     }
 }

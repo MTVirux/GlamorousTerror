@@ -115,6 +115,11 @@ public sealed partial class CustomizationDrawer(
     {
         using var spacing = ImStyleDouble.ItemSpacing.Push(_spacing);
 
+        // Reset popup tracking flags before drawing — each popup will set its flag to true if open.
+        _iconPopupOpen  = false;
+        _listPopupOpen  = false;
+        _colorPopupOpen = false;
+
         try
         {
             DrawRaceGenderSelector();
@@ -193,8 +198,13 @@ public sealed partial class CustomizationDrawer(
 
     public void ApplyHoverPreview(State.StateManager stateManager, State.ActorState state)
     {
-        ApplyIconHoverPreview(stateManager, state);
-        ApplyListHoverPreview(stateManager, state);
-        ApplyColorHoverPreview(stateManager, state);
+        if (_iconPopupOpen)
+            ApplyIconHoverPreview(stateManager, state);
+        else if (_listPopupOpen)
+            ApplyListHoverPreview(stateManager, state);
+        else if (_colorPopupOpen)
+            ApplyColorHoverPreview(stateManager, state);
+        else
+            previewService.EndCustomizationPopupFrame(state);
     }
 }

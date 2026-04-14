@@ -138,10 +138,7 @@ public partial class CustomizationDrawer
     {
         using var popup = Im.Popup.Begin(ColorPickerPopupName, WindowFlags.AlwaysAutoResize);
         if (!popup)
-        {
-            _colorPopupOpen = false;
             return;
-        }
 
         _colorPopupOpen    = true;
         _colorPopupIndex   = _currentIndex;
@@ -187,12 +184,12 @@ public partial class CustomizationDrawer
     {
         if (_colorPopupOpen)
         {
-            previewService.StartSingleCustomizationPreview(state, _colorPopupIndex);
+            previewService.StartSingleCustomizationPreview(state, _colorPopupIndex, requiresCtrl: true);
 
             if (_colorHoveredValue.Value != 0)
-                previewService.HandleCustomizationPopupFrame(state, _colorPopupIndex, (int)_colorHoveredValue.Value, _colorHoveredValue, false);
+                previewService.HandleCustomizationPopupFrame(state, _colorPopupIndex, (int)_colorHoveredValue.Value, _colorHoveredValue, Im.Io.KeyControl);
             else
-                previewService.HandleCustomizationPopupFrame(state, _colorPopupIndex, null, default, false);
+                previewService.HandleCustomizationPopupFrame(state, _colorPopupIndex, null, default, Im.Io.KeyControl);
 
             if (_colorSelectionMade)
             {
@@ -200,10 +197,6 @@ public partial class CustomizationDrawer
                 previewService.EndSingleValuePreview(wasSelectionMade: true);
                 _colorSelectionMade = false;
             }
-        }
-        else
-        {
-            previewService.EndCustomizationPopupFrame(state);
         }
     }
 }

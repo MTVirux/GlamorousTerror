@@ -241,7 +241,7 @@ public sealed class PreviewState
     /// Checks if we're previewing a single stain in the given slot and index.
     /// </summary>
     public bool IsSingleStainPreview(EquipSlot slot, int stainIndex)
-        => OriginalStainSlot == slot && OriginalStainIndex == stainIndex && OriginalStainSlot != EquipSlot.Unknown;
+        => IsActive && Type == PreviewType.SingleStain && OriginalStainSlot == slot && OriginalStainIndex == stainIndex;
 
     /// <summary>
     /// Ends the preview, clearing all state. Does NOT restore original data - caller should do that first.

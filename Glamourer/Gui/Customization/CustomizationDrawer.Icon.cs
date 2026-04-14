@@ -78,10 +78,7 @@ public partial class CustomizationDrawer
     {
         using var popup = Im.Popup.Begin(IconSelectorPopup, WindowFlags.AlwaysAutoResize);
         if (!popup)
-        {
-            _iconPopupOpen = false;
             return;
-        }
 
         _iconPopupOpen    = true;
         _iconPopupIndex   = _currentIndex;
@@ -248,12 +245,12 @@ public partial class CustomizationDrawer
     {
         if (_iconPopupOpen)
         {
-            previewService.StartSingleCustomizationPreview(state, _iconPopupIndex);
+            previewService.StartSingleCustomizationPreview(state, _iconPopupIndex, requiresCtrl: true);
 
             if (_iconHoveredValue.Value != 0)
-                previewService.HandleCustomizationPopupFrame(state, _iconPopupIndex, (int)_iconHoveredValue.Value, _iconHoveredValue, false);
+                previewService.HandleCustomizationPopupFrame(state, _iconPopupIndex, (int)_iconHoveredValue.Value, _iconHoveredValue, Im.Io.KeyControl);
             else
-                previewService.HandleCustomizationPopupFrame(state, _iconPopupIndex, null, default, false);
+                previewService.HandleCustomizationPopupFrame(state, _iconPopupIndex, null, default, Im.Io.KeyControl);
 
             if (_iconSelectionMade)
             {
@@ -261,10 +258,6 @@ public partial class CustomizationDrawer
                 previewService.EndSingleValuePreview(wasSelectionMade: true);
                 _iconSelectionMade = false;
             }
-        }
-        else
-        {
-            previewService.EndCustomizationPopupFrame(state);
         }
     }
 }

@@ -23,6 +23,31 @@ public sealed class GlamourerColorCombo : FilterComboColors, IDisposable
         _config.KeepItemComboFilterChanged += OnItemComboFilterChanged;
     }
 
+    /// <summary> Reset per-frame tracking state. Call once before all Draw calls. </summary>
+    public void ResetFrameState()
+    {
+        IsPopupOpen  = false;
+        HoveredStain = null;
+    }
+
+    /// <summary> The stain currently hovered in the open popup, or null. </summary>
+    public StainId? HoveredStain  { get; private set; }
+
+    /// <summary> Whether the combo popup is currently open. </summary>
+    public bool     IsPopupOpen   { get; private set; }
+
+    /// <summary> Whether a selection was just made. </summary>
+    public bool     StainSelected { get; private set; }
+
+    public void ResetSelection()
+        => StainSelected = false;
+
+    protected override void PreDrawList()
+    {
+        IsPopupOpen = true;
+        base.PreDrawList();
+    }
+
     protected override float AdditionalSpace
         => AwesomeIcon.Font.CalculateTextSize(LunaStyle.FavoriteIcon.Span).X + 8 * Im.Style.GlobalScale;
 
@@ -37,7 +62,10 @@ public sealed class GlamourerColorCombo : FilterComboColors, IDisposable
         var       buttonWidth = Im.ContentRegion.Available.X;
         var       totalWidth  = Im.ContentRegion.Maximum.X;
         using var style       = ImStyleDouble.ButtonTextAlign.PushX(buttonWidth / 2 / totalWidth);
-        return base.DrawItem(item, globalIndex, selected);
+        var ret = base.DrawItem(item, globalIndex, selected);
+        if (Im.Item.Hovered())
+            HoveredStain = new StainId((byte)item.Id);
+        return ret;
     }
 
     protected override void PreDrawCombo(float width)
@@ -74,6 +102,7 @@ public sealed class GlamourerColorCombo : FilterComboColors, IDisposable
             else if (!_stains.TryGetValue(newItem.Id, out newStain))
                 return false;
 
+            StainSelected = true;
             return true;
         }
 
