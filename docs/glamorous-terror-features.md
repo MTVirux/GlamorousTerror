@@ -545,18 +545,91 @@ Search for equipment items in **any language** regardless of the current display
 - Enable in Settings alongside the language selector
 - When active, typing in any equipment combo filter checks all 4 language variants of each item name
 - Example: With display set to English, typing "鉄" (Japanese for "iron") will find iron equipment
+- Supports **partwise matching**: multi-word searches like "iron chain" require all words to appear in the same language's name (not mixed across languages)
+- Special items (Nothing, Smallclothes — ID 0 or ≥ `uint.MaxValue - 512`) are skipped since they have no translations
 
 ### Implementation
 
-Shares code with the language system in `ItemNameService`:
+| File | Lines | Role |
+|------|-------|------|
+| `Glamourer/Gui/Equipment/BaseItemCombo.cs` | ~89–120 | `ItemFilter` — sealed filter class with `MatchesCrossLanguage()` |
+| `Glamourer/Services/ItemNameService.cs` | ~210–245 | `GetAllLanguageNames(uint)` — returns `string[4]` of all language names, cached |
+| `Glamourer/Services/ItemNameService.cs` | ~175–205 | `MatchesAnyLanguage(EquipItem, string)` — standalone helper (not used by filter) |
+| `Glamourer/Gui/Equipment/EquipmentDrawer.cs` | ~48 | Injects `ItemNameService` into all combo constructors |
+| `Glamourer/Gui/Tabs/SettingsTab/SettingsTab.cs` | — | Checkbox UI + `ClearCache()` on toggle |
+| `Glamourer/Config/Configuration.cs` | — | `CrossLanguageEquipmentSearch` property |
 
-- `MatchesAnyLanguage(EquipItem item, string filter)` — checks:
-  1. The display-language name (fast path)
-  2. All 4 language sheets via `GetAllLanguageNames(uint itemId)` — returns `string[]` of 4 names
-- `_allLanguageNamesCache` (`Dictionary<uint, string[]>`) — caches all-language lookups separately from single-language lookups
-- `ClearCache()` clears both caches
+**ItemFilter integration** — The sealed `ItemFilter` class inside `BaseItemCombo` is a primary-parameter class that receives `ItemNameService` and `Configuration`:
 
-The feature integrates into the existing `BaseItemCombo` filter system — when `CrossLanguageEquipmentSearch` is enabled, the filter's `WouldBeVisible` check uses `MatchesAnyLanguage` instead of single-language comparison.
+```csharp
+sealed class ItemFilter(ItemNameService itemNameService, Configuration config) : PartwiseFilterBase<CacheItem>
+```
+
+`WouldBeVisible(in CacheItem, int)` has three fallbacks evaluated in order:
+
+1. `base.WouldBeVisible(in item, globalIndex)` — matches display-language name via `ToFilterString()` → `item.Name.Utf16` (inherited partwise matching)
+2. `WouldBeVisible(item.Model.Utf16)` — matches model string like `(12345-1)`
+3. `MatchesCrossLanguage(in item)` — cross-language check (only when enabled)
+
+**`MatchesCrossLanguage(in CacheItem)`** — Private method:
+
+1. Early-out if `config.CrossLanguageEquipmentSearch` is `false` or `Parts.Length is 0`
+2. Early-out for special items (ID 0 or ≥ `uint.MaxValue - 512`)
+3. Calls `itemNameService.GetAllLanguageNames(itemId)` → `string[4]` (EN, JP, DE, FR), cached in `_allLanguageNamesCache`
+4. For each non-empty name, calls inherited `WouldBeVisible(string)` — this reuses the partwise filter logic (`Parts.All(p => text.Contains(p, Comparison))`)
+5. Returns `true` if **any** language name passes all filter tokens
+
+**Key design: per-language partwise matching** — All filter tokens must match within the **same** language name. The filter does NOT mix matches across languages. This is achieved by calling `WouldBeVisible(name)` (the `PartwiseFilterBase<T>.WouldBeVisible(string)` overload) per language, which checks that every token in `Parts` appears in that single string.
+
+**Dependency injection chain:**
+
+```
+EquipmentDrawer(…, ItemNameService itemNameService)
+  → new EquipCombo(…, itemNameService, …)       → BaseItemCombo(…, itemNameService)
+  → new WeaponCombo(…, itemNameService, …)       → BaseItemCombo(…, itemNameService)
+  → new BonusItemCombo(…, itemNameService, …)    → BaseItemCombo(…, itemNameService)
+    → base(new ItemFilter(itemNameService, config), …)
+```
+
+`EquipmentDrawer` receives `ItemNameService` via DI (auto-discovered as `IService` singleton) and passes it to all three combo types. Each combo forwards it to `BaseItemCombo`, which creates the `ItemFilter` with both `ItemNameService` and `Configuration`.
+
+**ItemNameService.GetAllLanguageNames(uint itemId)** — Public method:
+
+- Checks `_allLanguageNamesCache` (separate from single-language `_nameCache`)
+- On miss: loads names from all 4 `ExcelSheet<Item>` language sheets via `row.Name.ExtractText()`
+- Caches and returns `string[4]`, or `null` if no names found
+- `ClearCache()` clears both `_nameCache` and `_allLanguageNamesCache`
+
+**Settings UI** — `DrawEquipmentLanguageSettings()` in `SettingsTab.cs`:
+
+- Checkbox labeled "Cross-Language Equipment Search"
+- Help text: "When enabled, equipment combo searches will match item names in all available languages, not just the selected display language."
+- On toggle: sets `config.CrossLanguageEquipmentSearch` and calls `itemNameService.ClearCache()`
+
+### Data Flow
+
+```
+User enables "Cross-Language Equipment Search" in Settings
+  → config.CrossLanguageEquipmentSearch = true
+  → itemNameService.ClearCache() → _allLanguageNamesCache.Clear()
+
+User types filter text in equipment combo (e.g. "鉄")
+  → PartwiseFilterBase.SetInternal() → Parts = ["鉄"]
+  → For each CacheItem in combo list:
+    → ItemFilter.WouldBeVisible(in item, globalIndex)
+      → 1. base.WouldBeVisible() → ToFilterString() = item.Name.Utf16 (display language)
+           → Parts.All(p => displayName.Contains(p)) → false (English name doesn't contain "鉄")
+      → 2. WouldBeVisible(item.Model.Utf16) → false (model string doesn't match)
+      → 3. MatchesCrossLanguage(in item)
+           → config.CrossLanguageEquipmentSearch? → true
+           → itemId valid? (not 0, not special) → true
+           → itemNameService.GetAllLanguageNames(itemId)
+             → _allLanguageNamesCache miss
+             → Load from 4 ExcelSheet<Item> sheets → cache string[4]
+           → foreach name in [EN, JP, DE, FR]:
+               → WouldBeVisible("鉄の鎖帷子") → Parts.All(p => name.Contains(p)) → true!
+           → return true → item is visible in filtered list
+```
 
 ### Configuration
 
