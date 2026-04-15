@@ -206,7 +206,7 @@ public sealed class ItemNameService : IService
     /// <summary>
     /// Gets the item names in all supported languages.
     /// </summary>
-    private string[]? GetAllLanguageNames(uint itemId)
+    public string[]? GetAllLanguageNames(uint itemId)
     {
         if (_allLanguageNamesCache.TryGetValue(itemId, out var cached))
             return cached;

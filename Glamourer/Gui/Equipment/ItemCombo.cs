@@ -9,8 +9,8 @@ using Penumbra.GameData.Structs;
 
 namespace Glamourer.Gui.Equipment;
 
-public sealed class EquipCombo(FavoriteManager favorites, ItemManager items, Configuration config, IDataManager gameData, EquipSlot slot)
-    : BaseItemCombo(favorites, items, config)
+public sealed class EquipCombo(FavoriteManager favorites, ItemManager items, Configuration config, ItemNameService itemNameService, IDataManager gameData, EquipSlot slot)
+    : BaseItemCombo(favorites, items, config, itemNameService)
 {
     public override StringU8  Label { get; } = GetLabel(gameData, slot);
     public readonly EquipSlot Slot = slot;

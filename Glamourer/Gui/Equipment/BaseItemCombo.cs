@@ -19,8 +19,8 @@ public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, 
     protected          SecondaryId     CustomWeaponId;
     protected          Variant         CustomVariant;
 
-    protected BaseItemCombo(FavoriteManager favorites, ItemManager items, Configuration config)
-        : base(new ItemFilter(), ConfigData.Default with
+    protected BaseItemCombo(FavoriteManager favorites, ItemManager items, Configuration config, ItemNameService itemNameService)
+        : base(new ItemFilter(itemNameService, config), ConfigData.Default with
         {
             ComputeWidth = true,
             ClearFilterOnSelection = !config.KeepItemComboFilter,
@@ -86,13 +86,35 @@ public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, 
         public readonly StringPair Model = new($"({item.PrimaryId.Id}-{item.Variant.Id})");
     }
 
-    protected sealed class ItemFilter : PartwiseFilterBase<CacheItem>
+    protected sealed class ItemFilter(ItemNameService itemNameService, Configuration config) : PartwiseFilterBase<CacheItem>
     {
         public override bool WouldBeVisible(in CacheItem item, int globalIndex)
-            => base.WouldBeVisible(in item, globalIndex) || WouldBeVisible(item.Model.Utf16);
+            => base.WouldBeVisible(in item, globalIndex) || WouldBeVisible(item.Model.Utf16) || MatchesCrossLanguage(in item);
 
         protected override string ToFilterString(in CacheItem item, int globalIndex)
             => item.Name.Utf16;
+
+        private bool MatchesCrossLanguage(in CacheItem item)
+        {
+            if (!config.CrossLanguageEquipmentSearch || Parts.Length is 0)
+                return false;
+
+            var itemId = item.Item.ItemId.Id;
+            if (itemId is 0 || itemId >= uint.MaxValue - 512)
+                return false;
+
+            var allNames = itemNameService.GetAllLanguageNames(itemId);
+            if (allNames == null)
+                return false;
+
+            foreach (var name in allNames)
+            {
+                if (!string.IsNullOrEmpty(name) && WouldBeVisible(name))
+                    return true;
+            }
+
+            return false;
+        }
     }
 
     protected override FilterComboBaseCache<CacheItem> CreateCache()
