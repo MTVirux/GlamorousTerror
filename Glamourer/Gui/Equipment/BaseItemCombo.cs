@@ -19,12 +19,13 @@ public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, 
     protected          SecondaryId     CustomWeaponId;
     protected          Variant         CustomVariant;
 
-    protected BaseItemCombo(FavoriteManager favorites, ItemManager items, Configuration config, ItemNameService itemNameService)
-        : base(new ItemFilter(itemNameService, config), ConfigData.Default with
+    protected BaseItemCombo(FavoriteManager favorites, ItemManager items, Configuration config, ItemNameService itemNameService, ItemUnlockManager itemUnlockManager)
+        : base(new ItemFilter(itemNameService, config, itemUnlockManager), ConfigData.Default with
         {
             ComputeWidth = true,
             ClearFilterOnSelection = !config.KeepItemComboFilter,
             ClearFilterOnCacheDisposal = false,
+            DirtyCacheOnClose = true,
         })
     {
         Favorites = favorites;
@@ -86,10 +87,15 @@ public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, 
         public readonly StringPair Model = new($"({item.PrimaryId.Id}-{item.Variant.Id})");
     }
 
-    protected sealed class ItemFilter(ItemNameService itemNameService, Configuration config) : PartwiseFilterBase<CacheItem>
+    protected sealed class ItemFilter(ItemNameService itemNameService, Configuration config, ItemUnlockManager itemUnlockManager) : PartwiseFilterBase<CacheItem>
     {
         public override bool WouldBeVisible(in CacheItem item, int globalIndex)
-            => base.WouldBeVisible(in item, globalIndex) || WouldBeVisible(item.Model.Utf16) || MatchesCrossLanguage(in item);
+        {
+            if (config.OwnedOnlyComboFilter && !itemUnlockManager.IsOwnedFromSources(item.Item.ItemId, config.OwnedComboFilterSources))
+                return false;
+
+            return base.WouldBeVisible(in item, globalIndex) || WouldBeVisible(item.Model.Utf16) || MatchesCrossLanguage(in item);
+        }
 
         protected override string ToFilterString(in CacheItem item, int globalIndex)
             => item.Name.Utf16;

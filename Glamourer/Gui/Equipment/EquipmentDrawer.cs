@@ -44,7 +44,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
 
     public EquipmentDrawer(FavoriteManager favorites, IDataManager gameData, ItemManager items, TextureService textures,
         Configuration config, GPoseService gPose, AdvancedDyePopup advancedDyes, ItemCopyService itemCopy, DesignApplier designApplier,
-        DesignConverter converter, PreviewService previewService, ItemNameService itemNameService)
+        DesignConverter converter, PreviewService previewService, ItemNameService itemNameService, ItemUnlockManager itemUnlockManager)
     {
         _items          = items;
         _textures       = textures;
@@ -57,16 +57,16 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         _previewService = previewService;
         _stainData      = items.Stains;
         _stainCombo     = new GlamourerColorCombo(_stainData, favorites, config);
-        _equipCombo     = EquipSlotExtensions.EqdpSlots.Select(e => new EquipCombo(favorites, items, config, itemNameService, gameData, e)).ToArray();
-        _bonusItemCombo = BonusExtensions.AllFlags.Select(f => new BonusItemCombo(favorites, items, config, itemNameService, gameData, f)).ToArray();
+        _equipCombo     = EquipSlotExtensions.EqdpSlots.Select(e => new EquipCombo(favorites, items, config, itemNameService, itemUnlockManager, gameData, e)).ToArray();
+        _bonusItemCombo = BonusExtensions.AllFlags.Select(f => new BonusItemCombo(favorites, items, config, itemNameService, itemUnlockManager, gameData, f)).ToArray();
         _weaponCombo    = new Dictionary<FullEquipType, WeaponCombo>(FullEquipTypeExtensions.WeaponTypes.Count * 2);
         foreach (var type in FullEquipType.Values)
         {
             if (type.ToSlot() is EquipSlot.MainHand or EquipSlot.OffHand)
-                _weaponCombo.TryAdd(type, new WeaponCombo(favorites, items, config, itemNameService, type));
+                _weaponCombo.TryAdd(type, new WeaponCombo(favorites, items, config, itemNameService, itemUnlockManager, type));
         }
 
-        _weaponCombo.Add(FullEquipType.Unknown, new WeaponCombo(favorites, items, config, itemNameService, FullEquipType.Unknown));
+        _weaponCombo.Add(FullEquipType.Unknown, new WeaponCombo(favorites, items, config, itemNameService, itemUnlockManager, FullEquipType.Unknown));
     }
 
     private Vector2 _iconSize;
@@ -721,6 +721,38 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
             config.KeepItemComboFilter ^= true;
         Im.Tooltip.OnHover(
             "Whether the filter in the item and dye combos should persist after a selection or clear after an item or dye was selected.\n\nThis can also be used to restrict the mouse-wheel scrolling to matching items."u8);
+    }
+
+    public static void DrawOwnedOnlyFilter(Configuration config)
+    {
+        if (Im.Checkbox("Show Only Owned Items in Combos"u8, config.OwnedOnlyComboFilter))
+        {
+            config.OwnedOnlyComboFilter ^= true;
+            config.Save();
+        }
+        Im.Tooltip.OnHover(
+            "When enabled, equipment, weapon, and bonus item combo dropdowns will only show items you own.\nUse the source toggles below to control which sources count."u8);
+
+        if (config.OwnedOnlyComboFilter)
+        {
+            using var indent = Im.Indent();
+            DrawSourceToggle(config, "Inventory"u8,         ItemUnlockManager.ItemSource.Inventory);
+            DrawSourceToggle(config, "Glamour Dresser"u8,   ItemUnlockManager.ItemSource.GlamourDresser);
+            DrawSourceToggle(config, "Armoire"u8,           ItemUnlockManager.ItemSource.Armoire);
+            DrawSourceToggle(config, "Saddlebags"u8,        ItemUnlockManager.ItemSource.Saddlebags);
+            DrawSourceToggle(config, "Retainers"u8,         ItemUnlockManager.ItemSource.Retainers);
+            DrawSourceToggle(config, "Quest / Achievement"u8, ItemUnlockManager.ItemSource.QuestAchievement);
+        }
+    }
+
+    private static void DrawSourceToggle(Configuration config, ReadOnlySpan<byte> label, ItemUnlockManager.ItemSource flag)
+    {
+        var enabled = (config.OwnedComboFilterSources & flag) != 0;
+        if (Im.Checkbox(label, enabled))
+        {
+            config.OwnedComboFilterSources ^= flag;
+            config.Save();
+        }
     }
 
     public void Dispose()

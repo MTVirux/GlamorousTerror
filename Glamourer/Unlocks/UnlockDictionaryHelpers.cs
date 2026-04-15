@@ -6,7 +6,7 @@ namespace Glamourer.Unlocks;
 public static class UnlockDictionaryHelpers
 {
     public const int Magic   = 0x00C0FFEE;
-    public const int Version = 2;
+    public const int Version = 3;
 
     public static void Save(StreamWriter writer, IReadOnlyDictionary<uint, long> data)
     {
@@ -19,12 +19,32 @@ public static class UnlockDictionaryHelpers
         {
             b.Write(id);
             b.Write(timestamp);
+            b.Write((byte)0); // No source data in the non-source overload.
+        }
+
+        b.Flush();
+    }
+
+    public static void Save(StreamWriter writer, IReadOnlyDictionary<uint, long> data, IReadOnlyDictionary<uint, ItemUnlockManager.ItemSource> sources)
+    {
+        var b = new BinaryWriter(writer.BaseStream);
+        b.Write(Magic);
+        b.Write(Version);
+        b.Write(data.Count);
+        foreach (var (id, timestamp) in data)
+        {
+            b.Write(id);
+            b.Write(timestamp);
+            b.Write((byte)(sources.TryGetValue(id, out var src) ? src : ItemUnlockManager.ItemSource.All));
         }
 
         b.Flush();
     }
 
     public static int Load(string filePath, Dictionary<uint, long> data, Func<uint, bool> validate, string type)
+        => Load(filePath, data, null, validate, type);
+
+    public static int Load(string filePath, Dictionary<uint, long> data, Dictionary<uint, ItemUnlockManager.ItemSource>? sources, Func<uint, bool> validate, string type)
     {
         data.Clear();
         if (!File.Exists(filePath))
@@ -55,13 +75,16 @@ public static class UnlockDictionaryHelpers
             switch (version)
             {
                 case 1:
+                case 2:
                 case Version:
                     var count = b.ReadInt32();
                     data.EnsureCapacity(count);
+                    sources?.EnsureCapacity(count);
                     for (var i = 0; i < count; ++i)
                     {
                         var id        = b.ReadUInt32();
                         var timestamp = b.ReadInt64();
+                        var source    = version >= 3 ? (ItemUnlockManager.ItemSource)b.ReadByte() : ItemUnlockManager.ItemSource.All;
                         if (revertEndian)
                         {
                             id        = RevertEndianness(id);
@@ -73,7 +96,13 @@ public static class UnlockDictionaryHelpers
                          || date < DateTimeOffset.UnixEpoch
                          || date > now
                          || !data.TryAdd(id, timestamp))
+                        {
                             ++skips;
+                        }
+                        else
+                        {
+                            sources?.TryAdd(id, source);
+                        }
                     }
 
                     if (skips > 0)

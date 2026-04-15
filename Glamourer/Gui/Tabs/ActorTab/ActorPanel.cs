@@ -168,6 +168,7 @@ public sealed class ActorPanel : IPanel
         var usedAllStain = _equipmentDrawer.DrawAllStain(out var newAllStain, _selection.State!.IsLocked);
         Im.Line.Same();
         EquipmentDrawer.DrawKeepItemFilter(_config);
+        EquipmentDrawer.DrawOwnedOnlyFilter(_config);
         foreach (var slot in EquipSlotExtensions.EqdpSlots)
         {
             var data = EquipDrawData.FromState(_stateManager, _selection.State!, slot);

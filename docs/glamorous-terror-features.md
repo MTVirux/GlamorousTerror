@@ -12,6 +12,7 @@ GlamorousTerror is a custom fork of [Glamourer](https://github.com/Ottermandias/
 4. [Fun Modes](#4-fun-modes)
 5. [Equipment Name Language](#5-equipment-name-language)
 6. [Cross-Language Equipment Search](#6-cross-language-equipment-search)
+7. [Owned-Only Combo Filter](#7-owned-only-combo-filter)
 
 ---
 
@@ -559,17 +560,19 @@ Search for equipment items in **any language** regardless of the current display
 | `Glamourer/Gui/Tabs/SettingsTab/SettingsTab.cs` | — | Checkbox UI + `ClearCache()` on toggle |
 | `Glamourer/Config/Configuration.cs` | — | `CrossLanguageEquipmentSearch` property |
 
-**ItemFilter integration** — The sealed `ItemFilter` class inside `BaseItemCombo` is a primary-parameter class that receives `ItemNameService` and `Configuration`:
+**ItemFilter integration** — The sealed `ItemFilter` class inside `BaseItemCombo` is a primary-parameter class that receives `ItemNameService`, `Configuration`, and `ItemUnlockManager`:
 
 ```csharp
-sealed class ItemFilter(ItemNameService itemNameService, Configuration config) : PartwiseFilterBase<CacheItem>
+sealed class ItemFilter(ItemNameService itemNameService, Configuration config, ItemUnlockManager itemUnlockManager)
+    : PartwiseFilterBase<CacheItem>
 ```
 
-`WouldBeVisible(in CacheItem, int)` has three fallbacks evaluated in order:
+`WouldBeVisible(in CacheItem, int)` has four checks evaluated in order:
 
-1. `base.WouldBeVisible(in item, globalIndex)` — matches display-language name via `ToFilterString()` → `item.Name.Utf16` (inherited partwise matching)
-2. `WouldBeVisible(item.Model.Utf16)` — matches model string like `(12345-1)`
-3. `MatchesCrossLanguage(in item)` — cross-language check (only when enabled)
+1. **Owned check**: If `config.OwnedOnlyComboFilter` is true and item is not owned from selected sources → reject immediately (see [Owned-Only Combo Filter](#7-owned-only-combo-filter))
+2. `base.WouldBeVisible(in item, globalIndex)` — matches display-language name via `ToFilterString()` → `item.Name.Utf16` (inherited partwise matching)
+3. `WouldBeVisible(item.Model.Utf16)` — matches model string like `(12345-1)`
+4. `MatchesCrossLanguage(in item)` — cross-language check (only when enabled)
 
 **`MatchesCrossLanguage(in CacheItem)`** — Private method:
 
@@ -584,14 +587,14 @@ sealed class ItemFilter(ItemNameService itemNameService, Configuration config) :
 **Dependency injection chain:**
 
 ```
-EquipmentDrawer(…, ItemNameService itemNameService)
-  → new EquipCombo(…, itemNameService, …)       → BaseItemCombo(…, itemNameService)
-  → new WeaponCombo(…, itemNameService, …)       → BaseItemCombo(…, itemNameService)
-  → new BonusItemCombo(…, itemNameService, …)    → BaseItemCombo(…, itemNameService)
-    → base(new ItemFilter(itemNameService, config), …)
+EquipmentDrawer(…, ItemNameService itemNameService, ItemUnlockManager itemUnlockManager)
+  → new EquipCombo(…, itemNameService, itemUnlockManager, …)       → BaseItemCombo(…, itemNameService, itemUnlockManager)
+  → new WeaponCombo(…, itemNameService, itemUnlockManager, …)      → BaseItemCombo(…, itemNameService, itemUnlockManager)
+  → new BonusItemCombo(…, itemNameService, itemUnlockManager, …)   → BaseItemCombo(…, itemNameService, itemUnlockManager)
+    → base(new ItemFilter(itemNameService, config, itemUnlockManager), …)
 ```
 
-`EquipmentDrawer` receives `ItemNameService` via DI (auto-discovered as `IService` singleton) and passes it to all three combo types. Each combo forwards it to `BaseItemCombo`, which creates the `ItemFilter` with both `ItemNameService` and `Configuration`.
+`EquipmentDrawer` receives `ItemNameService` and `ItemUnlockManager` via DI (auto-discovered as `IService` singletons) and passes both to all three combo types. Each combo forwards them to `BaseItemCombo`, which creates the `ItemFilter` with `ItemNameService`, `Configuration`, and `ItemUnlockManager`.
 
 **ItemNameService.GetAllLanguageNames(uint itemId)** — Public method:
 
@@ -639,6 +642,216 @@ User types filter text in equipment combo (e.g. "鉄")
 
 ---
 
+## 7. Owned-Only Combo Filter
+
+Filter equipment, weapon, and bonus item combo dropdowns to show only items the player currently owns. Ownership is tracked **per-character** with automatic **pruning** when items leave inventories.
+
+### User-Facing Functionality
+
+- **Master toggle**: "Show Only Owned Items in Combos" checkbox in the equipment section of the Actor panel, Design panel, and Settings tab (next to "Keep Item and Dye Filters After Selection")
+- **Per-source toggles**: When the master toggle is enabled, 6 indented checkboxes appear to control which sources count as "owned":
+  - Inventory (player bags, armory chest, equipped items, mail)
+  - Glamour Dresser (prism box + glamour plates)
+  - Armoire (cabinet)
+  - Saddlebags (chocobo saddlebags + premium)
+  - Retainers (all retainer pages, equipped, market)
+  - Quest / Achievement (items unlockable via quests, achievements, or state requirements)
+- **Per-character tracking**: Each character has an independent save file. Switching characters loads that character's owned item data.
+- **Automatic pruning**: Items removed from transient inventories (Inventory, Saddlebags, Retainers, Glamour Dresser) are detected and have their source flags removed. Items with no remaining sources are removed entirely.
+- **Pseudo items always visible**: "Nothing", "Smallclothes", and other special items (ID 0 or ≥ `uint.MaxValue - 512`) are always shown regardless of filter state.
+- **Cache refresh**: Combo filter caches are dirtied when the popup closes (`DirtyCacheOnClose = true`), so ownership changes are reflected the next time a combo is opened.
+
+### Implementation — Per-Character Storage
+
+| File | Role |
+|------|------|
+| `Glamourer/Services/FilenameService.cs` | `UnlockFileItemsForCharacter(ulong contentId)` → `{ConfigDir}/unlocks_items_{contentId:X16}.dat` |
+| `Glamourer/Unlocks/ItemUnlockManager.cs` | Per-character lifecycle: login/logout handlers, `_currentContentId` field |
+
+**Character lifecycle** in `ItemUnlockManager`:
+
+- **Constructor**: Subscribes to `_clientState.Login += OnLogin` and `_clientState.Logout += OnLogout`. If `_playerState.ContentId != 0` (plugin reload while logged in), immediately calls `OnLogin()`.
+- **`OnLogin()`**: Captures `_playerState.ContentId`, clears all dictionaries and scan state, calls `Load()` then `Scan()`.
+- **`OnLogout(int, int)`**: Calls `Save()`, clears all dictionaries and scan state, resets `_currentContentId = 0`.
+- **`OnFramework` guard**: Early-returns if `_currentContentId == 0` (no character logged in).
+- **`ToFilePath()`**: Returns `fileNames.UnlockFileItemsForCharacter(_currentContentId)` when a character is logged in, falls back to `fileNames.UnlockFileItems` otherwise.
+- **`ResetScanState()`**: Resets all scan-related fields: `_currentInventory`, `_currentInventoryIndex`, armoire/achievement/glamour/plate state booleans, `_seenThisCycle`, `_fullyScannedSources`.
+
+### Implementation — Source Tracking
+
+| File | Role |
+|------|------|
+| `Glamourer/Unlocks/ItemUnlockManager.cs` | `ItemSource` flags enum, `_sources` dictionary, source-aware `AddItem()` |
+| `Glamourer/Unlocks/UnlockDictionaryHelpers.cs` | v3 binary format persisting source byte per entry |
+
+**`ItemSource` flags enum** (`[Flags] enum ItemSource : byte`):
+
+| Flag | Value | Source |
+|------|-------|--------|
+| `Inventory` | `0x01` | Player bags (1-4), equipped, mail, armory chest |
+| `GlamourDresser` | `0x02` | Prism box + glamour plates |
+| `Armoire` | `0x04` | Cabinet items |
+| `Saddlebags` | `0x08` | Chocobo saddlebag + premium saddlebag |
+| `Retainers` | `0x10` | All retainer pages, equipped, market |
+| `QuestAchievement` | `0x20` | Quest/achievement/state-gated shop items |
+| `All` | `0x3F` | Combination of all flags |
+
+**`_sources` dictionary** (`Dictionary<uint, ItemSource>`) — Parallel to `_unlocked`, stores the OR-combination of all sources an item has been detected from. Updated in `AddItem()`: sources always OR-in, even for already-unlocked items.
+
+**`GetInventorySource(InventoryType)`** — Maps 29 `InventoryType` values to `ItemSource`:
+- `Inventory1–4`, `EquippedItems`, `Mail`, `Armory*` → `Inventory`
+- `SaddleBag1/2`, `PremiumSaddleBag1/2` → `Saddlebags`
+- `RetainerPage1–7`, `RetainerEquippedItems`, `RetainerMarket` → `Retainers`
+
+**Binary format v3** (`UnlockDictionaryHelpers`):
+- Header: `[Magic:0x00C0FFEE (uint32)] [Version:3 (int32)] [Count (int32)]`
+- Per entry: `[ItemId (uint32)] [Timestamp (int64)] [Source (byte)]`
+- Backward compatible: v1/v2 files load with `ItemSource.All` default. v3 reads the source byte.
+- The non-source `Save()` overload (used by `CustomizeUnlockManager`) writes `0x00` as the source byte.
+
+### Implementation — Pruning
+
+Two pruning mechanisms ensure stale items are removed:
+
+**Inventory scan cycle pruning** — Handles Inventory, Saddlebags, Retainers:
+
+- **Tracking fields**: `Dictionary<uint, ItemSource> _seenThisCycle` and `ItemSource _fullyScannedSources`
+- **Per-frame scanning**: After each `AddItem()` call in the inventory scan block, `MarkSeen(itemId, source)` records the item (and its variants) in `_seenThisCycle`
+- **Inventory advancement**: When advancing past a fully-iterated inventory type (container was loaded and all slots scanned), its mapped `ItemSource` is OR'd into `_fullyScannedSources`. Containers that are null or not loaded are silently skipped (not marked).
+- **Cycle completion**: When `_currentInventory` wraps from the last type back to 0, `PruneInventorySources()` runs:
+  1. Computes `pruneMask = PrunableSources & _fullyScannedSources` (only prunes sources that were fully scanned)
+  2. For each item in `_sources` with a prunable flag that was fully scanned but NOT seen in `_seenThisCycle` → removes that flag
+  3. Items with no remaining source flags are removed from both `_sources` and `_unlocked`
+  4. Clears `_seenThisCycle` and `_fullyScannedSources`
+- **Prunable sources constant**: `Inventory | Saddlebags | Retainers` — Armoire and QuestAchievement are permanent and never pruned by this mechanism
+- **Retainer safety**: Retainer inventories are only available at the retainer bell. If not loaded, `_fullyScannedSources` won't include `Retainers`, preventing false pruning.
+
+**Glamour Dresser pruning** — Handles `GlamourDresser` flag:
+
+- Triggered when `PrismBoxLoaded` state changes to `true`
+- Collects all current dresser item IDs into a `HashSet<uint>` (resolved through `ItemData.TryGetValue` for model normalization)
+- Calls `PruneSource(ItemSource.GlamourDresser, currentDresserItems)`: for each item with `GlamourDresser` flag NOT in the current set → removes the flag. Items with no remaining flags are removed entirely.
+- After pruning, adds/updates all current dresser items with `AddItem(item, time, GlamourDresser)`
+- **Glamour plates are additive only** — Plates are a subset of the dresser. They add `GlamourDresser` flags but don't trigger pruning. The prism box is the authoritative source.
+
+**Non-prunable sources** — Armoire (`Cabinet`) and Quest/Achievement items are detected via game API (`IsUnlocked`) and represent permanent unlocks. These flags are never removed by pruning. They are set in `Scan()` (which runs on login and when armoire/achievement state loads) and in `IsUnlocked()` (lazy detection path).
+
+### Implementation — Combo Filter Integration
+
+| File | Role |
+|------|------|
+| `Glamourer/Gui/Equipment/BaseItemCombo.cs` | `ItemFilter` receives `ItemUnlockManager`, ownership pre-gate in `WouldBeVisible()` |
+| `Glamourer/Gui/Equipment/ItemCombo.cs` | `EquipCombo` constructor accepts and forwards `ItemUnlockManager` |
+| `Glamourer/Gui/Equipment/WeaponCombo.cs` | `WeaponCombo` constructor accepts and forwards `ItemUnlockManager` |
+| `Glamourer/Gui/Equipment/BonusItemCombo.cs` | `BonusItemCombo` constructor accepts and forwards `ItemUnlockManager` |
+| `Glamourer/Gui/Equipment/EquipmentDrawer.cs` | Injects `ItemUnlockManager` into all combo constructors, `DrawOwnedOnlyFilter()` UI |
+
+**ItemFilter integration** — The `ItemFilter` class receives `ItemUnlockManager` as a third primary constructor parameter:
+
+```csharp
+sealed class ItemFilter(ItemNameService itemNameService, Configuration config, ItemUnlockManager itemUnlockManager)
+    : PartwiseFilterBase<CacheItem>
+```
+
+`WouldBeVisible(in CacheItem, int)` now has a **pre-gate** before the three existing checks:
+
+1. **Owned check** (new): If `config.OwnedOnlyComboFilter` is true and `itemUnlockManager.IsOwnedFromSources(item.Item.ItemId, config.OwnedComboFilterSources)` returns false → **reject immediately** (return false)
+2. `base.WouldBeVisible()` — display-language name match
+3. `WouldBeVisible(item.Model.Utf16)` — model string match
+4. `MatchesCrossLanguage(in item)` — cross-language match
+
+**`IsOwnedFromSources(CustomItemId, ItemSource filter)`** — Public query method on `ItemUnlockManager`:
+- Pseudo items (ID 0 or ≥ `uint.MaxValue - 512`) always return `true`
+- Otherwise checks `(_sources[id] & filter) != 0`
+
+**Cache invalidation** — `BaseItemCombo` sets `DirtyCacheOnClose = true` in `ConfigData`, ensuring the filter re-evaluates ownership each time the combo popup opens. This avoids needing explicit event-driven cache invalidation.
+
+**Dependency injection chain:**
+
+```
+EquipmentDrawer(…, ItemNameService, ItemUnlockManager)
+  → new EquipCombo(…, itemNameService, itemUnlockManager, …)   → BaseItemCombo(…, itemNameService, itemUnlockManager)
+  → new WeaponCombo(…, itemNameService, itemUnlockManager, …)  → BaseItemCombo(…, itemNameService, itemUnlockManager)
+  → new BonusItemCombo(…, itemNameService, itemUnlockManager, …) → BaseItemCombo(…, itemNameService, itemUnlockManager)
+    → base(new ItemFilter(itemNameService, config, itemUnlockManager), …)
+```
+
+### Implementation — Settings UI
+
+`EquipmentDrawer.DrawOwnedOnlyFilter(Configuration config)` — Static method drawn alongside `DrawKeepItemFilter()`:
+
+- Master checkbox: "Show Only Owned Items in Combos" — toggles `config.OwnedOnlyComboFilter`, saves on change
+- Tooltip explaining the feature
+- When master is enabled, 6 indented source checkboxes via `DrawSourceToggle()`:
+  - Each toggles a flag in `config.OwnedComboFilterSources` via XOR, saves on change
+- Called from 3 locations: `ActorPanel`, `DesignPanel`, and `SettingsTab` (same places as `DrawKeepItemFilter`)
+
+### Data Flow
+
+```
+Character logs in
+  → IClientState.Login event → ItemUnlockManager.OnLogin()
+    → _currentContentId = _playerState.ContentId
+    → Clear _unlocked, _sources, scan state
+    → Load(unlocks_items_{contentId:X16}.dat) → populate _unlocked + _sources
+    → Scan() → detect Armoire + QuestAchievement items
+
+Per frame (OnFramework):
+  → Early-return if _currentContentId == 0
+  → Check armoire/achievement state changes → Scan() if needed
+  → Check glamour dresser state → prune removed items, add current items
+  → Check glamour plates state → add plate items (additive only)
+  → Scan one inventory slot:
+    → AddItem(itemId, time, source) → OR source into _sources
+    → MarkSeen(itemId, source) → record in _seenThisCycle
+  → When inventory type fully scanned → mark in _fullyScannedSources
+  → When cycle wraps to 0 → PruneInventorySources()
+    → Remove stale source flags from items not seen
+    → Remove items with no remaining flags
+  → If changes → Save() (10-second delay)
+
+User opens equipment combo:
+  → FilterComboBase cache was dirtied on last popup close
+  → UpdateFilter() runs → calls WouldBeVisible() for each item
+    → config.OwnedOnlyComboFilter? → check IsOwnedFromSources()
+      → (_sources[id] & config.OwnedComboFilterSources) != 0 → show/hide item
+    → Then text/model/cross-language matching as normal
+
+User toggles source checkbox:
+  → config.OwnedComboFilterSources ^= flag → config.Save()
+  → Next combo open → filter re-evaluates with new source mask
+
+Character logs out:
+  → IClientState.Logout event → ItemUnlockManager.OnLogout()
+    → Save() → persist to per-character file
+    → Clear all state, _currentContentId = 0
+```
+
+### Bug Fix: Glamour Dresser Save Trigger
+
+The original `OnFramework` had a bug where `changes = false;` was written before the inventory scanning block, discarding any `changes = true` set by the glamour dresser/plates scanning above. This silently prevented `Save()` from being called when new items were detected in the glamour dresser. Fixed by removing the erroneous reset — `changes` now accumulates across both dresser and inventory scanning sections.
+
+### Configuration
+
+| Property | Type | Default | Purpose |
+|----------|------|---------|---------|
+| `OwnedOnlyComboFilter` | `bool` | `false` | Master toggle for owned-only filtering |
+| `OwnedComboFilterSources` | `ItemUnlockManager.ItemSource` | `All` (`0x3F`) | Bitmask of sources that count as "owned" |
+
+### Known Pitfalls (for future upstream merges)
+
+1. **Per-character file path**: `ToFilePath()` now returns per-character paths. The `ISavable` system calls this on save — ensure upstream changes to `SaveService` or `FilenameService` don't break the dynamic path resolution.
+
+2. **Login/Logout lifecycle**: `ItemUnlockManager` no longer loads in its constructor. If other services depend on `ItemUnlockManager` being populated at construction time, they may see empty data until login fires. The constructor handles the "already logged in" case for plugin reloads.
+
+3. **DirtyCacheOnClose**: The combo cache is now dirtied every time the popup closes. This is necessary for ownership changes to be reflected but has a minor performance cost (one filter pass per popup open). Upstream changes to `FilterComboBase.ConfigData` field names should be monitored.
+
+4. **PruneSource modifies _sources during iteration**: Both `PruneInventorySources()` and `PruneSource()` iterate `_sources` and collect removals into a separate `List<uint>`, then remove after iteration. This avoids collection-modified-during-enumeration exceptions.
+
+5. **Retainer scan safety**: Retainer containers are only loaded when at a retainer bell. The `_fullyScannedSources` mechanism prevents false pruning — retainer items won't be pruned unless all retainer inventory types were actually loaded and fully iterated that cycle.
+
+---
+
 ## Configuration Summary
 
 All GlamorousTerror-specific properties in `Glamourer/Config/Configuration.cs`:
@@ -651,6 +864,8 @@ All GlamorousTerror-specific properties in `Glamourer/Config/Configuration.cs`:
 | `LastFestivalPopup` | `DateOnly` | `MinValue` | Fun Modes (festivals) |
 | `EquipmentNameLanguage` | `EquipmentNameLanguage` | `GameDefault` | Equipment Language |
 | `CrossLanguageEquipmentSearch` | `bool` | `false` | Cross-Language Search |
+| `OwnedOnlyComboFilter` | `bool` | `false` | Owned-Only Combo Filter |
+| `OwnedComboFilterSources` | `ItemUnlockManager.ItemSource` | `All` | Owned-Only Combo Filter |
 
 ---
 
@@ -689,6 +904,13 @@ All GlamorousTerror-specific properties in `Glamourer/Config/Configuration.cs`:
 │  ┌──────────────────────────────────────────────┐   │
 │  │            ItemNameService                    │   │
 │  │  (Language override + cross-language search)  │   │
+│  └──────────────────────────────────────────────┘   │
+│                                                      │
+│  ┌──────────────────────────────────────────────┐   │
+│  │          ItemUnlockManager                    │   │
+│  │  (Per-character owned item tracking,          │   │
+│  │   source flags, inventory pruning,            │   │
+│  │   combo filter integration)                   │   │
 │  └──────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────┘
 ```

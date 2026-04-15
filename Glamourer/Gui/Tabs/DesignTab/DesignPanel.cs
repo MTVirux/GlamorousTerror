@@ -84,6 +84,7 @@ public class DesignPanel : IPanel
         var usedAllStain = _equipmentDrawer.DrawAllStain(out var newAllStain, Selection.WriteProtected());
         Im.Line.Same();
         EquipmentDrawer.DrawKeepItemFilter(_config);
+        EquipmentDrawer.DrawOwnedOnlyFilter(_config);
         foreach (var slot in EquipSlotExtensions.EqdpSlots)
         {
             var data = EquipDrawData.FromDesign(_manager, Selection, slot);
