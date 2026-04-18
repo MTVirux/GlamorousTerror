@@ -50,6 +50,7 @@ public sealed partial class Configuration : IPluginConfiguration, ISavable, ISer
     public bool            EnableAutoDesigns                { get; set; } = true;
     public bool            HideApplyCheckmarks              { get; set; } = false;
     public bool            SmallEquip                       { get; set; } = false;
+    public bool            UseIconEquipmentDrawer           { get; set; } = false;
     public bool            UnlockedItemMode                 { get; set; } = false;
     public FestivalSetting FestivalMode                     { get; set; } = FestivalSetting.Undefined;
     public DateOnly        LastFestivalPopup                { get; set; } = DateOnly.MinValue;

@@ -138,6 +138,14 @@ public sealed class SettingsTab(
 
         EquipmentDrawer.DrawOwnedOnlyFilter(config);
 
+        Im.Dummy(Vector2.Zero);
+        Im.Separator();
+        Im.Dummy(Vector2.Zero);
+
+        Checkbox("Icon Equipment Drawer"u8,
+            "Display equipment slots as a compact icon grid instead of name-based combo dropdowns.\nClick an icon to open the item selector. Right-click to clear or revert."u8,
+            config.UseIconEquipmentDrawer, v => config.UseIconEquipmentDrawer = v);
+
         Im.Line.New();
     }
 
