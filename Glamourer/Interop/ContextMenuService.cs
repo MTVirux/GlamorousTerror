@@ -17,27 +17,32 @@ public sealed class ContextMenuService : IDisposable, IRequiredService
 {
     public const int ChatLogContextItemId = 0x958;
 
-    private readonly ItemManager         _items;
-    private readonly IContextMenu        _contextMenu;
-    private readonly StateManager        _state;
-    private readonly ActorObjectManager  _objects;
-    private readonly CharacterPopupMenu  _popupMenu;
-    private          EquipItem           _lastItem;
-    private readonly StainId[]           _lastStains = new StainId[StainId.NumStains];
-    private          Actor               _lastCharacterActor;
-    private          string              _lastCharacterName = string.Empty;
+    private readonly ItemManager              _items;
+    private readonly IContextMenu             _contextMenu;
+    private readonly StateManager             _state;
+    private readonly ActorObjectManager       _objects;
+    private readonly CharacterPopupMenu        _popupMenu;
+    private readonly ImmersiveDresserManager   _immersiveDresser;
+    private readonly Configuration             _config;
+    private          EquipItem                _lastItem;
+    private readonly StainId[]                _lastStains = new StainId[StainId.NumStains];
+    private          Actor                    _lastCharacterActor;
+    private          string                   _lastCharacterName = string.Empty;
 
     private readonly MenuItem _inventoryItem;
     private readonly MenuItem _characterItem;
+    private readonly MenuItem _immersiveDresserItem;
 
     public ContextMenuService(ItemManager items, StateManager state, ActorObjectManager objects, Configuration config,
-        IContextMenu context, CharacterPopupMenu popupMenu)
+        IContextMenu context, CharacterPopupMenu popupMenu, ImmersiveDresserManager immersiveDresser)
     {
-        _contextMenu = context;
-        _items       = items;
-        _state       = state;
-        _objects     = objects;
-        _popupMenu   = popupMenu;
+        _contextMenu      = context;
+        _items            = items;
+        _state            = state;
+        _objects          = objects;
+        _popupMenu        = popupMenu;
+        _immersiveDresser = immersiveDresser;
+        _config           = config;
         if (config.EnableGameContextMenu)
             Enable();
 
@@ -58,6 +63,16 @@ public sealed class ContextMenuService : IDisposable, IRequiredService
             PrefixChar  = 'G',
             Name        = "Glamorous Terror",
             OnClicked   = OnCharacterClick,
+            IsSubmenu   = false,
+            PrefixColor = 541,
+        };
+        _immersiveDresserItem = new MenuItem
+        {
+            IsEnabled   = true,
+            IsReturn    = false,
+            PrefixChar  = 'G',
+            Name        = "Immersive Dresser",
+            OnClicked   = OnImmersiveDresserClick,
             IsSubmenu   = false,
             PrefixColor = 541,
         };
@@ -85,6 +100,10 @@ public sealed class ContextMenuService : IDisposable, IRequiredService
                 _lastCharacterActor   = (nint)gameObject.Address;
                 _lastCharacterName    = target.TargetName;
                 args.AddMenuItem(_characterItem);
+
+                // Immersive Dresser: only for the local player.
+                if (_config.EnableImmersiveDresser && _objects.Player.Valid && (nint)gameObject.Address == (nint)_objects.Player)
+                    args.AddMenuItem(_immersiveDresserItem);
             }
 
             switch (args.AddonName)
@@ -156,6 +175,9 @@ public sealed class ContextMenuService : IDisposable, IRequiredService
 
     private void OnCharacterClick(IMenuItemClickedArgs _)
         => _popupMenu.Open(_lastCharacterActor, _lastCharacterName);
+
+    private void OnImmersiveDresserClick(IMenuItemClickedArgs _)
+        => _immersiveDresser.Open();
 
     private void OnClick(IMenuItemClickedArgs _)
     {

@@ -99,6 +99,13 @@ public sealed class SettingsTab(
                     contextMenuService.Disable();
             });
 
+        Checkbox("Enable Immersive Dresser"u8,
+            "Whether to show an Immersive Dresser option when right-clicking your own character. Opens a fullscreen equipment overlay with the game UI hidden."u8,
+            config.EnableImmersiveDresser, v =>
+            {
+                config.EnableImmersiveDresser = v;
+            });
+
         Im.Dummy(Vector2.Zero);
         Im.Separator();
         Im.Dummy(Vector2.Zero);

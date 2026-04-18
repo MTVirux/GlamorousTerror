@@ -32,6 +32,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
     private readonly DesignApplier                          _designApplier;
     private readonly DesignConverter                        _converter;
     private readonly PreviewService                        _previewService;
+    private readonly ItemUnlockManager                     _itemUnlockManager;
 
     private Stain?             _draggedStain;
     private EquipItemSlotCache _draggedItem;
@@ -53,8 +54,9 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         _advancedDyes   = advancedDyes;
         _itemCopy       = itemCopy;
         _designApplier  = designApplier;
-        _converter      = converter;
-        _previewService = previewService;
+        _converter         = converter;
+        _previewService    = previewService;
+        _itemUnlockManager = itemUnlockManager;
         _stainData      = items.Stains;
         _stainCombo     = new GlamourerColorCombo(_stainData, favorites, config);
         _equipCombo     = EquipSlotExtensions.EqdpSlots.Select(e => new EquipCombo(favorites, items, config, itemNameService, itemUnlockManager, gameData, e)).ToArray();
@@ -81,6 +83,20 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         _dragTarget            = EquipSlot.Unknown;
         _stainCombo.ResetFrameState();
         _stainPreviewValid = false;
+    }
+
+    private void PositionIconPickerPopup()
+    {
+        var windowPos     = Im.Window.Position;
+        var windowSize    = Im.Window.Size;
+        var windowCenterX = windowPos.X + windowSize.X * 0.5f;
+        var viewportCenterX = Im.Viewport.Main.Center.X;
+        var openLeft      = windowCenterX < viewportCenterX;
+        var anchorX       = openLeft ? windowPos.X : windowPos.X + windowSize.X;
+        Im.Window.SetNextPosition(
+            new Vector2(anchorX, _iconPickerClickY),
+            Condition.Appearing,
+            new Vector2(openLeft ? 1 : 0, 0));
     }
 
     private bool VerifyRestrictedGear(EquipDrawData data)
@@ -292,8 +308,9 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
     private bool          _iconPickerIsWeapon;
     private EquipItem?    _iconPickerHoveredItem;
     private bool          _iconPickerSelectionMade;
+    private float         _iconPickerClickY;
 
-    private void DrawEquipIcon(in EquipDrawData data)
+    internal void DrawEquipIcon(in EquipDrawData data)
     {
         var combo = _equipCombo[data.Slot.ToIndex()];
 
@@ -316,6 +333,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
             {
                 _iconPickerSlot     = data.Slot;
                 _iconPickerIsWeapon = false;
+                _iconPickerClickY   = Im.Item.UpperLeftCorner.Y;
                 Im.Popup.Open(IconPickerPopup);
             }
 
@@ -343,6 +361,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         if (_iconPickerSlot != data.Slot || _iconPickerIsWeapon)
             return;
 
+        PositionIconPickerPopup();
         using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.AlwaysAutoResize);
         if (!popup)
             return;
@@ -355,17 +374,26 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         var nothing = ItemManager.NothingItem(data.Slot);
         DrawIconPickerItem(nothing, data.CurrentItem, data, 0);
 
+        var hasItems = false;
         if (_items.ItemData.ByType.TryGetValue(data.Slot.ToEquipType(), out var list))
         {
             var i = 1;
             foreach (var equipItem in list)
             {
+                if (_config.OwnedOnlyComboFilter
+                    && !_itemUnlockManager.IsOwnedFromSources(equipItem.ItemId, _config.OwnedComboFilterSources))
+                    continue;
+
+                hasItems = true;
                 if (i % IconPickerColumns is not 0)
                     Im.Line.Same();
                 DrawIconPickerItem(equipItem, data.CurrentItem, data, i);
                 ++i;
             }
         }
+
+        if (!hasItems)
+            Im.Text("No items match the current filter."u8);
     }
 
     private void DrawIconPickerItem(in EquipItem item, in EquipItem current, in EquipDrawData data, int index)
@@ -393,7 +421,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         }
     }
 
-    private void DrawBonusItemIcon(in BonusDrawData data)
+    internal void DrawBonusItemIcon(in BonusDrawData data)
     {
         var combo = _bonusItemCombo[data.Slot.ToIndex()];
 
@@ -414,6 +442,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
             {
                 _iconPickerBonusSlot = data.Slot;
                 _iconPickerIsWeapon  = false;
+                _iconPickerClickY    = Im.Item.UpperLeftCorner.Y;
                 Im.Popup.Open(IconPickerPopup);
             }
 
@@ -436,6 +465,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         if (_iconPickerBonusSlot != data.Slot || _iconPickerIsWeapon)
             return;
 
+        PositionIconPickerPopup();
         using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.AlwaysAutoResize);
         if (!popup)
             return;
@@ -448,17 +478,26 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         var nothing = EquipItem.BonusItemNothing(data.Slot);
         DrawBonusIconPickerItem(nothing, data.CurrentItem, data, 0);
 
+        var hasItems = false;
         if (_items.ItemData.ByType.TryGetValue(data.Slot.ToEquipType(), out var list))
         {
             var i = 1;
             foreach (var equipItem in list)
             {
+                if (_config.OwnedOnlyComboFilter
+                    && !_itemUnlockManager.IsOwnedFromSources(equipItem.ItemId, _config.OwnedComboFilterSources))
+                    continue;
+
+                hasItems = true;
                 if (i % IconPickerColumns is not 0)
                     Im.Line.Same();
                 DrawBonusIconPickerItem(equipItem, data.CurrentItem, data, i);
                 ++i;
             }
         }
+
+        if (!hasItems)
+            Im.Text("No items match the current filter."u8);
     }
 
     private void DrawBonusIconPickerItem(in EquipItem item, in EquipItem current, in BonusDrawData data, int index)
@@ -541,6 +580,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
             {
                 _iconPickerSlot     = slot;
                 _iconPickerIsWeapon = true;
+                _iconPickerClickY   = Im.Item.UpperLeftCorner.Y;
                 Im.Popup.Open(IconPickerPopup);
             }
 
@@ -565,6 +605,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         if (_iconPickerSlot != slot || !_iconPickerIsWeapon)
             return;
 
+        PositionIconPickerPopup();
         using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.AlwaysAutoResize);
         if (!popup)
             return;
@@ -587,6 +628,10 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
 
                 foreach (var item in l)
                 {
+                    if (_config.OwnedOnlyComboFilter
+                        && !_itemUnlockManager.IsOwnedFromSources(item.ItemId, _config.OwnedComboFilterSources))
+                        continue;
+
                     if (i > 0 && i % IconPickerColumns is not 0)
                         Im.Line.Same();
                     DrawWeaponIconPickerItem(item, current, slot, ref mainhand, ref offhand, i);
@@ -598,12 +643,19 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         {
             foreach (var item in list)
             {
+                if (_config.OwnedOnlyComboFilter
+                    && !_itemUnlockManager.IsOwnedFromSources(item.ItemId, _config.OwnedComboFilterSources))
+                    continue;
+
                 if (i > 0 && i % IconPickerColumns is not 0)
                     Im.Line.Same();
                 DrawWeaponIconPickerItem(item, current, slot, ref mainhand, ref offhand, i);
                 ++i;
             }
         }
+
+        if (i == 0)
+            Im.Text("No items match the current filter."u8);
     }
 
     private void DrawWeaponIconPickerItem(in EquipItem item, in EquipItem current, EquipSlot slot,

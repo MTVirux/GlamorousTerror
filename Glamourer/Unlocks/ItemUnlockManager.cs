@@ -469,7 +469,8 @@ public sealed class ItemUnlockManager : ISavable, IDisposable, IReadOnlyDictiona
     public bool IsOwnedFromSources(CustomItemId itemId, ItemSource filter)
     {
         // Pseudo items (Nothing, Smallclothes, etc.) are always considered owned.
-        if (itemId.Id is 0 || itemId.Id >= uint.MaxValue - 512)
+        // Guard with IsItem so bonus/custom items (whose Id includes high flag bits) don't match.
+        if (itemId.IsItem && (itemId.Id is 0 || itemId.Id >= uint.MaxValue - 512))
             return true;
 
         var id = itemId.Item.Id;

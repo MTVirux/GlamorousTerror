@@ -13,6 +13,7 @@ GlamorousTerror is a custom fork of [Glamourer](https://github.com/Ottermandias/
 5. [Equipment Name Language](#5-equipment-name-language)
 6. [Cross-Language Equipment Search](#6-cross-language-equipment-search)
 7. [Owned-Only Combo Filter](#7-owned-only-combo-filter)
+8. [Immersive Dresser](#8-immersive-dresser)
 
 ---
 
@@ -852,6 +853,166 @@ The original `OnFramework` had a bug where `changes = false;` was written before
 
 ---
 
+## 8. Immersive Dresser
+
+Right-clicking the **local player character** in-game adds an **"Immersive Dresser"** entry to the context menu. Clicking it hides the game HUD and displays a 3-panel icon equipment overlay for quick glamour editing directly on the character.
+
+### User-Facing Functionality
+
+- Context menu entry only appears when right-clicking the player's own character
+- Game HUD is hidden; Dalamud/ImGui windows remain visible
+- Three floating panels appear:
+  - **Equipment** (left of center) — Main Hand weapon, Head → Feet armor slots, bonus items (facewear)
+  - **Accessories** (right of center) — Off Hand weapon (only when the current class has one), Ears → Left Ring
+  - **Options** (below center) — Dye All Slots combo, meta toggles (Hat Visible / Visor / Weapon / Ears + Head / Body / OffHand crests), owned-only source filter, Close Dresser button
+- Full **preview-on-hover** support — uses the same `EquipmentDrawer` icon combos as the Actor panel (see [Preview-on-Hover](#2-preview-on-hover))
+- **ESC** closes the dresser and restores the game UI (detected globally regardless of window focus, input consumed to prevent the game system menu)
+- **Close Dresser** button in the Options panel also closes and restores
+- Window positions are **remembered across sessions** — ImGui persists positions via its ini file; default centered layout only applies on first use
+- Gated by the `EnableImmersiveDresser` configuration toggle in Settings
+
+### Implementation
+
+| File | Role |
+|------|------|
+| `Glamourer/Gui/ImmersiveDresserWindow.cs` | `ImmersiveDresserManager` (`IService`) + 3 inner `Window` classes |
+| `Glamourer/Interop/ContextMenuService.cs` | Adds "Immersive Dresser" `MenuItem` with player-only guard, click → `Open()` |
+| `Glamourer/Gui/GlamourerWindowSystem.cs` | Registers `Left`, `Right`, `Options` windows with Dalamud's window system |
+| `Glamourer/Gui/Equipment/EquipmentDrawer.cs` | `DrawEquipIcon` / `DrawBonusItemIcon` (`internal`), `DrawAllStain`, `DrawMetaToggle`, `DrawOwnedOnlyFilter`, `ApplyHoverPreview` |
+| `Glamourer/Config/Configuration.cs` | `EnableImmersiveDresser` property |
+| `Glamourer/Gui/Tabs/SettingsTab/SettingsTab.cs` | Settings checkbox in GlamorousTerror section |
+
+**ContextMenuService** adds a `MenuItem` with `PrefixChar = 'G'` and `Name = "Immersive Dresser"`. In `OnMenuOpened`, the item is only added when `config.EnableImmersiveDresser` is true AND the target game object is the local player (`(nint)gameObject.Address == (nint)_objects.Player`). The click handler calls `_immersiveDresser.Open()`.
+
+**EquipmentDrawer visibility change** — `DrawEquipIcon()` and `DrawBonusItemIcon()` were changed from `private` to `internal` so the dresser panels (in the same assembly but different class) can call them directly.
+
+### ImmersiveDresserManager
+
+`ImmersiveDresserManager` implements `IService` and `IDisposable`. It owns three inner `Window` instances:
+
+| Field | Window Title | Class |
+|-------|-------------|-------|
+| `Left` | `Equipment###ImmersiveDresserLeft` | `EquipmentPanel` |
+| `Right` | `Accessories###ImmersiveDresserRight` | `AccessoryPanel` |
+| `Options` | `Options###ImmersiveDresserOptions` | `OptionsPanel` |
+
+**Constructor** — Receives `EquipmentDrawer`, `StateManager`, `ActorObjectManager`, `Configuration`, `IUiBuilder`, `IKeyState`, and `IFramework` via DI. Creates the three panel instances.
+
+**`Open()`** — Guarded by `_isOpen` to prevent double-open:
+
+1. Saves the current `IUiBuilder.DisableUserUiHide` value
+2. Sets `DisableUserUiHide = true` (so Dalamud keeps rendering ImGui while the game HUD is hidden)
+3. Subscribes to `IFramework.Update` for ESC key polling
+4. Hides game UI via `RaptureAtkModule.Instance()->IsUiVisible = false`
+5. Opens all three windows (`Left.IsOpen = Right.IsOpen = Options.IsOpen = true`)
+
+**`Close()`** — Guarded by `_isOpen` to prevent re-entrancy (each window's `OnClose()` also calls `Close()`):
+
+1. Unsubscribes from `IFramework.Update`
+2. Closes all three windows
+3. Restores `RaptureAtkModule.IsUiVisible` to its original value
+4. Restores the original `DisableUserUiHide` value
+
+**`Dispose()`** — Calls `Close()` if still open.
+
+### Panel Details
+
+All three panels share:
+
+- **`PanelFlags`**: `NoTitleBar | NoDocking | AlwaysAutoResize | NoCollapse` — no title bar (immersive feel), auto-sized to content
+- **`DrawConditions()`**: Returns `objects.Player.Valid` — panels only render when the player object exists
+- **`PreDraw()`**: Positions the window via `Im.Window.SetNextPosition(center ± offset, Condition.FirstUseEver, pivot)` — `FirstUseEver` means ImGui uses the default position only the first time, then remembers the user's repositioned location in its ini file
+- **`OnClose()`**: Delegates to `manager.Close()` — safe against re-entrancy due to the `_isOpen` guard
+
+**EquipmentPanel** (left of center, pivot `1, 0.5`):
+
+1. Gets player `ActorState` via `StateManager.GetOrCreate()`
+2. Calls `equipmentDrawer.Prepare()`
+3. Draws Main Hand weapon icon via `DrawSingleWeaponIcon(mainhand, offhand, showIcon: true, isMainHand: true)`
+4. Iterates `EquipSlotExtensions.EquipmentSlots` (Head → Feet) — calls `equipmentDrawer.DrawEquipIcon()` per slot
+5. Iterates `BonusExtensions.AllFlags` (facewear) — calls `equipmentDrawer.DrawBonusItemIcon()` per slot
+6. Calls `equipmentDrawer.ApplyHoverPreview(stateManager, state)` at the end of the frame
+
+**AccessoryPanel** (right of center, pivot `0, 0.5`):
+
+1. Gets player `ActorState`
+2. Calls `equipmentDrawer.Prepare()`
+3. Draws Off Hand weapon icon **only when** `offhand.CurrentItem.Type is not FullEquipType.Unknown` — classes without an off-hand (e.g., DRG, MNK) show no gap
+4. Iterates `EquipSlotExtensions.AccessorySlots` (Ears → Left Ring) — calls `equipmentDrawer.DrawEquipIcon()` per slot
+5. Calls `equipmentDrawer.ApplyHoverPreview(stateManager, state)`
+
+**OptionsPanel** (below center, pivot `0.5, 0`):
+
+1. Gets player `ActorState`
+2. **Dye All Slots** — `equipmentDrawer.DrawAllStain()` combo; on selection, applies the chosen stain to all `EquipSlotExtensions.EqdpSlots` via `StateManager.ChangeStains()`
+3. **Meta toggles** — Four groups drawn inline via `Im.Line.Same()`:
+   - Hat Visible (`MetaIndex.HatState`) + Head Crest (`CrestFlag.Head`)
+   - Visor Toggled (`MetaIndex.VisorState`) + Body Crest (`CrestFlag.Body`)
+   - Weapon Visible (`MetaIndex.WeaponState`) + Shield Crest (`CrestFlag.OffHand`)
+   - Ears Visible (`MetaIndex.EarState`)
+   - Each toggle uses `EquipmentDrawer.DrawMetaToggle()` with `ToggleDrawData.FromState()` / `CrestFromState()`
+4. **Owned-only source filter** — `EquipmentDrawer.DrawOwnedOnlyFilter(config)` (see [Owned-Only Combo Filter](#7-owned-only-combo-filter))
+5. **Close Dresser** button — centered via calculated offset, calls `manager.Close()` on click
+
+### Game UI Hiding
+
+- Uses `RaptureAtkModule.Instance()->IsUiVisible` to hide/restore the native FFXIV HUD
+- Saves the original visibility state (`_wasUiVisible`) to restore correctly — handles the edge case where UI was already hidden
+- Sets `IUiBuilder.DisableUserUiHide = true` **before** hiding — this tells Dalamud to continue rendering ImGui windows even when the game UI is hidden. Without this, all ImGui windows (including the dresser panels) would also disappear
+- Restores the original `DisableUserUiHide` value on close
+
+### ESC Key Handling
+
+- **`IKeyState`** is polled on **`IFramework.Update`** — this reads the game's keyboard state directly, working regardless of whether any ImGui window has focus
+- When ESC is detected while the dresser is open, the key is **consumed** (`_keyState[VirtualKey.ESCAPE] = false`) to prevent the game's system menu from opening simultaneously
+- The framework subscription is only active while the dresser is open — added in `Open()`, removed in `Close()` — so there is zero overhead when the dresser is closed
+
+### Data Flow
+
+```
+Right-click own character
+  → ContextMenuService.OnMenuOpened()
+    → config.EnableImmersiveDresser? && target is local player?
+    → adds "Immersive Dresser" MenuItem (PrefixChar='G')
+  → User clicks menu entry
+    → OnImmersiveDresserClick → ImmersiveDresserManager.Open()
+      → Save + set DisableUserUiHide = true
+      → Subscribe IFramework.Update
+      → RaptureAtkModule.IsUiVisible = false (hide game HUD)
+      → Left.IsOpen = Right.IsOpen = Options.IsOpen = true
+  → Each frame:
+    → OnFrameworkUpdate: IKeyState[ESCAPE]? → consume key + Close()
+    → Each panel: DrawConditions → PreDraw → Draw
+      → StateManager.GetOrCreate(player) → ActorState
+      → equipmentDrawer.Prepare() → draw icons → ApplyHoverPreview()
+  → User clicks Close Dresser or presses ESC
+    → ImmersiveDresserManager.Close()
+      → Unsubscribe IFramework.Update
+      → Left.IsOpen = Right.IsOpen = Options.IsOpen = false
+      → RaptureAtkModule.IsUiVisible = original (restore game HUD)
+      → Restore DisableUserUiHide
+```
+
+### Configuration
+
+| Property | Type | Default | Location |
+|----------|------|---------|----------|
+| `EnableImmersiveDresser` | `bool` | `true` | `Configuration.cs` |
+
+Controlled in the Settings tab via a checkbox in the GlamorousTerror section, alongside `EnableGameContextMenu`.
+
+### Known Pitfalls
+
+1. **`DisableUserUiHide` must be set before hiding**: Hiding the game UI via `RaptureAtkModule.IsUiVisible = false` also hides all ImGui windows unless `IUiBuilder.DisableUserUiHide` is set to `true` first.
+
+2. **`Close()` re-entrancy**: Each window's `OnClose()` callback calls `manager.Close()`. Without the `_isOpen` guard, `Close()` would execute its restore logic multiple times. The guard ensures only the first call runs the full teardown.
+
+3. **ESC requires `IKeyState` via `IFramework.Update`**: The ImGui keyboard API (`Im.Keyboard.IsPressed`) only detects keys when an ImGui window has focus. With `NoTitleBar` panels and no guaranteed focus, `IKeyState` (Dalamud's game keyboard state) must be used instead, polled on the framework update thread.
+
+4. **ESC must be consumed**: After detecting ESC, setting `_keyState[VirtualKey.ESCAPE] = false` prevents the game from also processing the key press and opening the system menu. This is the standard Dalamud pattern for key consumption (see `Luna/Luna/Keyboard/KeyboardManager.cs`).
+
+---
+
 ## Configuration Summary
 
 All GlamorousTerror-specific properties in `Glamourer/Config/Configuration.cs`:
@@ -859,6 +1020,7 @@ All GlamorousTerror-specific properties in `Glamourer/Config/Configuration.cs`:
 | Property | Type | Default | Feature |
 |----------|------|---------|---------|
 | `EnableGameContextMenu` | `bool` | `true` | Context Menu |
+| `EnableImmersiveDresser` | `bool` | `true` | Immersive Dresser |
 | `EnabledCheats` | `CodeService.CodeFlag` | `0` | Fun Modes |
 | `FestivalMode` | `FestivalSetting` | `Undefined` | Fun Modes (festivals) |
 | `LastFestivalPopup` | `DateOnly` | `MinValue` | Fun Modes (festivals) |
@@ -880,6 +1042,12 @@ All GlamorousTerror-specific properties in `Glamourer/Config/Configuration.cs`:
 │  │  Customize + │  │ PopupMenu  │  │  Settings)   │ │
 │  │  Stain)      │  │            │  │              │ │
 │  └──────┬───────┘  └─────┬──────┘  └──────┬───────┘ │
+│         │                │                 │         │
+│  ┌──────────────────────────────────────────────┐   │
+│  │       ImmersiveDresserManager                │   │
+│  │  (3-panel overlay: Equipment, Accessories,   │   │
+│  │   Options — hides game UI, ESC handling)     │   │
+│  └──────────────────────────────────────────────┘   │
 │         │                │                 │         │
 │  ┌──────▼────────────────▼─────┐  ┌───────▼───────┐ │
 │  │      PreviewService         │  │  CodeService   │ │
