@@ -74,6 +74,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
     private Vector2 _iconSize;
     private float   _comboLength;
     private Rgba32  _advancedMaterialColor;
+    private int     _lastPrepareFrame = -1;
 
     public void Prepare()
     {
@@ -81,8 +82,15 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         _comboLength           = DefaultWidth * Im.Style.GlobalScale;
         _advancedMaterialColor = ColorId.AdvancedDyeActive.Value();
         _dragTarget            = EquipSlot.Unknown;
-        _stainCombo.ResetFrameState();
-        _stainPreviewValid = false;
+
+        var frame = Im.State.FrameCount;
+        if (_lastPrepareFrame != frame)
+        {
+            _lastPrepareFrame    = frame;
+            _stainCombo.ResetFrameState();
+            _stainPreviewValid   = false;
+            _iconPickerPopupOpen = false;
+        }
     }
 
     private void PositionIconPickerPopup()
@@ -306,6 +314,8 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
     private EquipSlot     _iconPickerSlot;
     private BonusItemFlag _iconPickerBonusSlot;
     private bool          _iconPickerIsWeapon;
+    private bool          _iconPickerIsBonus;
+    private bool          _iconPickerPopupOpen;
     private EquipItem?    _iconPickerHoveredItem;
     private bool          _iconPickerSelectionMade;
     private float         _iconPickerClickY;
@@ -333,6 +343,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
             {
                 _iconPickerSlot     = data.Slot;
                 _iconPickerIsWeapon = false;
+                _iconPickerIsBonus  = false;
                 _iconPickerClickY   = Im.Item.UpperLeftCorner.Y;
                 Im.Popup.Open(IconPickerPopup);
             }
@@ -366,6 +377,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         if (!popup)
             return;
 
+        _iconPickerPopupOpen   = true;
         _iconPickerHoveredItem = null;
 
         using var style = ImStyleDouble.ItemSpacing.Push(Im.Style.ItemSpacing * 0.25f)
@@ -442,6 +454,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
             {
                 _iconPickerBonusSlot = data.Slot;
                 _iconPickerIsWeapon  = false;
+                _iconPickerIsBonus   = true;
                 _iconPickerClickY    = Im.Item.UpperLeftCorner.Y;
                 Im.Popup.Open(IconPickerPopup);
             }
@@ -470,6 +483,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         if (!popup)
             return;
 
+        _iconPickerPopupOpen   = true;
         _iconPickerHoveredItem = null;
 
         using var style = ImStyleDouble.ItemSpacing.Push(Im.Style.ItemSpacing * 0.25f)
@@ -610,6 +624,7 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         if (!popup)
             return;
 
+        _iconPickerPopupOpen   = true;
         _iconPickerHoveredItem = null;
 
         using var style = ImStyleDouble.ItemSpacing.Push(Im.Style.ItemSpacing * 0.25f)
@@ -1358,6 +1373,35 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         {
             _previewService.EndSingleValuePreview(wasSelectionMade: true);
             _stainCombo.ResetSelection();
+        }
+
+        // Icon picker popup (requires CTRL for preview, like customization popups)
+        if (_iconPickerPopupOpen)
+        {
+            if (_iconPickerIsBonus)
+                _previewService.StartSingleBonusItemPreview(state, _iconPickerBonusSlot);
+            else
+                _previewService.StartSingleItemPreview(state, _iconPickerSlot);
+
+            if (Im.Io.KeyControl && _iconPickerHoveredItem is { } hovered)
+            {
+                if (_iconPickerIsBonus)
+                    _previewService.PreviewSingleBonusItem(state, _iconPickerBonusSlot, hovered);
+                else
+                    _previewService.PreviewSingleItem(state, _iconPickerSlot, hovered);
+            }
+            else
+            {
+                _previewService.RestoreSingleValuePreview();
+            }
+
+            if (_iconPickerSelectionMade)
+            {
+                _previewService.EndSingleValuePreview(wasSelectionMade: true);
+                _iconPickerSelectionMade = false;
+            }
+
+            return;
         }
 
         // No equipment popup open — end only if the active preview is equipment-related
