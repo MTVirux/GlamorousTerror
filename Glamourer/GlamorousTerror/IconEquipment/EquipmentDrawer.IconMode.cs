@@ -718,35 +718,33 @@ public sealed partial class EquipmentDrawer
 
     private void DrawIconStainIndicators(in EquipDrawData data)
     {
-        var stainSize = new Vector2(Im.Style.FrameHeight * 0.6f);
+        using var id       = Im.Id.Push((uint)data.Slot);
+        using var disabled = Im.Disabled(data.Locked);
+        var       width    = Im.Style.FrameHeight;
         foreach (var (index, stainId) in data.CurrentStains.Index())
         {
-            if (index > 0)
+            id.Push(index);
+            var found        = _stainData.TryGetValue(stainId, out var stain);
+            var wasPopupOpen = _stainCombo.IsPopupOpen;
+            var change       = _stainCombo.Draw("##stain"u8, stain, out var newStain, width);
+
+            // GT: Track which slot/index the stain popup is open for.
+            if (!wasPopupOpen && _stainCombo.IsPopupOpen)
+                GTCaptureStainSlot(data.Slot, index);
+
+            _itemCopy.HandleCopyPaste(data, index);
+            if (!change)
+                DrawStainDragDrop(data, index, stain, found);
+
+            if (index < data.CurrentStains.Count - 1)
                 Im.Line.SameInner();
 
-            if (_stainData.TryGetValue(stainId, out var stain) && stain.RowIndex.Id is not 0)
-            {
-                var pos = Im.Cursor.ScreenPosition;
-                Im.Window.DrawList.Shape.RectangleFilled(pos, pos + stainSize, stain.RgbaColor, 3 * Im.Style.GlobalScale);
-                Im.Dummy(stainSize);
-            }
-            else
-            {
-                var pos = Im.Cursor.ScreenPosition;
-                Im.Window.DrawList.Shape.RectangleFilled(pos, pos + stainSize, ImGuiColor.FrameBackground.Get(),
-                    3 * Im.Style.GlobalScale);
-                Im.Dummy(stainSize);
-            }
-
-            // Stain tooltip on hover.
-            if (Im.Item.Hovered())
-            {
-                using var tt = Im.Tooltip.Begin();
-                if (_stainData.TryGetValue(stainId, out var s) && s.RowIndex.Id is not 0)
-                    Im.Text(s.Name);
-                else
-                    Im.Text("No Dye"u8);
-            }
+            if (change)
+                data.SetStains(data.CurrentStains.With(index, newStain.RowIndex));
+            if (ResetOrClear(data.Locked, false, data.AllowRevert, true, stainId, data.GameStains[index], Stain.None.RowIndex,
+                    out var newStainId))
+                data.SetStains(data.CurrentStains.With(index, newStainId));
+            id.Pop(index);
         }
     }
 
