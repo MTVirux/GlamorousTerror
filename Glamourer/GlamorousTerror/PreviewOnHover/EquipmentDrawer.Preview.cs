@@ -138,6 +138,13 @@ public sealed partial class EquipmentDrawer
             else
                 _previewService.StartSingleItemPreview(state, _iconPickerSlot);
 
+            if (_iconPickerSelectionMade)
+            {
+                _previewService.EndSingleValuePreview(wasSelectionMade: true);
+                _iconPickerSelectionMade = false;
+                return;
+            }
+
             if (Im.Io.KeyControl && _iconPickerHoveredItem is { } hovered)
             {
                 if (_iconPickerIsBonus)
@@ -148,12 +155,6 @@ public sealed partial class EquipmentDrawer
             else
             {
                 _previewService.RestoreSingleValuePreview();
-            }
-
-            if (_iconPickerSelectionMade)
-            {
-                _previewService.EndSingleValuePreview(wasSelectionMade: true);
-                _iconPickerSelectionMade = false;
             }
 
             return;
