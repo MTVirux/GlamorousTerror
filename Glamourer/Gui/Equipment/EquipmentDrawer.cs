@@ -4,6 +4,7 @@ using Glamourer.Designs;
 using Glamourer.Events;
 using Glamourer.Gui.Materials;
 using Glamourer.Services;
+using Glamourer.Interop;
 using Glamourer.State;
 using Glamourer.Unlocks;
 using ImSharp;
@@ -33,6 +34,8 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
     private readonly DesignConverter                        _converter;
     private readonly PreviewService                        _previewService;
     private readonly ItemUnlockManager                     _itemUnlockManager;
+    private readonly FavoriteManager                       _favoriteManager;
+    private readonly JobService                            _jobService;
 
     private Stain?             _draggedStain;
     private EquipItemSlotCache _draggedItem;
@@ -40,18 +43,21 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
 
     public EquipmentDrawer(FavoriteManager favorites, IDataManager gameData, ItemManager items, TextureService textures,
         Configuration config, GPoseService gPose, AdvancedDyePopup advancedDyes, ItemCopyService itemCopy, DesignApplier designApplier,
-        DesignConverter converter, PreviewService previewService, ItemNameService itemNameService, ItemUnlockManager itemUnlockManager)
+        DesignConverter converter, PreviewService previewService, ItemNameService itemNameService, ItemUnlockManager itemUnlockManager,
+        JobService jobService)
     {
-        _items          = items;
-        _textures       = textures;
-        _config         = config;
-        _gPose          = gPose;
-        _advancedDyes   = advancedDyes;
-        _itemCopy       = itemCopy;
-        _designApplier  = designApplier;
+        _items             = items;
+        _textures          = textures;
+        _config            = config;
+        _gPose             = gPose;
+        _advancedDyes      = advancedDyes;
+        _itemCopy          = itemCopy;
+        _designApplier     = designApplier;
         _converter         = converter;
         _previewService    = previewService;
         _itemUnlockManager = itemUnlockManager;
+        _favoriteManager   = favorites;
+        _jobService        = jobService;
         _stainData      = items.Stains;
         _stainCombo     = new GlamourerColorCombo(_stainData, favorites, config);
         _equipCombo     = EquipSlotExtensions.EqdpSlots.Select(e => new EquipCombo(favorites, items, config, itemNameService, itemUnlockManager, gameData, e)).ToArray();
