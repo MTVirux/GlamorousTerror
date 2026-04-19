@@ -66,10 +66,22 @@ public sealed partial class EquipmentDrawer
         var viewportCenterX = Im.Viewport.Main.Center.X;
         var openLeft      = windowCenterX < viewportCenterX;
         var anchorX       = openLeft ? windowPos.X : windowPos.X + windowSize.X;
+
+        var maxRows        = Math.Max(1, _config.IconPickerMaxRows);
+        var reducedSpacing = Im.Style.ItemSpacing * 0.25f;
+        var buttonHeight   = _iconSize.Y + 2 * Im.Style.FramePadding.Y;
+        var maxHeight      = maxRows * (buttonHeight + reducedSpacing.Y) + 2 * Im.Style.WindowPadding.Y;
+
+        var viewportSize = Im.Viewport.Main.Size;
+        var anchorY      = Math.Min(_iconPickerClickY, viewportSize.Y - maxHeight);
+        anchorX          = Math.Clamp(anchorX, 0, viewportSize.X);
+
         Im.Window.SetNextPosition(
-            new Vector2(anchorX, _iconPickerClickY),
+            new Vector2(anchorX, anchorY),
             Condition.Appearing,
             new Vector2(openLeft ? 1 : 0, 0));
+
+        Im.Window.SetNextSizeConstraints(Vector2.Zero, new Vector2(float.MaxValue, maxHeight));
     }
 
     internal void DrawEquipIcon(in EquipDrawData data)
@@ -125,7 +137,7 @@ public sealed partial class EquipmentDrawer
             return;
 
         PositionIconPickerPopup();
-        using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.AlwaysAutoResize);
+        using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.NoMove);
         if (!popup)
             return;
 
@@ -142,10 +154,16 @@ public sealed partial class EquipmentDrawer
         if (_items.ItemData.ByType.TryGetValue(data.Slot.ToEquipType(), out var list))
         {
             var i = 1;
+            HashSet<(FullEquipType, PrimaryId, SecondaryId, Variant)>? modelSet = _config.GroupIconPickerByModel
+                ? new HashSet<(FullEquipType, PrimaryId, SecondaryId, Variant)>()
+                : null;
             foreach (var equipItem in list)
             {
                 if (_config.OwnedOnlyComboFilter
                     && !_itemUnlockManager.IsOwnedFromSources(equipItem.ItemId, _config.OwnedComboFilterSources))
+                    continue;
+
+                if (modelSet != null && !modelSet.Add((equipItem.Type, equipItem.PrimaryId, equipItem.SecondaryId, equipItem.Variant)))
                     continue;
 
                 hasItems = true;
@@ -231,7 +249,7 @@ public sealed partial class EquipmentDrawer
             return;
 
         PositionIconPickerPopup();
-        using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.AlwaysAutoResize);
+        using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.NoMove);
         if (!popup)
             return;
 
@@ -248,10 +266,16 @@ public sealed partial class EquipmentDrawer
         if (_items.ItemData.ByType.TryGetValue(data.Slot.ToEquipType(), out var list))
         {
             var i = 1;
+            HashSet<(FullEquipType, PrimaryId, SecondaryId, Variant)>? modelSet = _config.GroupIconPickerByModel
+                ? new HashSet<(FullEquipType, PrimaryId, SecondaryId, Variant)>()
+                : null;
             foreach (var equipItem in list)
             {
                 if (_config.OwnedOnlyComboFilter
                     && !_itemUnlockManager.IsOwnedFromSources(equipItem.ItemId, _config.OwnedComboFilterSources))
+                    continue;
+
+                if (modelSet != null && !modelSet.Add((equipItem.Type, equipItem.PrimaryId, equipItem.SecondaryId, equipItem.Variant)))
                     continue;
 
                 hasItems = true;
@@ -372,7 +396,7 @@ public sealed partial class EquipmentDrawer
             return;
 
         PositionIconPickerPopup();
-        using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.AlwaysAutoResize);
+        using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.NoMove);
         if (!popup)
             return;
 
@@ -385,6 +409,9 @@ public sealed partial class EquipmentDrawer
         ref var data    = ref isMainhand ? ref mainhand : ref offhand;
         var     current = data.CurrentItem;
         var     i       = 0;
+        HashSet<(FullEquipType, PrimaryId, SecondaryId, Variant)>? modelSet = _config.GroupIconPickerByModel
+            ? new HashSet<(FullEquipType, PrimaryId, SecondaryId, Variant)>()
+            : null;
 
         if (comboType is FullEquipType.Unknown)
         {
@@ -397,6 +424,9 @@ public sealed partial class EquipmentDrawer
                 {
                     if (_config.OwnedOnlyComboFilter
                         && !_itemUnlockManager.IsOwnedFromSources(item.ItemId, _config.OwnedComboFilterSources))
+                        continue;
+
+                    if (modelSet != null && !modelSet.Add((item.Type, item.PrimaryId, item.SecondaryId, item.Variant)))
                         continue;
 
                     if (i > 0 && i % IconPickerColumns is not 0)
@@ -412,6 +442,9 @@ public sealed partial class EquipmentDrawer
             {
                 if (_config.OwnedOnlyComboFilter
                     && !_itemUnlockManager.IsOwnedFromSources(item.ItemId, _config.OwnedComboFilterSources))
+                    continue;
+
+                if (modelSet != null && !modelSet.Add((item.Type, item.PrimaryId, item.SecondaryId, item.Variant)))
                     continue;
 
                 if (i > 0 && i % IconPickerColumns is not 0)

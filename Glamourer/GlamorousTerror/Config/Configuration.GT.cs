@@ -22,6 +22,8 @@ public sealed partial class Configuration
     // --- GlamorousTerror-specific configuration properties ---
 
     public bool                  UseIconEquipmentDrawer     { get; set; } = false;
+    public int                   IconPickerMaxRows          { get; set; } = 10;
+    public bool                  GroupIconPickerByModel     { get; set; } = true;
     public bool                  EnableGameContextMenu      { get; set; } = true;
     public bool                  EnableImmersiveDresser     { get; set; } = true;
     public bool                  LockImmersiveDresserPanels { get; set; } = false;

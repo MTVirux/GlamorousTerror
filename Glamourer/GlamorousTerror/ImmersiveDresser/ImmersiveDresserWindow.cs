@@ -375,8 +375,22 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
 
             Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));
 
-            // Source filter
-            EquipmentDrawer.DrawOwnedOnlyFilter(config);
+            // Icon Drawer settings
+            if (Im.Tree.Header("Icon Drawer"u8))
+            {
+                EquipmentDrawer.DrawOwnedOnlyFilter(config);
+
+                if (Im.Checkbox("Group by Model"u8, config.GroupIconPickerByModel))
+                {
+                    config.GroupIconPickerByModel ^= true;
+                    config.Save();
+                }
+
+                Im.Tooltip.OnHover(
+                    "When enabled, items that share the same visual model are grouped under a single icon in the picker."u8);
+
+                Im.Line.New();
+            }
 
             Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));
 

@@ -82,6 +82,24 @@ public sealed partial class SettingsTab
             "Display equipment slots as a compact icon grid instead of name-based combo dropdowns.\nClick an icon to open the item selector. Right-click to clear or revert."u8,
             config.UseIconEquipmentDrawer, v => config.UseIconEquipmentDrawer = v);
 
+        if (config.UseIconEquipmentDrawer)
+        {
+            Checkbox("Group by Model"u8,
+                "When enabled, items that share the same visual model are grouped under a single icon in the picker."u8,
+                config.GroupIconPickerByModel, v => config.GroupIconPickerByModel = v);
+
+            var maxRows = config.IconPickerMaxRows;
+            Im.Item.SetNextWidthScaled(200);
+            if (Im.Slider("##iconPickerMaxRows"u8, ref maxRows, "%i"u8, 1, 20, SliderFlags.AlwaysClamp))
+            {
+                config.IconPickerMaxRows = maxRows;
+                config.Save();
+            }
+
+            LunaStyle.DrawAlignedHelpMarkerLabel("Icon Picker Max Rows"u8,
+                "Maximum number of rows visible in the icon equipment picker popup before scrolling."u8);
+        }
+
         Im.Line.New();
     }
 
