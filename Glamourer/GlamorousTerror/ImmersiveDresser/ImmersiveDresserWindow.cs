@@ -1,13 +1,19 @@
 using Dalamud.Game.ClientState.Keys;
+using Dalamud.Game.Command;
+using Dalamud.Hooking;
 using Dalamud.Interface;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
 using Glamourer.Config;
 using Glamourer.Designs;
 using Glamourer.Gui.Customization;
 using Glamourer.Gui.Equipment;
 using Glamourer.Services;
 using Glamourer.State;
+
 using ImSharp;
 using Luna;
 using Penumbra.GameData.Enums;
@@ -26,8 +32,10 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
     private readonly IUiBuilder        _uiBuilder;
     private readonly IKeyState          _keyState;
     private readonly IFramework         _framework;
+    private readonly ICommandManager   _commandManager;
     private readonly Configuration     _config;
     private readonly PreviewService    _previewService;
+    private readonly RotationDrawer    _rotationDrawer;
 
     public readonly  EquipmentPanel    Left;
     public readonly  AccessoryPanel    Right;
@@ -39,19 +47,39 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
     private bool _wasUiVisible = true;
     private bool _savedDisableUserUiHide;
     private bool _isOpen;
+    private bool _didHideUi;
+    internal bool _cammyFreeCamActive;
+    internal float _lastValidCameraY;
 
-    public ImmersiveDresserManager(EquipmentDrawer equipmentDrawer, CustomizationDrawer customizationDrawer,
+    private unsafe delegate void CameraUpdateDelegate(CameraBase* self);
+    private unsafe delegate byte CanChangePerspectiveDelegate();
+
+    private readonly Hook<CameraUpdateDelegate>?        _cameraUpdateHook;
+    private readonly Hook<CanChangePerspectiveDelegate>? _canChangePerspectiveHook;
+
+    public unsafe ImmersiveDresserManager(EquipmentDrawer equipmentDrawer, CustomizationDrawer customizationDrawer,
         CustomizeParameterDrawer parameterDrawer, PreviewService previewService, StateManager stateManager,
-        ActorObjectManager objects, Configuration config, IUiBuilder uiBuilder, IKeyState keyState, IFramework framework)
+        ActorObjectManager objects, Configuration config, IUiBuilder uiBuilder, IKeyState keyState, IFramework framework,
+        ICommandManager commandManager, IGameInteropProvider interop, RotationDrawer rotationDrawer)
     {
         _uiBuilder      = uiBuilder;
         _keyState       = keyState;
         _framework      = framework;
+        _commandManager = commandManager;
         _config         = config;
         _previewService = previewService;
+        _rotationDrawer = rotationDrawer;
         Left            = new EquipmentPanel(this, equipmentDrawer, customizationDrawer, stateManager, objects);
         Right           = new AccessoryPanel(this, equipmentDrawer, parameterDrawer, stateManager, objects);
-        Options         = new OptionsPanel(this, equipmentDrawer, stateManager, objects, config);
+        Options         = new OptionsPanel(this, equipmentDrawer, stateManager, objects, config, commandManager);
+
+        var camera = CameraManager.Instance()->GetActiveCamera();
+        if (camera != null)
+        {
+            var vtable = *(nint**)(&camera->CameraBase);
+            _cameraUpdateHook           = interop.HookFromAddress<CameraUpdateDelegate>(vtable[3], CameraUpdateDetour);
+            _canChangePerspectiveHook   = interop.HookFromAddress<CanChangePerspectiveDelegate>(vtable[22], CanChangePerspectiveDetour);
+        }
     }
 
     public void Open()
@@ -60,10 +88,21 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
             return;
 
         _isOpen                      = true;
+        _config.ImmersiveDresserCameraY = 0f;
         _savedDisableUserUiHide      = _uiBuilder.DisableUserUiHide;
         _uiBuilder.DisableUserUiHide = true;
         _framework.Update           += OnFrameworkUpdate;
-        HideGameUi();
+        _cameraUpdateHook?.Enable();
+        _canChangePerspectiveHook?.Enable();
+        if (_config.AutoHideGameUi)
+        {
+            HideGameUi();
+            _didHideUi = true;
+        }
+        else
+        {
+            _didHideUi = false;
+        }
         Left.IsOpen    = true;
         Right.IsOpen   = true;
         Options.IsOpen = true;
@@ -76,10 +115,24 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
 
         _isOpen        = false;
         _framework.Update -= OnFrameworkUpdate;
+        _rotationDrawer.Reset();
+        if (_cammyFreeCamActive)
+        {
+            _commandManager.ProcessCommand("/cammy freecam");
+            _cammyFreeCamActive = false;
+        }
+
+        _cameraUpdateHook?.Disable();
+        _canChangePerspectiveHook?.Disable();
         Left.IsOpen    = false;
         Right.IsOpen   = false;
         Options.IsOpen = false;
-        RestoreGameUi();
+        if (_didHideUi)
+        {
+            RestoreGameUi();
+            _didHideUi = false;
+        }
+
         _uiBuilder.DisableUserUiHide = _savedDisableUserUiHide;
     }
 
@@ -87,14 +140,87 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
     {
         if (_isOpen)
             Close();
+        _cameraUpdateHook?.Dispose();
+        _canChangePerspectiveHook?.Dispose();
     }
 
-    private void OnFrameworkUpdate(IFramework _)
+    private unsafe void OnFrameworkUpdate(IFramework _)
     {
         if (_isOpen && _keyState[VirtualKey.ESCAPE])
         {
             _keyState[VirtualKey.ESCAPE] = false;
             Close();
+            return;
+        }
+
+    }
+
+    private unsafe byte CanChangePerspectiveDetour()
+    {
+        if (_config.DisableFirstPerson)
+            return 0;
+        return _canChangePerspectiveHook!.Original();
+    }
+
+    private unsafe void CameraUpdateDetour(CameraBase* self)
+    {
+        _cameraUpdateHook!.Original(self);
+
+        var offset = _config.ImmersiveDresserCameraY;
+        if (offset == 0f)
+        {
+            _lastValidCameraY = 0f;
+            return;
+        }
+
+        // Compute candidate position after offset.
+        var candidateY = self->SceneCamera.Position.Y + offset;
+
+        // Cast a ray downward from the original camera position to find the ground.
+        if (!_config.AllowCameraClipping)
+        {
+            const float minHeightAboveGround = 0.5f;
+            var         origin               = self->SceneCamera.Position;
+            var         direction            = new Vector3(0, -1, 0);
+            if (BGCollisionModule.RaycastMaterialFilter(origin, direction, out var hit))
+            {
+                var groundY = hit.Point.Y + minHeightAboveGround;
+                if (candidateY < groundY)
+                    candidateY = groundY;
+            }
+        }
+
+        var appliedOffset = candidateY - self->SceneCamera.Position.Y;
+        _lastValidCameraY = appliedOffset;
+
+        // Snap config back to the clamped value so the slider reflects reality.
+        if (Math.Abs(appliedOffset - offset) > 0.001f)
+            _config.ImmersiveDresserCameraY = appliedOffset;
+
+        self->SceneCamera.LookAtVector.Y += appliedOffset;
+        self->SceneCamera.Position.Y      = candidateY;
+    }
+
+    internal unsafe void SetAutoHideUi(bool hide)
+    {
+        var module = RaptureAtkModule.Instance();
+        if (module == null)
+            return;
+
+        if (hide && module->IsUiVisible)
+        {
+            _wasUiVisible       = true;
+            module->IsUiVisible = false;
+            _didHideUi          = true;
+        }
+        else if (!hide && !module->IsUiVisible)
+        {
+            module->IsUiVisible = true;
+            _didHideUi          = false;
+        }
+        else
+        {
+            _didHideUi = hide;
         }
     }
 
@@ -111,7 +237,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
     private unsafe void RestoreGameUi()
     {
         var module = RaptureAtkModule.Instance();
-        if (module != null)
+        if (module != null && !module->IsUiVisible)
             module->IsUiVisible = _wasUiVisible;
     }
 
@@ -158,30 +284,6 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
 
             if (manager._currentMode is DresserMode.Appearance)
             {
-                // Controls row: mode switch, show colors, close
-                if (Im.Button("Switch to Equipment"u8))
-                {
-                    manager._previewService.EndCustomizationPopupFrame(state);
-                    manager._currentMode = DresserMode.Equipment;
-                }
-
-                Im.Line.Same();
-                if (Im.Button(manager._showParameters ? "Hide Color Customization"u8 : "Color Customization"u8))
-                    manager._showParameters = !manager._showParameters;
-
-                Im.Line.Same();
-                if (Im.Button("Close Dresser"u8))
-                    manager.Close();
-
-                // Lock panels toggle
-                if (Im.Checkbox("Lock Panels"u8, manager._config.LockImmersiveDresserPanels))
-                {
-                    manager._config.LockImmersiveDresserPanels ^= true;
-                    manager._config.Save();
-                }
-
-                Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));
-
                 // Customization drawer
                 if (customizationDrawer.Draw(state.ModelData.Customize, state.IsLocked, false))
                     stateManager.ChangeEntireCustomize(state, customizationDrawer.Customize,
@@ -302,11 +404,20 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         EquipmentDrawer equipmentDrawer,
         StateManager stateManager,
         ActorObjectManager objects,
-        Configuration config)
+        Configuration config,
+        ICommandManager commandManager)
         : Window("Options###ImmersiveDresserOptions", PanelFlags)
     {
+        private static readonly AwesomeIcon EyeIcon      = FontAwesomeIcon.Eye;
+        private static readonly AwesomeIcon EyeSlashIcon = FontAwesomeIcon.EyeSlash;
+        private static readonly AwesomeIcon LockIcon     = FontAwesomeIcon.Lock;
+        private static readonly AwesomeIcon UnlockIcon   = FontAwesomeIcon.LockOpen;
+        private static readonly AwesomeIcon FreeCamIcon  = FontAwesomeIcon.Video;
+
+        private bool _cammyAvailable;
+
         public override bool DrawConditions()
-            => objects.Player.Valid && manager._currentMode is DresserMode.Equipment;
+            => objects.Player.Valid;
 
         public override void PreDraw()
         {
@@ -331,74 +442,208 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
                 return;
 
             // Mode toggle
-            if (Im.Button("Switch to Appearance"u8))
-                manager._currentMode = DresserMode.Appearance;
-
-            Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));
-
-            // Dye All
-            equipmentDrawer.Prepare();
-            if (equipmentDrawer.DrawAllStain(out var newAllStain, state.IsLocked))
+            if (manager._currentMode is DresserMode.Equipment)
             {
-                foreach (var slot in EquipSlotExtensions.EqdpSlots)
-                    stateManager.ChangeStains(state, slot, newAllStain, ApplySettings.Manual);
+                if (Im.Button("Switch to Appearance"u8))
+                    manager._currentMode = DresserMode.Appearance;
             }
-
-            Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));
-
-            // Meta toggles: Hat + Head Crest | Visor + Body Crest | Weapon + Shield Crest | Ears
-            using (Im.Group())
+            else
             {
-                EquipmentDrawer.DrawMetaToggle(ToggleDrawData.FromState(MetaIndex.HatState, stateManager, state));
-                EquipmentDrawer.DrawMetaToggle(ToggleDrawData.CrestFromState(CrestFlag.Head, stateManager, state));
-            }
-
-            Im.Line.Same();
-            using (Im.Group())
-            {
-                EquipmentDrawer.DrawMetaToggle(ToggleDrawData.FromState(MetaIndex.VisorState, stateManager, state));
-                EquipmentDrawer.DrawMetaToggle(ToggleDrawData.CrestFromState(CrestFlag.Body, stateManager, state));
-            }
-
-            Im.Line.Same();
-            using (Im.Group())
-            {
-                EquipmentDrawer.DrawMetaToggle(ToggleDrawData.FromState(MetaIndex.WeaponState, stateManager, state));
-                EquipmentDrawer.DrawMetaToggle(ToggleDrawData.CrestFromState(CrestFlag.OffHand, stateManager, state));
-            }
-
-            Im.Line.Same();
-            using (Im.Group())
-            {
-                EquipmentDrawer.DrawMetaToggle(ToggleDrawData.FromState(MetaIndex.EarState, stateManager, state));
-            }
-
-            Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));
-
-            // Icon Drawer settings
-            if (Im.Tree.Header("Icon Drawer"u8))
-            {
-                EquipmentDrawer.DrawOwnedOnlyFilter(config);
-
-                if (Im.Checkbox("Group by Model"u8, config.GroupIconPickerByModel))
+                if (Im.Button("Switch to Equipment"u8))
                 {
-                    config.GroupIconPickerByModel ^= true;
+                    manager._previewService.EndCustomizationPopupFrame(state);
+                    manager._currentMode = DresserMode.Equipment;
+                }
+            }
+
+            Im.Line.Same();
+            if (Im.Button("Reset to Game State"u8))
+                stateManager.ResetState(state, StateSource.Manual, isFinal: true);
+
+            // Detect Cammy availability and free cam state each frame.
+            _cammyAvailable = commandManager.Commands.ContainsKey("/cammy");
+            unsafe
+            {
+                var cam = CameraManager.Instance()->GetActiveCamera();
+                manager._cammyFreeCamActive = _cammyAvailable && cam != null && cam->MaxDistance <= 0.1f;
+            }
+
+            // Right-aligned icon buttons on the same line
+            Im.Line.Same();
+            var available = Im.ContentRegion.Available.X;
+            var iconSize  = Im.Style.FrameHeight;
+            var spacing   = Im.Style.ItemSpacing.X;
+            var needed    = iconSize * 3 + spacing * 2;
+            Im.Cursor.X += available - needed;
+
+            bool isGameUiHidden;
+            unsafe
+            {
+                var module = RaptureAtkModule.Instance();
+                isGameUiHidden = module != null && !module->IsUiVisible;
+            }
+
+            var eyeIcon = isGameUiHidden ? EyeSlashIcon : EyeIcon;
+            if (ImEx.Icon.Button(eyeIcon, isGameUiHidden
+                    ? "Game UI is hidden. Click to show."u8
+                    : "Game UI is visible. Click to hide."u8,
+                size: new Vector2(iconSize, iconSize)))
+            {
+                config.AutoHideGameUi = !isGameUiHidden;
+                config.Save();
+                manager.SetAutoHideUi(config.AutoHideGameUi);
+            }
+
+            Im.Line.Same();
+            var lockIcon = config.LockImmersiveDresserPanels ? LockIcon : UnlockIcon;
+            if (ImEx.Icon.Button(lockIcon, config.LockImmersiveDresserPanels
+                    ? "Panels are locked. Click to unlock."u8
+                    : "Panels are unlocked. Click to lock."u8,
+                size: new Vector2(iconSize, iconSize)))
+            {
+                config.LockImmersiveDresserPanels ^= true;
+                config.Save();
+            }
+
+            Im.Line.Same();
+            if (ImEx.Icon.Button(FreeCamIcon, _cammyAvailable
+                    ? manager._cammyFreeCamActive
+                        ? "Free camera is active. Click to disable."u8
+                        : "Click to enable free camera (Cammy)."u8
+                    : "Freecan requires the Cammy plugin to be installed."u8,
+                disabled: !_cammyAvailable,
+                buttonColor: manager._cammyFreeCamActive ? (ColorParameter)0xFF44AA44u : default,
+                size: new Vector2(iconSize, iconSize)))
+            {
+                commandManager.ProcessCommand("/cammy freecam");
+            }
+
+            if (manager._currentMode is DresserMode.Equipment)
+            {
+                Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));
+
+                // Dye All
+                equipmentDrawer.Prepare();
+                if (equipmentDrawer.DrawAllStain(out var newAllStain, state.IsLocked))
+                {
+                    foreach (var slot in EquipSlotExtensions.EqdpSlots)
+                        stateManager.ChangeStains(state, slot, newAllStain, ApplySettings.Manual);
+                }
+
+                Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));
+
+                // Meta toggles: Hat + Head Crest | Visor + Body Crest | Weapon + Shield Crest | Ears
+                using (Im.Group())
+                {
+                    EquipmentDrawer.DrawMetaToggle(ToggleDrawData.FromState(MetaIndex.HatState, stateManager, state));
+                    EquipmentDrawer.DrawMetaToggle(ToggleDrawData.CrestFromState(CrestFlag.Head, stateManager, state));
+                }
+
+                Im.Line.Same();
+                using (Im.Group())
+                {
+                    EquipmentDrawer.DrawMetaToggle(ToggleDrawData.FromState(MetaIndex.VisorState, stateManager, state));
+                    EquipmentDrawer.DrawMetaToggle(ToggleDrawData.CrestFromState(CrestFlag.Body, stateManager, state));
+                }
+
+                Im.Line.Same();
+                using (Im.Group())
+                {
+                    EquipmentDrawer.DrawMetaToggle(ToggleDrawData.FromState(MetaIndex.WeaponState, stateManager, state));
+                    EquipmentDrawer.DrawMetaToggle(ToggleDrawData.CrestFromState(CrestFlag.OffHand, stateManager, state));
+                }
+
+                Im.Line.Same();
+                using (Im.Group())
+                {
+                    EquipmentDrawer.DrawMetaToggle(ToggleDrawData.FromState(MetaIndex.EarState, stateManager, state));
+                }
+
+                Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));
+
+                // Icon Drawer settings
+                if (Im.Tree.Header("Icon Drawer"u8))
+                {
+                    EquipmentDrawer.DrawOwnedOnlyFilter(config);
+
+                    if (Im.Checkbox("Group by Model"u8, config.GroupIconPickerByModel))
+                    {
+                        config.GroupIconPickerByModel ^= true;
+                        config.Save();
+                    }
+
+                    Im.Tooltip.OnHover(
+                        "When enabled, items that share the same visual model are grouped under a single icon in the picker."u8);
+
+                    Im.Line.New();
+                }
+            }
+
+            Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));
+
+            // Camera settings (hidden while free cam is active since all controls are irrelevant)
+            if (!manager._cammyFreeCamActive && Im.Tree.Header("Camera"u8))
+            {
+                var cameraY = config.ImmersiveDresserCameraY;
+                Im.Item.SetNextWidthScaled(200);
+                if (Im.Slider("##cameraYOffset"u8, ref cameraY, "%.2f"u8, -2f, 2f, SliderFlags.AlwaysClamp))
+                {
+                    config.ImmersiveDresserCameraY = cameraY;
                     config.Save();
                 }
 
-                Im.Tooltip.OnHover(
-                    "When enabled, items that share the same visual model are grouped under a single icon in the picker."u8);
+                Im.Line.Same();
+                Im.Text("Camera Height"u8);
+                Im.Tooltip.OnHover("Adjusts the camera vertical position while the immersive dresser is open."u8);
+
+                if (Im.Checkbox("Allow Camera Clipping"u8, config.AllowCameraClipping))
+                {
+                    config.AllowCameraClipping ^= true;
+                    config.Save();
+                }
+
+                Im.Tooltip.OnHover("When enabled, the camera can clip through the ground."u8);
+
+                if (Im.Checkbox("Disable First Person"u8, config.DisableFirstPerson))
+                {
+                    config.DisableFirstPerson ^= true;
+                    config.Save();
+
+                    // If toggled on while already in first person, force back to third person.
+                    unsafe
+                    {
+                        if (config.DisableFirstPerson)
+                        {
+                            var cam = CameraManager.Instance()->GetActiveCamera();
+                            if (cam != null && cam->ZoomMode == CameraZoomMode.FirstPerson)
+                            {
+                                cam->ZoomMode      = CameraZoomMode.ThirdPerson;
+                                cam->ControlMode   = CameraControlMode.ThirdPersonFixed;
+                                cam->Distance      = cam->MinDistance > 0 ? cam->MinDistance : 1.5f;
+                                cam->InterpDistance = cam->Distance;
+                            }
+                        }
+                    }
+                }
+
+                Im.Tooltip.OnHover("Prevents the camera from entering first-person mode when zooming in."u8);
 
                 Im.Line.New();
             }
 
-            Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));
-
-            // Lock panels toggle
-            if (Im.Checkbox("Lock Panels"u8, config.LockImmersiveDresserPanels))
+            // Character rotation
+            if (Im.Tree.Header("Character Rotation"u8))
             {
-                config.LockImmersiveDresserPanels ^= true;
-                config.Save();
+                manager._rotationDrawer.Draw(objects.Player);
+                Im.Line.New();
+            }
+
+            if (manager._currentMode is DresserMode.Appearance)
+            {
+                Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));
+
+                if (Im.Checkbox("Show Color Customization"u8, manager._showParameters))
+                    manager._showParameters = !manager._showParameters;
             }
 
             Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));

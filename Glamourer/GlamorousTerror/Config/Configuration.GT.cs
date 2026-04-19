@@ -26,7 +26,11 @@ public sealed partial class Configuration
     public bool                  GroupIconPickerByModel     { get; set; } = true;
     public bool                  EnableGameContextMenu      { get; set; } = true;
     public bool                  EnableImmersiveDresser     { get; set; } = true;
+    public bool                  AutoHideGameUi             { get; set; } = false;
     public bool                  LockImmersiveDresserPanels { get; set; } = false;
+    public float                 ImmersiveDresserCameraY    { get; set; } = 0f;
+    public bool                  AllowCameraClipping        { get; set; } = false;
+    public bool                  DisableFirstPerson         { get; set; } = false;
 
     public EquipmentNameLanguage EquipmentNameLanguage        { get; set; } = EquipmentNameLanguage.GameDefault;
     public bool                  CrossLanguageEquipmentSearch { get; set; } = false;

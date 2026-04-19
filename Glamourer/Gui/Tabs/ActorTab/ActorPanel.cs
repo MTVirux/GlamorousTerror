@@ -33,6 +33,7 @@ public sealed class ActorPanel : IPanel
     private readonly CustomizeParameterDrawer _parameterDrawer;
     private readonly AdvancedDyePopup         _advancedDyes;
     private readonly DesignApplier            _designApplier;
+    private readonly RotationDrawer           _rotationDrawer;
 
     public ActorPanel(StateManager stateManager,
         CustomizationDrawer customizationDrawer,
@@ -47,7 +48,8 @@ public sealed class ActorPanel : IPanel
         AdvancedDyePopup advancedDyes,
         EditorHistory editorHistory,
         ActorSelection selection,
-        DesignApplier designApplier)
+        DesignApplier designApplier,
+        RotationDrawer rotationDrawer)
     {
         _stateManager        = stateManager;
         _customizationDrawer = customizationDrawer;
@@ -61,6 +63,7 @@ public sealed class ActorPanel : IPanel
         _advancedDyes        = advancedDyes;
         _selection           = selection;
         _designApplier       = designApplier;
+        _rotationDrawer      = rotationDrawer;
     }
 
     private CustomizeFlag CustomizeApplicationFlags
@@ -132,6 +135,7 @@ public sealed class ActorPanel : IPanel
         DrawCustomizationsHeader();
         DrawEquipmentHeader();
         DrawParameterHeader();
+        DrawRotationHeader();
         DrawDebugData();
     }
 
@@ -245,6 +249,15 @@ public sealed class ActorPanel : IPanel
             return;
 
         _parameterDrawer.Draw(_stateManager, _selection.State!);
+    }
+
+    private void DrawRotationHeader()
+    {
+        using var h = Im.Tree.HeaderId("Rotation###Rotation"u8);
+        if (!h)
+            return;
+
+        _rotationDrawer.Draw(_selection.Actor);
     }
 
     private unsafe void DrawDebugData()
@@ -363,6 +376,8 @@ public sealed class ActorPanel : IPanel
             if (Im.Cursor.X is not 0)
                 Im.Line.New();
         }
+
+        DrawRotationHeader();
     }
 
 
