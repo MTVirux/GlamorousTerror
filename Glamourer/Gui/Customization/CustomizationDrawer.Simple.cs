@@ -334,23 +334,4 @@ public partial class CustomizationDrawer
         ChangeApply   = _currentApply ? ChangeApply | _currentFlag : ChangeApply & ~_currentFlag;
     }
 
-    private void ApplyListHoverPreview(State.StateManager stateManager, State.ActorState state)
-    {
-        if (_listPopupOpen)
-        {
-            previewService.StartSingleCustomizationPreview(state, _listPopupIndex, requiresCtrl: true);
-
-            if (_listHoveredValue.Value != 0)
-                previewService.HandleCustomizationPopupFrame(state, _listPopupIndex, (int)_listHoveredValue.Value, _listHoveredValue, Im.Io.KeyControl);
-            else
-                previewService.HandleCustomizationPopupFrame(state, _listPopupIndex, null, default, Im.Io.KeyControl);
-
-            if (_listSelectionMade)
-            {
-                previewService.MarkPopupSelectionMade();
-                previewService.EndSingleValuePreview(wasSelectionMade: true);
-                _listSelectionMade = false;
-            }
-        }
-    }
 }

@@ -14,7 +14,7 @@ using Penumbra.GameData.Structs;
 
 namespace Glamourer.Gui.Equipment;
 
-public sealed class EquipmentDrawer : IUiService, IDisposable
+public sealed partial class EquipmentDrawer : IUiService, IDisposable
 {
     private const float DefaultWidth = 280;
 
@@ -37,11 +37,6 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
     private Stain?             _draggedStain;
     private EquipItemSlotCache _draggedItem;
     private EquipSlot          _dragTarget;
-
-    // Stain hover preview tracking
-    private EquipSlot _stainPreviewSlot;
-    private int       _stainPreviewIndex;
-    private bool      _stainPreviewValid;
 
     public EquipmentDrawer(FavoriteManager favorites, IDataManager gameData, ItemManager items, TextureService textures,
         Configuration config, GPoseService gPose, AdvancedDyePopup advancedDyes, ItemCopyService itemCopy, DesignApplier designApplier,
@@ -88,24 +83,18 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         {
             _lastPrepareFrame    = frame;
             _stainCombo.ResetFrameState();
-            _stainPreviewValid   = false;
-            _iconPickerPopupOpen = false;
+            GTResetPreviewState();
+            GTResetIconState();
         }
     }
 
-    private void PositionIconPickerPopup()
-    {
-        var windowPos     = Im.Window.Position;
-        var windowSize    = Im.Window.Size;
-        var windowCenterX = windowPos.X + windowSize.X * 0.5f;
-        var viewportCenterX = Im.Viewport.Main.Center.X;
-        var openLeft      = windowCenterX < viewportCenterX;
-        var anchorX       = openLeft ? windowPos.X : windowPos.X + windowSize.X;
-        Im.Window.SetNextPosition(
-            new Vector2(anchorX, _iconPickerClickY),
-            Condition.Appearing,
-            new Vector2(openLeft ? 1 : 0, 0));
-    }
+    // GT partial method declarations (implementations in GlamorousTerror/ partial files)
+    private partial void GTResetPreviewState();
+    private partial void GTResetIconState();
+    private partial void GTCaptureStainSlot(EquipSlot slot, int index);
+    private partial bool GTTryDrawEquipIcon(EquipDrawData data);
+    private partial bool GTTryDrawBonusItemIcon(BonusDrawData data);
+    private partial bool GTTryDrawWeaponsIcon(EquipDrawData mainhand, EquipDrawData offhand, bool allWeapons);
 
     private bool VerifyRestrictedGear(EquipDrawData data)
     {
@@ -124,12 +113,13 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         using var id    = Im.Id.Push((int)equipDrawData.Slot);
         using var style = ImStyleDouble.ItemSpacing.PushX(Im.Style.ItemInnerSpacing.X);
 
-        if (_config.UseIconEquipmentDrawer)
-            DrawEquipIcon(equipDrawData);
-        else if (_config.SmallEquip)
-            DrawEquipSmall(equipDrawData);
-        else
-            DrawEquipNormal(equipDrawData);
+        if (!GTTryDrawEquipIcon(equipDrawData))
+        {
+            if (_config.SmallEquip)
+                DrawEquipSmall(equipDrawData);
+            else
+                DrawEquipNormal(equipDrawData);
+        }
     }
 
     public void DrawBonusItem(BonusDrawData bonusDrawData)
@@ -140,12 +130,13 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         using var id    = Im.Id.Push(100 + (int)bonusDrawData.Slot);
         using var style = ImStyleDouble.ItemSpacing.PushX(Im.Style.ItemInnerSpacing.X);
 
-        if (_config.UseIconEquipmentDrawer)
-            DrawBonusItemIcon(bonusDrawData);
-        else if (_config.SmallEquip)
-            DrawBonusItemSmall(bonusDrawData);
-        else
-            DrawBonusItemNormal(bonusDrawData);
+        if (!GTTryDrawBonusItemIcon(bonusDrawData))
+        {
+            if (_config.SmallEquip)
+                DrawBonusItemSmall(bonusDrawData);
+            else
+                DrawBonusItemNormal(bonusDrawData);
+        }
     }
 
     public void DrawWeapons(EquipDrawData mainhand, EquipDrawData offhand, bool allWeapons)
@@ -162,12 +153,13 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         using var id    = Im.Id.Push("Weapons"u8);
         using var style = ImStyleDouble.ItemSpacing.PushX(Im.Style.ItemInnerSpacing.X);
 
-        if (_config.UseIconEquipmentDrawer)
-            DrawWeaponsIcon(mainhand, offhand, allWeapons);
-        else if (_config.SmallEquip)
-            DrawWeaponsSmall(mainhand, offhand, allWeapons);
-        else
-            DrawWeaponsNormal(mainhand, offhand, allWeapons);
+        if (!GTTryDrawWeaponsIcon(mainhand, offhand, allWeapons))
+        {
+            if (_config.SmallEquip)
+                DrawWeaponsSmall(mainhand, offhand, allWeapons);
+            else
+                DrawWeaponsNormal(mainhand, offhand, allWeapons);
+        }
     }
 
     public static void DrawMetaToggle(in ToggleDrawData data)
@@ -304,452 +296,6 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
 
     #endregion
 
-    #region Icon
-
-    private const int IconPickerColumns = 8;
-
-    private static ReadOnlySpan<byte> IconPickerPopup
-        => "##IconPicker"u8;
-
-    private EquipSlot     _iconPickerSlot;
-    private BonusItemFlag _iconPickerBonusSlot;
-    private bool          _iconPickerIsWeapon;
-    private bool          _iconPickerIsBonus;
-    private bool          _iconPickerPopupOpen;
-    private EquipItem?    _iconPickerHoveredItem;
-    private bool          _iconPickerSelectionMade;
-    private float         _iconPickerClickY;
-
-    internal void DrawEquipIcon(in EquipDrawData data)
-    {
-        var combo = _equipCombo[data.Slot.ToIndex()];
-
-        using (Im.Group())
-        {
-            data.CurrentItem.DrawIcon(_textures, _iconSize, data.Slot);
-            var clicked      = Im.Item.Clicked();
-            var rightClicked = Im.Item.RightClicked();
-
-            if (Im.Item.Hovered())
-            {
-                using var tt = Im.Tooltip.Begin();
-                Im.Text(combo.Label);
-                Im.Text(data.CurrentItem.Name);
-                if (VerifyRestrictedGear(data))
-                    Im.Text("(Restricted)"u8);
-            }
-
-            if (clicked && !data.Locked)
-            {
-                _iconPickerSlot     = data.Slot;
-                _iconPickerIsWeapon = false;
-                _iconPickerIsBonus  = false;
-                _iconPickerClickY   = Im.Item.UpperLeftCorner.Y;
-                Im.Popup.Open(IconPickerPopup);
-            }
-
-            if (ResetOrClear(data.Locked, rightClicked, data.AllowRevert, true, data.CurrentItem, data.GameItem,
-                    ItemManager.NothingItem(data.Slot), out var item))
-                data.SetItem(item);
-
-            DrawGearDragDrop(data);
-            DrawIconStainIndicators(data);
-        }
-
-        if (data.DisplayApplication)
-        {
-            Im.Line.Same();
-            DrawApply(data);
-            Im.Line.Same();
-            DrawApplyStain(data);
-        }
-
-        DrawEquipIconPickerPopup(data);
-    }
-
-    private void DrawEquipIconPickerPopup(in EquipDrawData data)
-    {
-        if (_iconPickerSlot != data.Slot || _iconPickerIsWeapon)
-            return;
-
-        PositionIconPickerPopup();
-        using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.AlwaysAutoResize);
-        if (!popup)
-            return;
-
-        _iconPickerPopupOpen   = true;
-        _iconPickerHoveredItem = null;
-
-        using var style = ImStyleDouble.ItemSpacing.Push(Im.Style.ItemSpacing * 0.25f)
-            .Push(ImStyleSingle.FrameRounding, 0);
-
-        var nothing = ItemManager.NothingItem(data.Slot);
-        DrawIconPickerItem(nothing, data.CurrentItem, data, 0);
-
-        var hasItems = false;
-        if (_items.ItemData.ByType.TryGetValue(data.Slot.ToEquipType(), out var list))
-        {
-            var i = 1;
-            foreach (var equipItem in list)
-            {
-                if (_config.OwnedOnlyComboFilter
-                    && !_itemUnlockManager.IsOwnedFromSources(equipItem.ItemId, _config.OwnedComboFilterSources))
-                    continue;
-
-                hasItems = true;
-                if (i % IconPickerColumns is not 0)
-                    Im.Line.Same();
-                DrawIconPickerItem(equipItem, data.CurrentItem, data, i);
-                ++i;
-            }
-        }
-
-        if (!hasItems)
-            Im.Text("No items match the current filter."u8);
-    }
-
-    private void DrawIconPickerItem(in EquipItem item, in EquipItem current, in EquipDrawData data, int index)
-    {
-        using var id         = Im.Id.Push(index);
-        using var frameColor = item.Id == current.Id
-            ? ImGuiColor.Button.Push(Colors.SelectedRed)
-            : ImGuiColor.Button.Push(ImGuiColor.Button.Get());
-
-        var (ptr, textureSize, empty) = _textures.GetIcon(item, data.Slot);
-        if (Im.Image.Button(ptr, _iconSize))
-        {
-            data.SetItem(item);
-            _iconPickerSelectionMade = true;
-            Im.Popup.CloseCurrent();
-        }
-
-        if (Im.Item.Hovered())
-        {
-            _iconPickerHoveredItem = item;
-            using var tt = Im.Tooltip.Begin();
-            Im.Text(item.Name);
-            if (!empty)
-                Im.Image.Draw(ptr, textureSize);
-        }
-    }
-
-    internal void DrawBonusItemIcon(in BonusDrawData data)
-    {
-        var combo = _bonusItemCombo[data.Slot.ToIndex()];
-
-        using (Im.Group())
-        {
-            data.CurrentItem.DrawIcon(_textures, _iconSize, data.Slot);
-            var clicked      = Im.Item.Clicked();
-            var rightClicked = Im.Item.RightClicked();
-
-            if (Im.Item.Hovered())
-            {
-                using var tt = Im.Tooltip.Begin();
-                Im.Text(combo.Label);
-                Im.Text(data.CurrentItem.Name);
-            }
-
-            if (clicked && !data.Locked)
-            {
-                _iconPickerBonusSlot = data.Slot;
-                _iconPickerIsWeapon  = false;
-                _iconPickerIsBonus   = true;
-                _iconPickerClickY    = Im.Item.UpperLeftCorner.Y;
-                Im.Popup.Open(IconPickerPopup);
-            }
-
-            if (ResetOrClear(data.Locked, rightClicked, data.AllowRevert, true, data.CurrentItem, data.GameItem,
-                    EquipItem.BonusItemNothing(data.Slot), out var item))
-                data.SetItem(item);
-        }
-
-        if (data.DisplayApplication)
-        {
-            Im.Line.Same();
-            DrawApply(data);
-        }
-
-        DrawBonusIconPickerPopup(data);
-    }
-
-    private void DrawBonusIconPickerPopup(in BonusDrawData data)
-    {
-        if (_iconPickerBonusSlot != data.Slot || _iconPickerIsWeapon)
-            return;
-
-        PositionIconPickerPopup();
-        using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.AlwaysAutoResize);
-        if (!popup)
-            return;
-
-        _iconPickerPopupOpen   = true;
-        _iconPickerHoveredItem = null;
-
-        using var style = ImStyleDouble.ItemSpacing.Push(Im.Style.ItemSpacing * 0.25f)
-            .Push(ImStyleSingle.FrameRounding, 0);
-
-        var nothing = EquipItem.BonusItemNothing(data.Slot);
-        DrawBonusIconPickerItem(nothing, data.CurrentItem, data, 0);
-
-        var hasItems = false;
-        if (_items.ItemData.ByType.TryGetValue(data.Slot.ToEquipType(), out var list))
-        {
-            var i = 1;
-            foreach (var equipItem in list)
-            {
-                if (_config.OwnedOnlyComboFilter
-                    && !_itemUnlockManager.IsOwnedFromSources(equipItem.ItemId, _config.OwnedComboFilterSources))
-                    continue;
-
-                hasItems = true;
-                if (i % IconPickerColumns is not 0)
-                    Im.Line.Same();
-                DrawBonusIconPickerItem(equipItem, data.CurrentItem, data, i);
-                ++i;
-            }
-        }
-
-        if (!hasItems)
-            Im.Text("No items match the current filter."u8);
-    }
-
-    private void DrawBonusIconPickerItem(in EquipItem item, in EquipItem current, in BonusDrawData data, int index)
-    {
-        using var id         = Im.Id.Push(index);
-        using var frameColor = item.Id == current.Id
-            ? ImGuiColor.Button.Push(Colors.SelectedRed)
-            : ImGuiColor.Button.Push(ImGuiColor.Button.Get());
-
-        var (ptr, textureSize, empty) = _textures.GetIcon(item, data.Slot);
-        if (Im.Image.Button(ptr, _iconSize))
-        {
-            data.SetItem(item);
-            _iconPickerSelectionMade = true;
-            Im.Popup.CloseCurrent();
-        }
-
-        if (Im.Item.Hovered())
-        {
-            _iconPickerHoveredItem = item;
-            using var tt = Im.Tooltip.Begin();
-            Im.Text(item.Name);
-            if (!empty)
-                Im.Image.Draw(ptr, textureSize);
-        }
-    }
-
-    private void DrawWeaponsIcon(EquipDrawData mainhand, EquipDrawData offhand, bool allWeapons)
-    {
-        DrawWeaponSlotIcon(ref mainhand, ref offhand, allWeapons, true);
-
-        if (offhand.CurrentItem.Type is not FullEquipType.Unknown)
-        {
-            Im.Line.Same();
-            DrawWeaponSlotIcon(ref mainhand, ref offhand, allWeapons, false);
-        }
-    }
-
-    /// <summary> Draw a single weapon slot icon without the DrawWeapons wrapper, for custom panel layouts. </summary>
-    public void DrawSingleWeaponIcon(ref EquipDrawData mainhand, ref EquipDrawData offhand, bool allWeapons, bool isMainhand)
-    {
-        if (_config.HideApplyCheckmarks)
-        {
-            mainhand.DisplayApplication = false;
-            offhand.DisplayApplication  = false;
-        }
-
-        using var id    = Im.Id.Push(isMainhand ? "WeaponMH"u8 : "WeaponOH"u8);
-        using var style = ImStyleDouble.ItemSpacing.PushX(Im.Style.ItemInnerSpacing.X);
-        DrawWeaponSlotIcon(ref mainhand, ref offhand, allWeapons, isMainhand);
-    }
-
-    private void DrawWeaponSlotIcon(ref EquipDrawData mainhand, ref EquipDrawData offhand, bool allWeapons, bool isMainhand)
-    {
-        ref var data = ref isMainhand ? ref mainhand : ref offhand;
-        var comboType = isMainhand
-            ? (allWeapons ? FullEquipType.Unknown : mainhand.CurrentItem.Type)
-            : offhand.CurrentItem.Type;
-
-        if (!_weaponCombo.TryGetValue(comboType, out var combo))
-            return;
-
-        var slot = isMainhand ? EquipSlot.MainHand : EquipSlot.OffHand;
-
-        using (Im.Group())
-        {
-            data.CurrentItem.DrawIcon(_textures, _iconSize, slot);
-            var clicked = Im.Item.Clicked();
-
-            if (Im.Item.Hovered())
-            {
-                using var tt = Im.Tooltip.Begin();
-                Im.Text(combo.Label);
-                Im.Text(data.CurrentItem.Name);
-                if (allWeapons && isMainhand)
-                    Im.Text($"({data.CurrentItem.Type.ToName()})");
-            }
-
-            if (clicked && !data.Locked)
-            {
-                _iconPickerSlot     = slot;
-                _iconPickerIsWeapon = true;
-                _iconPickerClickY   = Im.Item.UpperLeftCorner.Y;
-                Im.Popup.Open(IconPickerPopup);
-            }
-
-            DrawGearDragDrop(data);
-            DrawIconStainIndicators(data);
-        }
-
-        if (data.DisplayApplication)
-        {
-            Im.Line.Same();
-            DrawApply(data);
-            Im.Line.Same();
-            DrawApplyStain(data);
-        }
-
-        DrawWeaponIconPickerPopup(ref mainhand, ref offhand, isMainhand, comboType, slot);
-    }
-
-    private void DrawWeaponIconPickerPopup(ref EquipDrawData mainhand, ref EquipDrawData offhand, bool isMainhand,
-        FullEquipType comboType, EquipSlot slot)
-    {
-        if (_iconPickerSlot != slot || !_iconPickerIsWeapon)
-            return;
-
-        PositionIconPickerPopup();
-        using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.AlwaysAutoResize);
-        if (!popup)
-            return;
-
-        _iconPickerPopupOpen   = true;
-        _iconPickerHoveredItem = null;
-
-        using var style = ImStyleDouble.ItemSpacing.Push(Im.Style.ItemSpacing * 0.25f)
-            .Push(ImStyleSingle.FrameRounding, 0);
-
-        ref var data    = ref isMainhand ? ref mainhand : ref offhand;
-        var     current = data.CurrentItem;
-        var     i       = 0;
-
-        if (comboType is FullEquipType.Unknown)
-        {
-            foreach (var t in FullEquipType.Values.Where(e => e.ToSlot() is EquipSlot.MainHand))
-            {
-                if (!_items.ItemData.ByType.TryGetValue(t, out var l))
-                    continue;
-
-                foreach (var item in l)
-                {
-                    if (_config.OwnedOnlyComboFilter
-                        && !_itemUnlockManager.IsOwnedFromSources(item.ItemId, _config.OwnedComboFilterSources))
-                        continue;
-
-                    if (i > 0 && i % IconPickerColumns is not 0)
-                        Im.Line.Same();
-                    DrawWeaponIconPickerItem(item, current, slot, ref mainhand, ref offhand, i);
-                    ++i;
-                }
-            }
-        }
-        else if (_items.ItemData.ByType.TryGetValue(comboType, out var list))
-        {
-            foreach (var item in list)
-            {
-                if (_config.OwnedOnlyComboFilter
-                    && !_itemUnlockManager.IsOwnedFromSources(item.ItemId, _config.OwnedComboFilterSources))
-                    continue;
-
-                if (i > 0 && i % IconPickerColumns is not 0)
-                    Im.Line.Same();
-                DrawWeaponIconPickerItem(item, current, slot, ref mainhand, ref offhand, i);
-                ++i;
-            }
-        }
-
-        if (i == 0)
-            Im.Text("No items match the current filter."u8);
-    }
-
-    private void DrawWeaponIconPickerItem(in EquipItem item, in EquipItem current, EquipSlot slot,
-        ref EquipDrawData mainhand, ref EquipDrawData offhand, int index)
-    {
-        using var id         = Im.Id.Push(index);
-        using var frameColor = item.Id == current.Id
-            ? ImGuiColor.Button.Push(Colors.SelectedRed)
-            : ImGuiColor.Button.Push(ImGuiColor.Button.Get());
-
-        var (ptr, textureSize, empty) = _textures.GetIcon(item, slot);
-        if (Im.Image.Button(ptr, _iconSize))
-        {
-            if (slot is EquipSlot.MainHand)
-            {
-                mainhand.SetItem(item);
-                if (item.Type.ValidOffhand() != mainhand.CurrentItem.Type.ValidOffhand())
-                {
-                    offhand.CurrentItem = _items.GetDefaultOffhand(item);
-                    offhand.SetItem(offhand.CurrentItem);
-                }
-
-                mainhand.CurrentItem = item;
-            }
-            else
-            {
-                offhand.SetItem(item);
-            }
-
-            _iconPickerSelectionMade = true;
-            Im.Popup.CloseCurrent();
-        }
-
-        if (Im.Item.Hovered())
-        {
-            _iconPickerHoveredItem = item;
-            using var tt = Im.Tooltip.Begin();
-            Im.Text(item.Name);
-            if (!empty)
-                Im.Image.Draw(ptr, textureSize);
-        }
-    }
-
-    private void DrawIconStainIndicators(in EquipDrawData data)
-    {
-        var stainSize = new Vector2(Im.Style.FrameHeight * 0.6f);
-        foreach (var (index, stainId) in data.CurrentStains.Index())
-        {
-            if (index > 0)
-                Im.Line.SameInner();
-
-            if (_stainData.TryGetValue(stainId, out var stain) && stain.RowIndex.Id is not 0)
-            {
-                var pos = Im.Cursor.ScreenPosition;
-                Im.Window.DrawList.Shape.RectangleFilled(pos, pos + stainSize, stain.RgbaColor, 3 * Im.Style.GlobalScale);
-                Im.Dummy(stainSize);
-            }
-            else
-            {
-                var pos = Im.Cursor.ScreenPosition;
-                Im.Window.DrawList.Shape.RectangleFilled(pos, pos + stainSize, ImGuiColor.FrameBackground.Get(),
-                    3 * Im.Style.GlobalScale);
-                Im.Dummy(stainSize);
-            }
-
-            // Stain tooltip on hover.
-            if (Im.Item.Hovered())
-            {
-                using var tt = Im.Tooltip.Begin();
-                if (_stainData.TryGetValue(stainId, out var s) && s.RowIndex.Id is not 0)
-                    Im.Text(s.Name);
-                else
-                    Im.Text("No Dye"u8);
-            }
-        }
-    }
-
-    #endregion
-
     #region Normal
 
     private void DrawEquipNormal(in EquipDrawData equipDrawData)
@@ -882,14 +428,9 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
                 ? _stainCombo.Draw("##stain"u8, stain, out var newStain, Im.Style.FrameHeight)
                 : _stainCombo.Draw("##stain"u8, stain, out newStain,     width);
 
-            // Track which slot/index the stain popup is open for.
-            // Only capture on the false→true transition to avoid clobbering by later Draw calls.
+            // GT: Track which slot/index the stain popup is open for.
             if (!wasPopupOpen && _stainCombo.IsPopupOpen)
-            {
-                _stainPreviewSlot  = data.Slot;
-                _stainPreviewIndex = index;
-                _stainPreviewValid = true;
-            }
+                GTCaptureStainSlot(data.Slot, index);
 
             _itemCopy.HandleCopyPaste(data, index);
             if (!change)
@@ -1199,38 +740,6 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
             "Whether the filter in the item and dye combos should persist after a selection or clear after an item or dye was selected.\n\nThis can also be used to restrict the mouse-wheel scrolling to matching items."u8);
     }
 
-    public static void DrawOwnedOnlyFilter(Configuration config)
-    {
-        if (Im.Checkbox("Show Only Owned Items in Combos"u8, config.OwnedOnlyComboFilter))
-        {
-            config.OwnedOnlyComboFilter ^= true;
-            config.Save();
-        }
-        Im.Tooltip.OnHover(
-            "When enabled, equipment, weapon, and bonus item combo dropdowns will only show items you own.\nUse the source toggles below to control which sources count."u8);
-
-        if (config.OwnedOnlyComboFilter)
-        {
-            using var indent = Im.Indent();
-            DrawSourceToggle(config, "Inventory"u8,         ItemUnlockManager.ItemSource.Inventory);
-            DrawSourceToggle(config, "Glamour Dresser"u8,   ItemUnlockManager.ItemSource.GlamourDresser);
-            DrawSourceToggle(config, "Armoire"u8,           ItemUnlockManager.ItemSource.Armoire);
-            DrawSourceToggle(config, "Saddlebags"u8,        ItemUnlockManager.ItemSource.Saddlebags);
-            DrawSourceToggle(config, "Retainers"u8,         ItemUnlockManager.ItemSource.Retainers);
-            DrawSourceToggle(config, "Quest / Achievement"u8, ItemUnlockManager.ItemSource.QuestAchievement);
-        }
-    }
-
-    private static void DrawSourceToggle(Configuration config, ReadOnlySpan<byte> label, ItemUnlockManager.ItemSource flag)
-    {
-        var enabled = (config.OwnedComboFilterSources & flag) != 0;
-        if (Im.Checkbox(label, enabled))
-        {
-            config.OwnedComboFilterSources ^= flag;
-            config.Save();
-        }
-    }
-
     public void Dispose()
     {
         _stainCombo.Dispose();
@@ -1267,146 +776,5 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         Im.Separator();
         Im.Cursor.Y += Im.Style.ItemInnerSpacing.Y;
         Im.Text("This design has advanced dyes setup for this slot."u8);
-    }
-
-    public void ApplyHoverPreview(State.StateManager stateManager, State.ActorState state)
-    {
-        // Equipment combos
-        for (var i = 0; i < _equipCombo.Length; i++)
-        {
-            var combo = _equipCombo[i];
-            if (combo.IsPopupOpen)
-            {
-                var slot = EquipSlotExtensions.EqdpSlots[i];
-                if (combo.HoveredItem is { } hoveredItem)
-                    _previewService.PreviewSingleItem(state, slot, hoveredItem);
-                else
-                    _previewService.StartSingleItemPreview(state, slot);
-
-                if (combo.ItemSelected)
-                {
-                    _previewService.EndSingleValuePreview(wasSelectionMade: true);
-                    combo.ResetSelection();
-                }
-
-                return;
-            }
-
-            if (combo.ItemSelected)
-            {
-                _previewService.EndSingleValuePreview(wasSelectionMade: true);
-                combo.ResetSelection();
-            }
-        }
-
-        // Bonus item combos
-        foreach (var (combo, slot) in _bonusItemCombo.Zip(BonusExtensions.AllFlags))
-        {
-            if (combo.IsPopupOpen)
-            {
-                if (combo.HoveredItem is { } hoveredItem)
-                    _previewService.PreviewSingleBonusItem(state, slot, hoveredItem);
-                else
-                    _previewService.StartSingleBonusItemPreview(state, slot);
-
-                if (combo.ItemSelected)
-                {
-                    _previewService.EndSingleValuePreview(wasSelectionMade: true);
-                    combo.ResetSelection();
-                }
-
-                return;
-            }
-
-            if (combo.ItemSelected)
-            {
-                _previewService.EndSingleValuePreview(wasSelectionMade: true);
-                combo.ResetSelection();
-            }
-        }
-
-        // Weapon combos
-        foreach (var (type, combo) in _weaponCombo)
-        {
-            if (combo.IsPopupOpen)
-            {
-                var slot = type.ToSlot();
-                if (combo.HoveredItem is { } hoveredItem)
-                    _previewService.PreviewSingleItem(state, slot, hoveredItem);
-                else
-                    _previewService.StartSingleItemPreview(state, slot);
-
-                if (combo.ItemSelected)
-                {
-                    _previewService.EndSingleValuePreview(wasSelectionMade: true);
-                    combo.ResetSelection();
-                }
-
-                return;
-            }
-
-            if (combo.ItemSelected)
-            {
-                _previewService.EndSingleValuePreview(wasSelectionMade: true);
-                combo.ResetSelection();
-            }
-        }
-
-        // Stain combo
-        if (_stainCombo.IsPopupOpen && _stainPreviewValid)
-        {
-            _previewService.StartSingleStainPreview(state, _stainPreviewSlot, _stainPreviewIndex);
-
-            if (_stainCombo.HoveredStain is { } hoveredStain)
-                _previewService.PreviewSingleStain(state, _stainPreviewSlot, _stainPreviewIndex, hoveredStain);
-
-            if (_stainCombo.StainSelected)
-            {
-                _previewService.EndSingleValuePreview(wasSelectionMade: true);
-                _stainCombo.ResetSelection();
-            }
-
-            return;
-        }
-
-        if (_stainCombo.StainSelected)
-        {
-            _previewService.EndSingleValuePreview(wasSelectionMade: true);
-            _stainCombo.ResetSelection();
-        }
-
-        // Icon picker popup (requires CTRL for preview, like customization popups)
-        if (_iconPickerPopupOpen)
-        {
-            if (_iconPickerIsBonus)
-                _previewService.StartSingleBonusItemPreview(state, _iconPickerBonusSlot);
-            else
-                _previewService.StartSingleItemPreview(state, _iconPickerSlot);
-
-            if (Im.Io.KeyControl && _iconPickerHoveredItem is { } hovered)
-            {
-                if (_iconPickerIsBonus)
-                    _previewService.PreviewSingleBonusItem(state, _iconPickerBonusSlot, hovered);
-                else
-                    _previewService.PreviewSingleItem(state, _iconPickerSlot, hovered);
-            }
-            else
-            {
-                _previewService.RestoreSingleValuePreview();
-            }
-
-            if (_iconPickerSelectionMade)
-            {
-                _previewService.EndSingleValuePreview(wasSelectionMade: true);
-                _iconPickerSelectionMade = false;
-            }
-
-            return;
-        }
-
-        // No equipment popup open — end only if the active preview is equipment-related
-        if (_previewService.State.IsActive &&
-            _previewService.State.Type is PreviewType.SingleItem or PreviewType.SingleStain)
-            _previewService.EndSingleValuePreview();
     }
 }

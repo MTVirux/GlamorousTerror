@@ -180,23 +180,4 @@ public partial class CustomizationDrawer
         return (current, custom!.Value);
     }
 
-    private void ApplyColorHoverPreview(State.StateManager stateManager, State.ActorState state)
-    {
-        if (_colorPopupOpen)
-        {
-            previewService.StartSingleCustomizationPreview(state, _colorPopupIndex, requiresCtrl: true);
-
-            if (_colorHoveredValue.Value != 0)
-                previewService.HandleCustomizationPopupFrame(state, _colorPopupIndex, (int)_colorHoveredValue.Value, _colorHoveredValue, Im.Io.KeyControl);
-            else
-                previewService.HandleCustomizationPopupFrame(state, _colorPopupIndex, null, default, Im.Io.KeyControl);
-
-            if (_colorSelectionMade)
-            {
-                previewService.MarkPopupSelectionMade();
-                previewService.EndSingleValuePreview(wasSelectionMade: true);
-                _colorSelectionMade = false;
-            }
-        }
-    }
 }

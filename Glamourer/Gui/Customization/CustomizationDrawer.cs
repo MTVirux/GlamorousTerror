@@ -196,15 +196,5 @@ public sealed partial class CustomizationDrawer(
             : null;
     }
 
-    public void ApplyHoverPreview(State.StateManager stateManager, State.ActorState state)
-    {
-        if (_iconPopupOpen)
-            ApplyIconHoverPreview(stateManager, state);
-        else if (_listPopupOpen)
-            ApplyListHoverPreview(stateManager, state);
-        else if (_colorPopupOpen)
-            ApplyColorHoverPreview(stateManager, state);
-        else
-            previewService.EndCustomizationPopupFrame(state);
-    }
+
 }

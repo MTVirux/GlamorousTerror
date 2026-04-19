@@ -241,23 +241,4 @@ public partial class CustomizationDrawer
         }
     }
 
-    private void ApplyIconHoverPreview(State.StateManager stateManager, State.ActorState state)
-    {
-        if (_iconPopupOpen)
-        {
-            previewService.StartSingleCustomizationPreview(state, _iconPopupIndex, requiresCtrl: true);
-
-            if (_iconHoveredValue.Value != 0)
-                previewService.HandleCustomizationPopupFrame(state, _iconPopupIndex, (int)_iconHoveredValue.Value, _iconHoveredValue, Im.Io.KeyControl);
-            else
-                previewService.HandleCustomizationPopupFrame(state, _iconPopupIndex, null, default, Im.Io.KeyControl);
-
-            if (_iconSelectionMade)
-            {
-                previewService.MarkPopupSelectionMade();
-                previewService.EndSingleValuePreview(wasSelectionMade: true);
-                _iconSelectionMade = false;
-            }
-        }
-    }
 }

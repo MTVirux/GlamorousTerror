@@ -6,7 +6,7 @@ using Penumbra.GameData.Structs;
 
 namespace Glamourer.Gui.Equipment;
 
-public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, IDisposable
+public abstract partial class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, IDisposable
 {
     private readonly Im.StyleDisposable _style = new();
     public abstract  StringU8           Label { get; }
@@ -87,40 +87,22 @@ public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, 
         public readonly StringPair Model = new($"({item.PrimaryId.Id}-{item.Variant.Id})");
     }
 
-    protected sealed class ItemFilter(ItemNameService itemNameService, Configuration config, ItemUnlockManager itemUnlockManager) : PartwiseFilterBase<CacheItem>
+    protected sealed partial class ItemFilter(ItemNameService itemNameService, Configuration config, ItemUnlockManager itemUnlockManager) : PartwiseFilterBase<CacheItem>
     {
+        // GT partial method declarations (implementations in GlamorousTerror/ partial files)
+        private partial bool GTPreFilterItem(in CacheItem item);
+        private partial bool GTFallbackNameMatch(in CacheItem item);
+
         public override bool WouldBeVisible(in CacheItem item, int globalIndex)
         {
-            if (config.OwnedOnlyComboFilter && !itemUnlockManager.IsOwnedFromSources(item.Item.ItemId, config.OwnedComboFilterSources))
+            if (!GTPreFilterItem(in item))
                 return false;
 
-            return base.WouldBeVisible(in item, globalIndex) || WouldBeVisible(item.Model.Utf16) || MatchesCrossLanguage(in item);
+            return base.WouldBeVisible(in item, globalIndex) || WouldBeVisible(item.Model.Utf16) || GTFallbackNameMatch(in item);
         }
 
         protected override string ToFilterString(in CacheItem item, int globalIndex)
             => item.Name.Utf16;
-
-        private bool MatchesCrossLanguage(in CacheItem item)
-        {
-            if (!config.CrossLanguageEquipmentSearch || Parts.Length is 0)
-                return false;
-
-            var itemId = item.Item.ItemId.Id;
-            if (itemId is 0 || itemId >= uint.MaxValue - 512)
-                return false;
-
-            var allNames = itemNameService.GetAllLanguageNames(itemId);
-            if (allNames == null)
-                return false;
-
-            foreach (var name in allNames)
-            {
-                if (!string.IsNullOrEmpty(name) && WouldBeVisible(name))
-                    return true;
-            }
-
-            return false;
-        }
     }
 
     protected override FilterComboBaseCache<CacheItem> CreateCache()
