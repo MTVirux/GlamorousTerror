@@ -8,6 +8,7 @@ using Glamourer.Designs.Special;
 using Glamourer.GameData;
 using Glamourer.Gui;
 using Glamourer.Gui.Tabs.DesignTab;
+using Glamourer.Gui;
 using Glamourer.Interop.Penumbra;
 using Glamourer.State;
 using ImSharp;
@@ -42,12 +43,13 @@ public class CommandService : IDisposable, IApiService
     private readonly DesignConverter    _converter;
     private readonly DesignResolver     _resolver;
     private readonly PenumbraService    _penumbra;
+    private readonly ImmersiveDresserManager _immersiveDresser;
 
     public CommandService(ICommandManager commands, MainWindow mainWindow, IChatGui chat, ActorManager actors, ActorObjectManager objects,
         AutoDesignApplier autoDesignApplier, StateManager stateManager, DesignManager designManager, DesignConverter converter,
         DesignFileSystem designFileSystem, AutoDesignManager autoDesignManager, Configuration config, ModSettingApplier modApplier,
         ItemManager items, RandomDesignGenerator randomDesign, CustomizeService customizeService, DesignFileSystemDrawer designDrawer,
-        QuickDesignCombo quickDesignCombo, DesignResolver resolver, PenumbraService penumbra)
+        QuickDesignCombo quickDesignCombo, DesignResolver resolver, PenumbraService penumbra, ImmersiveDresserManager immersiveDresser)
     {
         _commands          = commands;
         _mainWindow        = mainWindow;
@@ -65,6 +67,7 @@ public class CommandService : IDisposable, IApiService
         _customizeService  = customizeService;
         _resolver          = resolver;
         _penumbra          = penumbra;
+        _immersiveDresser  = immersiveDresser;
 
         _commands.AddHandler(MainCommandString, new CommandInfo(OnGlamourer) { HelpMessage = "Open or close the Glamourer window." });
         _commands.AddHandler(MainCommandAlias, new CommandInfo(OnGlamourer) { HelpMessage = "Open or close the Glamourer window." });
@@ -99,6 +102,9 @@ public class CommandService : IDisposable, IApiService
                 case "unlock":
                     _config.Ephemeral.LockMainWindow = !_config.Ephemeral.LockMainWindow;
                     _config.Ephemeral.Save();
+                    return;
+                case "dresser":
+                    _immersiveDresser.Open();
                     return;
                 case "automation":
                     var newValue = !_config.EnableAutoDesigns;
