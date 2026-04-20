@@ -42,6 +42,7 @@ public sealed partial class EquipmentDrawer
     private bool               _iconPickerNeutralJobFilter;
     private int                _iconPickerDyeChannelFilter = -1;
     private IconPickerSortMode _iconPickerSortMode         = IconPickerSortMode.AlphabeticalAsc;
+    private bool               _iconPickerShowSettings;
 
     private partial void GTResetIconState()
     {
@@ -104,12 +105,12 @@ public sealed partial class EquipmentDrawer
 
     private void DrawIconPickerFilterBar()
     {
-        // Row 1: Name filter + Favorites toggle + Keep-open toggle
+        // Row 1: Name filter + Favorites toggle + Keep-open toggle + Settings toggle
         if (Im.Window.Appearing)
             Im.Keyboard.SetFocusHere();
 
         var buttonWidth = Im.Style.FrameHeight + Im.Style.ItemSpacing.X;
-        var inputWidth  = Im.ContentRegion.Available.X - buttonWidth * 2;
+        var inputWidth  = Im.ContentRegion.Available.X - buttonWidth * 3;
         Im.Item.SetNextWidth(inputWidth);
         Im.Input.Text("##IconPickerName"u8, ref _iconPickerNameFilter, "Search..."u8);
 
@@ -135,6 +136,30 @@ public sealed partial class EquipmentDrawer
             }
         }
         Im.Tooltip.OnHover("Keep picker open after selecting an item."u8);
+
+        Im.Line.Same();
+        using (var color = _iconPickerShowSettings
+                   ? ImGuiColor.Text.Push(0xFF00CFFFu)
+                   : ImGuiColor.Text.Push(ImGuiColor.TextDisabled.Get()))
+        {
+            if (Im.Button("\u2699##IconPickerSettings"u8, new Vector2(Im.Style.FrameHeight)))
+                _iconPickerShowSettings = !_iconPickerShowSettings;
+        }
+        Im.Tooltip.OnHover("Toggle icon picker settings."u8);
+
+        // Inline settings panel
+        if (_iconPickerShowSettings)
+        {
+            DrawOwnedOnlyFilter(_config);
+
+            if (Im.Checkbox("Group by Model"u8, _config.GroupIconPickerByModel))
+            {
+                _config.GroupIconPickerByModel ^= true;
+                _config.Save();
+            }
+            Im.Tooltip.OnHover(
+                "When enabled, items that share the same visual model are grouped under a single icon in the picker."u8);
+        }
 
         // Row 2: Job filter | Dye channel filter | Sort
         var comboWidth = (Im.ContentRegion.Available.X - 2 * Im.Style.ItemSpacing.X) / 3f;
