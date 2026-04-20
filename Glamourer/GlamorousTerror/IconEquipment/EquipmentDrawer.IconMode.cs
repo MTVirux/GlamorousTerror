@@ -1,4 +1,5 @@
 using System.Numerics;
+using Dalamud.Interface;
 using Glamourer.Config;
 using Glamourer.Services;
 using Glamourer.Unlocks;
@@ -138,14 +139,10 @@ public sealed partial class EquipmentDrawer
         Im.Tooltip.OnHover("Keep picker open after selecting an item."u8);
 
         Im.Line.Same();
-        using (var color = _iconPickerShowSettings
-                   ? ImGuiColor.Text.Push(0xFF00CFFFu)
-                   : ImGuiColor.Text.Push(ImGuiColor.TextDisabled.Get()))
-        {
-            if (Im.Button("\u2699##IconPickerSettings"u8, new Vector2(Im.Style.FrameHeight)))
-                _iconPickerShowSettings = !_iconPickerShowSettings;
-        }
-        Im.Tooltip.OnHover("Toggle icon picker settings."u8);
+        var settingsColor = _iconPickerShowSettings ? 0xFF00CFFFu : ImGuiColor.TextDisabled.Get();
+        if (ImEx.Icon.Button(FontAwesomeIcon.Cog.Icon(), "Toggle icon picker settings."u8, false, default, settingsColor,
+                new Vector2(Im.Style.FrameHeight)))
+            _iconPickerShowSettings = !_iconPickerShowSettings;
 
         // Inline settings panel
         if (_iconPickerShowSettings)
