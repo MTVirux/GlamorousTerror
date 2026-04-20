@@ -88,6 +88,10 @@ public sealed partial class SettingsTab
                 "When enabled, items that share the same visual model are grouped under a single icon in the picker."u8,
                 config.GroupIconPickerByModel, v => config.GroupIconPickerByModel = v);
 
+            Checkbox("Keep Picker Open"u8,
+                "When enabled, the icon picker popup stays open after selecting an item instead of closing automatically."u8,
+                config.KeepIconPickerOpen, v => config.KeepIconPickerOpen = v);
+
             var maxRows = config.IconPickerMaxRows;
             Im.Item.SetNextWidthScaled(200);
             if (Im.Slider("##iconPickerMaxRows"u8, ref maxRows, "%i"u8, 1, 20, SliderFlags.AlwaysClamp))

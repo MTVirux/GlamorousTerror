@@ -89,12 +89,12 @@ public sealed partial class EquipmentDrawer
 
     private void DrawIconPickerFilterBar()
     {
-        // Row 1: Name filter + Favorites toggle
+        // Row 1: Name filter + Favorites toggle + Keep-open toggle
         if (Im.Window.Appearing)
             Im.Keyboard.SetFocusHere();
 
-        var starWidth   = Im.Style.FrameHeight + Im.Style.ItemSpacing.X;
-        var inputWidth  = Im.ContentRegion.Available.X - starWidth;
+        var buttonWidth = Im.Style.FrameHeight + Im.Style.ItemSpacing.X;
+        var inputWidth  = Im.ContentRegion.Available.X - buttonWidth * 2;
         Im.Item.SetNextWidth(inputWidth);
         Im.Input.Text("##IconPickerName"u8, ref _iconPickerNameFilter, "Search..."u8);
 
@@ -107,6 +107,19 @@ public sealed partial class EquipmentDrawer
                 _iconPickerFavoritesOnly = !_iconPickerFavoritesOnly;
         }
         Im.Tooltip.OnHover("Toggle favorites-only filter."u8);
+
+        Im.Line.Same();
+        using (var color = _config.KeepIconPickerOpen
+                   ? ImGuiColor.Text.Push(0xFF00CFFFu)
+                   : ImGuiColor.Text.Push(ImGuiColor.TextDisabled.Get()))
+        {
+            if (Im.Button("K##IconPickerKeep"u8, new Vector2(Im.Style.FrameHeight)))
+            {
+                _config.KeepIconPickerOpen = !_config.KeepIconPickerOpen;
+                _config.Save();
+            }
+        }
+        Im.Tooltip.OnHover("Keep picker open after selecting an item."u8);
 
         // Row 2: Job filter | Dye channel filter | Sort
         var comboWidth = (Im.ContentRegion.Available.X - 2 * Im.Style.ItemSpacing.X) / 3f;
@@ -392,7 +405,8 @@ public sealed partial class EquipmentDrawer
         {
             data.SetItem(item);
             _iconPickerSelectionMade = true;
-            Im.Popup.CloseCurrent();
+            if (!_config.KeepIconPickerOpen)
+                Im.Popup.CloseCurrent();
         }
 
         if (Im.Item.Hovered())
@@ -510,7 +524,8 @@ public sealed partial class EquipmentDrawer
         {
             data.SetItem(item);
             _iconPickerSelectionMade = true;
-            Im.Popup.CloseCurrent();
+            if (!_config.KeepIconPickerOpen)
+                Im.Popup.CloseCurrent();
         }
 
         if (Im.Item.Hovered())
@@ -703,7 +718,8 @@ public sealed partial class EquipmentDrawer
             }
 
             _iconPickerSelectionMade = true;
-            Im.Popup.CloseCurrent();
+            if (!_config.KeepIconPickerOpen)
+                Im.Popup.CloseCurrent();
         }
 
         if (Im.Item.Hovered())
