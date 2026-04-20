@@ -35,6 +35,7 @@ public sealed partial class EquipmentDrawer
     private EquipItem?    _iconPickerHoveredItem;
     private bool          _iconPickerSelectionMade;
     private float         _iconPickerClickY;
+    private int           _iconPickerScrollResetFrames;
 
     // Filter & sort state (session-scoped, not persisted)
     private string             _iconPickerNameFilter       = string.Empty;
@@ -411,6 +412,15 @@ public sealed partial class EquipmentDrawer
         if (!popup)
             return;
 
+        if (Im.Window.Appearing)
+            _iconPickerScrollResetFrames = 2;
+
+        if (_iconPickerScrollResetFrames > 0)
+        {
+            Im.Scroll.Y = 0;
+            --_iconPickerScrollResetFrames;
+        }
+
         _iconPickerPopupOpen   = true;
         _iconPickerHoveredItem = null;
 
@@ -529,6 +539,15 @@ public sealed partial class EquipmentDrawer
         using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.NoMove);
         if (!popup)
             return;
+
+        if (Im.Window.Appearing)
+            _iconPickerScrollResetFrames = 2;
+
+        if (_iconPickerScrollResetFrames > 0)
+        {
+            Im.Scroll.Y = 0;
+            --_iconPickerScrollResetFrames;
+        }
 
         _iconPickerPopupOpen   = true;
         _iconPickerHoveredItem = null;
@@ -683,6 +702,15 @@ public sealed partial class EquipmentDrawer
         using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.NoMove);
         if (!popup)
             return;
+
+        if (Im.Window.Appearing)
+            _iconPickerScrollResetFrames = 2;
+
+        if (_iconPickerScrollResetFrames > 0)
+        {
+            Im.Scroll.Y = 0;
+            --_iconPickerScrollResetFrames;
+        }
 
         _iconPickerPopupOpen   = true;
         _iconPickerHoveredItem = null;
