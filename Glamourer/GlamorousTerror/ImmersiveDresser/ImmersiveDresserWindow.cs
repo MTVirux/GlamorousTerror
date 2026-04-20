@@ -270,6 +270,8 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
                 Condition.FirstUseEver, new Vector2(1f, 0.5f));
             Im.Window.SetNextSize(Vector2.Zero, Condition.Always);
             Flags               = PanelFlags;
+            if (manager._currentMode is DresserMode.Appearance)
+                Flags &= ~(WindowFlags.NoTitleBar | WindowFlags.NoCollapse);
             if (manager._config.LockImmersiveDresserPanels)
                 Flags |= WindowFlags.NoMove;
             RespectCloseHotkey  = true;
@@ -433,7 +435,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
             Im.Window.SetNextPosition(center + new Vector2(0, Im.Viewport.Main.Size.Y * 0.25f),
                 Condition.FirstUseEver, new Vector2(0.5f, 0f));
             Im.Window.SetNextSize(Vector2.Zero, Condition.Always);
-            Flags               = PanelFlags;
+            Flags               = PanelFlags & ~(WindowFlags.NoTitleBar | WindowFlags.NoCollapse);
             if (config.LockImmersiveDresserPanels)
                 Flags |= WindowFlags.NoMove;
             RespectCloseHotkey  = true;
