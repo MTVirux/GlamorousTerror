@@ -345,7 +345,6 @@ public sealed partial class SettingsTab(
         Im.Dummy(Vector2.Zero);
 
         EquipmentDrawer.DrawKeepItemFilter(config);
-        EquipmentDrawer.DrawOwnedOnlyFilter(config);
 
         Checkbox("Remember Design Filter Across Sessions"u8,
             "Whether the filter in the Designs tab should remember its input and start with its list filtered identically to the last session."u8,
