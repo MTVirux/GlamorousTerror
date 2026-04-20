@@ -39,6 +39,7 @@ public sealed partial class EquipmentDrawer
     private string             _iconPickerNameFilter       = string.Empty;
     private bool               _iconPickerFavoritesOnly;
     private JobFlag            _iconPickerJobFilter        = JobFlag.All;
+    private bool               _iconPickerNeutralJobFilter;
     private int                _iconPickerDyeChannelFilter = -1;
     private IconPickerSortMode _iconPickerSortMode         = IconPickerSortMode.AlphabeticalAsc;
 
@@ -66,10 +67,24 @@ public sealed partial class EquipmentDrawer
             && !item.Name.Contains(_iconPickerNameFilter, StringComparison.OrdinalIgnoreCase))
             return false;
 
-        if (_iconPickerJobFilter != JobFlag.All
-            && _jobService.JobGroups.TryGetValue(item.JobRestrictions, out var jg)
-            && (jg.Flags & _iconPickerJobFilter) == 0)
-            return false;
+        if (_iconPickerNeutralJobFilter)
+        {
+            var id = item.JobRestrictions.Id;
+            var jg = id > 0 && id < _jobService.AllJobGroups.Count
+                ? _jobService.AllJobGroups[id]
+                : _jobService.AllJobGroups[1];
+            if ((jg.Flags & _jobService.Jobs.AllAvailableJobs) != _jobService.Jobs.AllAvailableJobs)
+                return false;
+        }
+        else if (_iconPickerJobFilter != JobFlag.All)
+        {
+            var id = item.JobRestrictions.Id;
+            var jg = id > 0 && id < _jobService.AllJobGroups.Count
+                ? _jobService.AllJobGroups[id]
+                : _jobService.AllJobGroups[1];
+            if ((jg.Flags & _iconPickerJobFilter) == 0)
+                return false;
+        }
 
         if (_iconPickerDyeChannelFilter >= 0 && GetDyeChannelCount(in item) != _iconPickerDyeChannelFilter)
             return false;
@@ -127,17 +142,31 @@ public sealed partial class EquipmentDrawer
         // Job filter combo
         var jobCount   = BitOperations.PopCount((ulong)_iconPickerJobFilter);
         var totalJobs  = _jobService.Jobs.Ordered.Count;
-        var jobPreview = jobCount >= totalJobs ? "All Jobs" : $"{jobCount} Jobs";
+        var jobPreview = _iconPickerNeutralJobFilter ? "Unrestricted" : jobCount >= totalJobs ? "All Jobs" : $"{jobCount} Jobs";
         Im.Item.SetNextWidth(comboWidth);
         using (var combo = Im.Combo.Begin("##IconPickerJobFilter"u8, jobPreview, ComboFlags.HeightLargest))
         {
             if (combo)
             {
                 if (Im.Button("Select All##jobs"u8))
-                    _iconPickerJobFilter = _jobService.Jobs.AllAvailableJobs;
+                {
+                    _iconPickerJobFilter        = _jobService.Jobs.AllAvailableJobs;
+                    _iconPickerNeutralJobFilter  = false;
+                }
                 Im.Line.Same();
                 if (Im.Button("Clear All##jobs"u8))
-                    _iconPickerJobFilter = 0;
+                {
+                    _iconPickerJobFilter        = 0;
+                    _iconPickerNeutralJobFilter  = false;
+                }
+                Im.Line.Same();
+                if (Im.Button("Unrestricted##jobs"u8))
+                {
+                    _iconPickerNeutralJobFilter  = !_iconPickerNeutralJobFilter;
+                    if (_iconPickerNeutralJobFilter)
+                        _iconPickerJobFilter = _jobService.Jobs.AllAvailableJobs;
+                }
+                Im.Tooltip.OnHover("Show only gear equippable by all jobs."u8);
                 Im.Separator();
 
                 DrawIconPickerJobCategory("Tanks"u8,           Job.JobRole.Tank);
@@ -220,17 +249,26 @@ public sealed partial class EquipmentDrawer
 
         // Role-level toggle: clicking checks/unchecks all jobs in the category
         if (!noneSet && Im.Checkbox($"All {Encoding.UTF8.GetString(label)}", allSet))
+        {
             _iconPickerJobFilter = allSet
                 ? _iconPickerJobFilter & ~roleFlag
                 : _iconPickerJobFilter | roleFlag;
+            _iconPickerNeutralJobFilter = false;
+        }
         else if (noneSet && Im.Checkbox($"All {Encoding.UTF8.GetString(label)}", false))
-            _iconPickerJobFilter |= roleFlag;
+        {
+            _iconPickerJobFilter       |= roleFlag;
+            _iconPickerNeutralJobFilter = false;
+        }
 
         foreach (var job in roleJobs)
         {
             var enabled = (_iconPickerJobFilter & job.Flag) != 0;
             if (Im.Checkbox(job.Abbreviation, enabled))
-                _iconPickerJobFilter ^= job.Flag;
+            {
+                _iconPickerJobFilter       ^= job.Flag;
+                _iconPickerNeutralJobFilter  = false;
+            }
             Im.Tooltip.OnHover(job.Name);
         }
     }
