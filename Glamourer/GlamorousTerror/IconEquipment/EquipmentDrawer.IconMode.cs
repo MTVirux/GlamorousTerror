@@ -413,10 +413,10 @@ public sealed partial class EquipmentDrawer
                     && !_itemUnlockManager.IsOwnedFromSources(equipItem.ItemId, _config.OwnedComboFilterSources))
                     continue;
 
-                if (modelSet != null && !modelSet.Add((equipItem.Type, equipItem.PrimaryId, equipItem.SecondaryId, equipItem.Variant)))
+                if (!FilterIconPickerItem(in equipItem))
                     continue;
 
-                if (!FilterIconPickerItem(in equipItem))
+                if (modelSet != null && !modelSet.Add((equipItem.Type, equipItem.PrimaryId, equipItem.SecondaryId, equipItem.Variant)))
                     continue;
 
                 hasItems = true;
@@ -532,10 +532,10 @@ public sealed partial class EquipmentDrawer
                     && !_itemUnlockManager.IsOwnedFromSources(equipItem.ItemId, _config.OwnedComboFilterSources))
                     continue;
 
-                if (modelSet != null && !modelSet.Add((equipItem.Type, equipItem.PrimaryId, equipItem.SecondaryId, equipItem.Variant)))
+                if (!FilterIconPickerItem(in equipItem))
                     continue;
 
-                if (!FilterIconPickerItem(in equipItem))
+                if (modelSet != null && !modelSet.Add((equipItem.Type, equipItem.PrimaryId, equipItem.SecondaryId, equipItem.Variant)))
                     continue;
 
                 hasItems = true;
@@ -690,10 +690,10 @@ public sealed partial class EquipmentDrawer
                         && !_itemUnlockManager.IsOwnedFromSources(item.ItemId, _config.OwnedComboFilterSources))
                         continue;
 
-                    if (modelSet != null && !modelSet.Add((item.Type, item.PrimaryId, item.SecondaryId, item.Variant)))
+                    if (!FilterIconPickerItem(in item))
                         continue;
 
-                    if (!FilterIconPickerItem(in item))
+                    if (modelSet != null && !modelSet.Add((item.Type, item.PrimaryId, item.SecondaryId, item.Variant)))
                         continue;
 
                     if (i > 0 && i % IconPickerColumns is not 0)
@@ -711,10 +711,10 @@ public sealed partial class EquipmentDrawer
                     && !_itemUnlockManager.IsOwnedFromSources(item.ItemId, _config.OwnedComboFilterSources))
                     continue;
 
-                if (modelSet != null && !modelSet.Add((item.Type, item.PrimaryId, item.SecondaryId, item.Variant)))
+                if (!FilterIconPickerItem(in item))
                     continue;
 
-                if (!FilterIconPickerItem(in item))
+                if (modelSet != null && !modelSet.Add((item.Type, item.PrimaryId, item.SecondaryId, item.Variant)))
                     continue;
 
                 if (i > 0 && i % IconPickerColumns is not 0)
