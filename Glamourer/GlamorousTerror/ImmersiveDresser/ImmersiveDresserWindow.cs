@@ -606,6 +606,16 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
                 }
 
                 Im.Line.Same();
+                if(config.ImmersiveDresserCameraY != 0f)
+                {
+                if (Im.Button("Reset##cameraYReset"u8))
+                    {
+                        config.ImmersiveDresserCameraY = 0f;
+                        config.Save();
+                    }
+                }
+
+                Im.Line.Same();
                 Im.Text("Camera Height"u8);
                 Im.Tooltip.OnHover("Adjusts the camera vertical position while the immersive dresser is open."u8);
 
