@@ -7,8 +7,10 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Common.Component.BGCollision;
+using Dalamud.Interface.ImGuiNotification;
 using Glamourer.Config;
 using Glamourer.Designs;
+using Glamourer.Designs.History;
 using Glamourer.Gui.Customization;
 using Glamourer.Gui.Equipment;
 using Glamourer.Services;
@@ -60,7 +62,8 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
     public unsafe ImmersiveDresserManager(EquipmentDrawer equipmentDrawer, CustomizationDrawer customizationDrawer,
         CustomizeParameterDrawer parameterDrawer, PreviewService previewService, StateManager stateManager,
         ActorObjectManager objects, Configuration config, IUiBuilder uiBuilder, IKeyState keyState, IFramework framework,
-        ICommandManager commandManager, IGameInteropProvider interop, RotationDrawer rotationDrawer)
+        ICommandManager commandManager, IGameInteropProvider interop, RotationDrawer rotationDrawer,
+        DesignConverter designConverter, DesignManager designManager, EditorHistory editorHistory)
     {
         _uiBuilder      = uiBuilder;
         _keyState       = keyState;
@@ -71,7 +74,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         _rotationDrawer = rotationDrawer;
         Left            = new EquipmentPanel(this, equipmentDrawer, customizationDrawer, stateManager, objects);
         Right           = new AccessoryPanel(this, equipmentDrawer, parameterDrawer, stateManager, objects);
-        Options         = new OptionsPanel(this, equipmentDrawer, stateManager, objects, config, commandManager);
+        Options         = new OptionsPanel(this, equipmentDrawer, stateManager, objects, config, commandManager, designConverter, designManager, editorHistory);
 
         var camera = CameraManager.Instance()->GetActiveCamera();
         if (camera != null)
@@ -405,7 +408,10 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         StateManager stateManager,
         ActorObjectManager objects,
         Configuration config,
-        ICommandManager commandManager)
+        ICommandManager commandManager,
+        DesignConverter converter,
+        DesignManager designManager,
+        EditorHistory editorHistory)
         : Window("Options###ImmersiveDresserOptions", PanelFlags)
     {
         private static readonly AwesomeIcon EyeIcon      = FontAwesomeIcon.Eye;
@@ -414,7 +420,9 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         private static readonly AwesomeIcon UnlockIcon   = FontAwesomeIcon.LockOpen;
         private static readonly AwesomeIcon FreeCamIcon  = FontAwesomeIcon.Video;
 
-        private bool _cammyAvailable;
+        private bool        _cammyAvailable;
+        private string      _newName   = string.Empty;
+        private DesignBase? _newDesign;
 
         public override bool DrawConditions()
             => objects.Player.Valid;
@@ -459,6 +467,9 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
             Im.Line.Same();
             if (Im.Button("Reset to Game State"u8))
                 stateManager.ResetState(state, StateSource.Manual, isFinal: true);
+
+            // Design action buttons (clipboard, save, undo)
+            DrawDesignActions(state, id);
 
             // Detect Cammy availability and free cam state each frame.
             _cammyAvailable = commandManager.Commands.ContainsKey("/cammy");
@@ -654,6 +665,86 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
             Im.Cursor.X += (totalWidth - buttonWidth) * 0.5f;
             if (Im.Button("Close Dresser"u8))
                 manager.Close();
+
+            // Save as Design popup (must be drawn every frame while open)
+            using (Im.Style.PushDefault())
+            {
+                if (InputPopup.OpenName("Save as Design"u8, _newName, out var newName))
+                {
+                    if (_newDesign is not null && newName.Length > 0)
+                        designManager.CreateClone(_newDesign, newName, true);
+                    _newDesign = null;
+                    _newName   = string.Empty;
+                }
+            }
+        }
+
+        private void DrawDesignActions(ActorState state, Penumbra.GameData.Actors.ActorIdentifier id)
+        {
+            var iconSize = Im.Style.FrameHeight;
+
+            // Set from clipboard
+            if (ImEx.Icon.Button(LunaStyle.FromClipboardIcon,
+                    "Try to apply a design from your clipboard.\nHold Control to only apply gear.\nHold Shift to only apply customizations."u8,
+                    disabled: state.IsLocked,
+                    size: new Vector2(iconSize, iconSize)))
+            {
+                try
+                {
+                    var (applyGear, applyCustomize) = UiHelpers.ConvertKeysToBool();
+                    var text   = Im.Clipboard.GetUtf16();
+                    var design = converter.FromBase64(text, applyCustomize, applyGear, out _)
+                     ?? throw new Exception("The clipboard did not contain valid data.");
+                    stateManager.ApplyDesign(state, design, ApplySettings.ManualWithLinks with { IsFinal = true });
+                }
+                catch (Exception ex)
+                {
+                    Glamourer.Messager.NotificationMessage(ex, $"Could not apply clipboard to {id}.",
+                        $"Could not apply clipboard to design.", NotificationType.Error, false);
+                }
+            }
+
+            Im.Line.Same();
+
+            // Export to clipboard
+            if (ImEx.Icon.Button(LunaStyle.ToClipboardIcon,
+                    "Copy the current design to your clipboard.\nHold Control to disable applying of customizations.\nHold Shift to disable applying of gear."u8,
+                    disabled: state.ModelData.ModelId is not 0,
+                    size: new Vector2(iconSize, iconSize)))
+            {
+                try
+                {
+                    var text = converter.ShareBase64(state, ApplicationRules.FromModifiers(state));
+                    Im.Clipboard.Set(text);
+                }
+                catch (Exception ex)
+                {
+                    Glamourer.Messager.NotificationMessage(ex, $"Could not copy {id} data to clipboard.",
+                        $"Could not copy data to clipboard.", NotificationType.Error);
+                }
+            }
+
+            Im.Line.Same();
+
+            // Save as design
+            if (ImEx.Icon.Button(LunaStyle.SaveIcon,
+                    "Save the current state as a design.\nHold Control to disable applying of customizations.\nHold Shift to disable applying of gear."u8,
+                    disabled: state.ModelData.ModelId is not 0,
+                    size: new Vector2(iconSize, iconSize)))
+            {
+                Im.Popup.Open("Save as Design"u8);
+                _newName   = id.ToName();
+                _newDesign = converter.Convert(state, ApplicationRules.FromModifiers(state));
+            }
+
+            Im.Line.Same();
+
+            // Undo
+            if (ImEx.Icon.Button(LunaStyle.UndoIcon,
+                    "Undo the last change."u8,
+                    disabled: state.IsLocked || !editorHistory.CanUndo(state),
+                    size: new Vector2(iconSize, iconSize)))
+                editorHistory.Undo(state);
         }
 
         public override void OnClose()
