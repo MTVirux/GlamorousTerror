@@ -659,15 +659,6 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
                     manager._showParameters = !manager._showParameters;
             }
 
-            Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));
-
-            // Close button
-            var buttonWidth = Im.Font.CalculateSize("Close Dresser"u8).X + Im.Style.FramePadding.X * 2;
-            var totalWidth  = Im.ContentRegion.Available.X;
-            Im.Cursor.X += (totalWidth - buttonWidth) * 0.5f;
-            if (Im.Button("Close Dresser"u8))
-                manager.Close();
-
             // Save as Design popup (must be drawn every frame while open)
             using (Im.Style.PushDefault())
             {
