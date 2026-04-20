@@ -22,7 +22,8 @@ public sealed partial class EquipmentDrawer
 {
     #region Icon Mode
 
-    private const int IconPickerColumns = 8;
+    private const int  IconPickerColumns        = 8;
+    private const uint FavoriteIconPickerColor   = 0xFF00CFFF; // Yellow (ABGR)
 
     private static ReadOnlySpan<byte> IconPickerPopup
         => "##IconPicker"u8;
@@ -466,9 +467,10 @@ public sealed partial class EquipmentDrawer
     private void DrawIconPickerItem(in EquipItem item, in EquipItem current, in EquipDrawData data, int index)
     {
         using var id         = Im.Id.Push(index);
+        var       isFavorite = _favoriteManager.Contains(item);
         using var frameColor = item.Id == current.Id
             ? ImGuiColor.Button.Push(Colors.SelectedRed)
-            : ImGuiColor.Button.Push(ImGuiColor.Button.Get());
+            : ImGuiColor.Button.Push(FavoriteIconPickerColor, isFavorite);
 
         var (ptr, textureSize, empty) = _textures.GetIcon(item, data.Slot);
         if (Im.Image.Button(ptr, _iconSize))
@@ -479,6 +481,14 @@ public sealed partial class EquipmentDrawer
                 Im.Popup.CloseCurrent();
         }
 
+        if (Im.Item.RightClicked())
+        {
+            if (isFavorite)
+                _favoriteManager.Remove(item);
+            else
+                _favoriteManager.TryAdd(item);
+        }
+
         if (Im.Item.Hovered())
         {
             _iconPickerHoveredItem = item;
@@ -486,6 +496,7 @@ public sealed partial class EquipmentDrawer
             Im.Text(item.Name);
             if (!empty)
                 Im.Image.Draw(ptr, textureSize);
+            Im.Text("Right-Click to toggle favorite."u8);
         }
     }
 
@@ -594,9 +605,10 @@ public sealed partial class EquipmentDrawer
     private void DrawBonusIconPickerItem(in EquipItem item, in EquipItem current, in BonusDrawData data, int index)
     {
         using var id         = Im.Id.Push(index);
+        var       isFavorite = _favoriteManager.Contains(item);
         using var frameColor = item.Id == current.Id
             ? ImGuiColor.Button.Push(Colors.SelectedRed)
-            : ImGuiColor.Button.Push(ImGuiColor.Button.Get());
+            : ImGuiColor.Button.Push(FavoriteIconPickerColor, isFavorite);
 
         var (ptr, textureSize, empty) = _textures.GetIcon(item, data.Slot);
         if (Im.Image.Button(ptr, _iconSize))
@@ -607,6 +619,14 @@ public sealed partial class EquipmentDrawer
                 Im.Popup.CloseCurrent();
         }
 
+        if (Im.Item.RightClicked())
+        {
+            if (isFavorite)
+                _favoriteManager.Remove(item);
+            else
+                _favoriteManager.TryAdd(item);
+        }
+
         if (Im.Item.Hovered())
         {
             _iconPickerHoveredItem = item;
@@ -614,6 +634,7 @@ public sealed partial class EquipmentDrawer
             Im.Text(item.Name);
             if (!empty)
                 Im.Image.Draw(ptr, textureSize);
+            Im.Text("Right-Click to toggle favorite."u8);
         }
     }
 
@@ -782,9 +803,10 @@ public sealed partial class EquipmentDrawer
         ref EquipDrawData mainhand, ref EquipDrawData offhand, int index)
     {
         using var id         = Im.Id.Push(index);
+        var       isFavorite = _favoriteManager.Contains(item);
         using var frameColor = item.Id == current.Id
             ? ImGuiColor.Button.Push(Colors.SelectedRed)
-            : ImGuiColor.Button.Push(ImGuiColor.Button.Get());
+            : ImGuiColor.Button.Push(FavoriteIconPickerColor, isFavorite);
 
         var (ptr, textureSize, empty) = _textures.GetIcon(item, slot);
         if (Im.Image.Button(ptr, _iconSize))
@@ -810,6 +832,14 @@ public sealed partial class EquipmentDrawer
                 Im.Popup.CloseCurrent();
         }
 
+        if (Im.Item.RightClicked())
+        {
+            if (isFavorite)
+                _favoriteManager.Remove(item);
+            else
+                _favoriteManager.TryAdd(item);
+        }
+
         if (Im.Item.Hovered())
         {
             _iconPickerHoveredItem = item;
@@ -817,6 +847,7 @@ public sealed partial class EquipmentDrawer
             Im.Text(item.Name);
             if (!empty)
                 Im.Image.Draw(ptr, textureSize);
+            Im.Text("Right-Click to toggle favorite."u8);
         }
     }
 
