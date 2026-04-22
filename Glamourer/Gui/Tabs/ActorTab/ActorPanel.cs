@@ -236,6 +236,7 @@ public sealed class ActorPanel : IPanel
         Im.Dummy(new Vector2(Im.Style.TextHeight / 2));
         _equipmentDrawer.DrawDragDropTooltip();
         _equipmentDrawer.ApplyHoverPreview(_stateManager, _selection.State!);
+        _equipmentDrawer.ApplyAllStainHoverPreview(_stateManager, _selection.State!);
     }
 
     private void DrawParameterHeader()

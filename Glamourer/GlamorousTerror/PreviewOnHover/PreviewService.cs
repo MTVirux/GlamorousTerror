@@ -29,6 +29,8 @@ public enum PreviewType
     SingleCustomization,
     /// <summary> Single stain preview in stain combos. </summary>
     SingleStain,
+    /// <summary> All-slots stain preview from the "Dye All Slots" combo. </summary>
+    AllSlotsStain,
 }
 
 /// <summary>
@@ -81,6 +83,9 @@ public sealed class PreviewState
     public EquipSlot OriginalStainSlot { get; set; }
     public int OriginalStainIndex { get; set; }
     public bool StainSelectionMade { get; set; }
+
+    // AllSlotsStain preview tracking: original stains for every slot, keyed by slot.
+    public Dictionary<EquipSlot, StainIds> OriginalAllSlotStains { get; } = new();
 
     // Popup preview tracking (for CustomizationDrawer popups)
     public bool PopupActiveThisFrame { get; set; }
@@ -196,6 +201,15 @@ public sealed class PreviewState
     }
 
     /// <summary>
+    /// Starts an all-slots stain preview. The caller must populate <see cref="OriginalAllSlotStains"/>
+    /// with the pre-preview stains for each slot before or after this call.
+    /// </summary>
+    public void StartAllSlotsStain(ActorState state)
+    {
+        Start(state, PreviewType.AllSlotsStain, false);
+    }
+
+    /// <summary>
     /// Checks if we're already previewing the same equipment.
     /// </summary>
     public bool IsSameEquipmentPreview(EquipSlot slot, bool isBonusItem, bool toSelf)
@@ -244,6 +258,12 @@ public sealed class PreviewState
         => IsActive && Type == PreviewType.SingleStain && OriginalStainSlot == slot && OriginalStainIndex == stainIndex;
 
     /// <summary>
+    /// Checks if an all-slots stain preview is currently active.
+    /// </summary>
+    public bool IsAllSlotsStainPreview()
+        => IsActive && Type == PreviewType.AllSlotsStain;
+
+    /// <summary>
     /// Ends the preview, clearing all state. Does NOT restore original data - caller should do that first.
     /// </summary>
     public void End()
@@ -268,6 +288,7 @@ public sealed class PreviewState
         OriginalStainSlot = default;
         OriginalStainIndex = default;
         StainSelectionMade = false;
+        OriginalAllSlotStains.Clear();
         // Clear popup tracking
         PopupActiveThisFrame = false;
         ActivePopupType = PopupType.None;
@@ -870,6 +891,38 @@ public sealed class PreviewService(
     }
 
     /// <summary>
+    /// Starts an all-slots stain preview. Captures the pre-preview stain value for every
+    /// <see cref="EquipSlotExtensions.EqdpSlots"/> slot so <see cref="RestoreSingleValuePreview"/>
+    /// can put them back.
+    /// </summary>
+    public bool StartAllSlotsStainPreview(ActorState state)
+    {
+        if (State.IsAllSlotsStainPreview())
+            return true;
+
+        try
+        {
+            if (State.IsActive)
+            {
+                RestoreSingleValuePreview();
+                State.End();
+            }
+
+            State.OriginalAllSlotStains.Clear();
+            foreach (var slot in EquipSlotExtensions.EqdpSlots)
+                State.OriginalAllSlotStains[slot] = state.ModelData.Stain(slot);
+
+            State.StartAllSlotsStain(state);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Glamourer.Log.Debug($"Start all-slots stain preview failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Applies a previewed item change. Call when hovering an item in the combo.
     /// </summary>
     /// <param name="state">The actor state.</param>
@@ -938,6 +991,25 @@ public sealed class PreviewService(
     }
 
     /// <summary>
+    /// Applies an all-slots stain preview. Mirrors <see cref="EquipmentDrawer.DrawAllStain"/>
+    /// commit behavior, writing <see cref="StainIds.All(StainId)"/> to every
+    /// <see cref="EquipSlotExtensions.EqdpSlots"/> slot.
+    /// </summary>
+    public void PreviewAllSlotsStain(ActorState state, StainId stainValue)
+    {
+        if (!State.IsAllSlotsStainPreview())
+            return;
+
+        var target = StainIds.All(stainValue);
+        foreach (var slot in EquipSlotExtensions.EqdpSlots)
+        {
+            var current = state.ModelData.Stain(slot);
+            if (current != target)
+                stateManager.ChangeStains(state, slot, target, ApplySettings.Manual);
+        }
+    }
+
+    /// <summary>
     /// Restores the original value for single-value previews.
     /// </summary>
     public void RestoreSingleValuePreview()
@@ -972,6 +1044,15 @@ public sealed class PreviewService(
                     if (currentStain != State.OriginalStain)
                         stateManager.ChangeStains(State.TargetState, State.OriginalStainSlot, State.OriginalStain, ApplySettings.Manual);
                     break;
+
+                case PreviewType.AllSlotsStain:
+                    foreach (var (slot, originalStains) in State.OriginalAllSlotStains)
+                    {
+                        var current = State.TargetState.ModelData.Stain(slot);
+                        if (current != originalStains)
+                            stateManager.ChangeStains(State.TargetState, slot, originalStains, ApplySettings.Manual);
+                    }
+                    break;
             }
         }
         catch (Exception ex)
@@ -990,7 +1071,7 @@ public sealed class PreviewService(
         if (!State.IsActive)
             return;
 
-        if (State.Type is not (PreviewType.SingleItem or PreviewType.SingleCustomization or PreviewType.SingleStain))
+        if (State.Type is not (PreviewType.SingleItem or PreviewType.SingleCustomization or PreviewType.SingleStain or PreviewType.AllSlotsStain))
             return;
 
         try

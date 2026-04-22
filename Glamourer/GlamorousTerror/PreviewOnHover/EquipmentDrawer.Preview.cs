@@ -11,10 +11,12 @@ public sealed partial class EquipmentDrawer
     private EquipSlot _stainPreviewSlot;
     private int       _stainPreviewIndex;
     private bool      _stainPreviewValid;
+    private bool      _allStainPreviewValid;
 
     private partial void GTResetPreviewState()
     {
-        _stainPreviewValid = false;
+        _stainPreviewValid    = false;
+        _allStainPreviewValid = false;
     }
 
     private partial void GTCaptureStainSlot(EquipSlot slot, int index)
@@ -22,6 +24,11 @@ public sealed partial class EquipmentDrawer
         _stainPreviewSlot  = slot;
         _stainPreviewIndex = index;
         _stainPreviewValid = true;
+    }
+
+    private partial void GTCaptureAllStain()
+    {
+        _allStainPreviewValid = true;
     }
 
     public void ApplyHoverPreview(State.StateManager stateManager, State.ActorState state)
@@ -107,7 +114,7 @@ public sealed partial class EquipmentDrawer
             }
         }
 
-        // Stain combo
+        // Stain combo (per-slot)
         if (_stainCombo.IsPopupOpen && _stainPreviewValid)
         {
             _previewService.StartSingleStainPreview(state, _stainPreviewSlot, _stainPreviewIndex);
@@ -160,9 +167,40 @@ public sealed partial class EquipmentDrawer
             return;
         }
 
-        // No equipment popup open — end only if the active preview is equipment-related
+        // No equipment popup open — end only if the active preview is equipment-related.
+        // AllSlotsStain is handled separately in ApplyAllStainHoverPreview (called from panels
+        // that actually contain DrawAllStain) — don't end it here.
         if (_previewService.State.IsActive &&
             _previewService.State.Type is PreviewType.SingleItem or PreviewType.SingleStain)
+            _previewService.EndSingleValuePreview();
+    }
+
+    /// <summary>
+    /// Hover preview dispatcher for the "Dye All Slots" combo. Must be called from the same
+    /// panel that drew <see cref="DrawAllStain"/> (after the draw), because that combo lives
+    /// in a panel separate from the per-slot equipment draws (e.g., ImmersiveDresser's
+    /// OptionsPanel vs. EquipmentPanel).
+    /// </summary>
+    public void ApplyAllStainHoverPreview(State.StateManager stateManager, State.ActorState state)
+    {
+        if (_stainCombo.IsPopupOpen && _allStainPreviewValid)
+        {
+            _previewService.StartAllSlotsStainPreview(state);
+
+            if (_stainCombo.HoveredStain is { } hoveredAllStain)
+                _previewService.PreviewAllSlotsStain(state, hoveredAllStain);
+
+            if (_stainCombo.StainSelected)
+            {
+                _previewService.EndSingleValuePreview(wasSelectionMade: true);
+                _stainCombo.ResetSelection();
+            }
+
+            return;
+        }
+
+        // Popup closed without selection — restore and end.
+        if (_previewService.State.IsActive && _previewService.State.Type == PreviewType.AllSlotsStain)
             _previewService.EndSingleValuePreview();
     }
 }

@@ -542,6 +542,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
                     foreach (var slot in EquipSlotExtensions.EqdpSlots)
                         stateManager.ChangeStains(state, slot, newAllStain, ApplySettings.Manual);
                 }
+                equipmentDrawer.ApplyAllStainHoverPreview(stateManager, state);
 
                 Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));
 

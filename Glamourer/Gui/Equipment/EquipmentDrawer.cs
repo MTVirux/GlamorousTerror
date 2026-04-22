@@ -98,6 +98,7 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
     private partial void GTResetPreviewState();
     private partial void GTResetIconState();
     private partial void GTCaptureStainSlot(EquipSlot slot, int index);
+    private partial void GTCaptureAllStain();
     private partial bool GTTryDrawEquipIcon(EquipDrawData data);
     private partial bool GTTryDrawBonusItemIcon(BonusDrawData data);
     private partial bool GTTryDrawWeaponsIcon(EquipDrawData mainhand, EquipDrawData offhand, bool allWeapons);
@@ -189,8 +190,14 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
 
     public bool DrawAllStain(out StainIds ret, bool locked)
     {
-        using var disabled = Im.Disabled(locked);
-        var       change   = _stainCombo.Draw("Dye All Slots"u8, Stain.None, out var newAllStain, Im.Style.FrameHeight);
+        using var disabled     = Im.Disabled(locked);
+        var       wasPopupOpen = _stainCombo.IsPopupOpen;
+        var       change       = _stainCombo.Draw("Dye All Slots"u8, Stain.None, out var newAllStain, Im.Style.FrameHeight);
+
+        // GT: Flag that the open stain popup belongs to the "Dye All Slots" combo so
+        // ApplyAllStainHoverPreview routes into the all-slots branch (captured once on false→true transition).
+        if (!wasPopupOpen && _stainCombo.IsPopupOpen)
+            GTCaptureAllStain();
 
         Im.DrawList.Window.Text(AwesomeIcon.Font, AwesomeIcon.Font.Size, Im.Item.UpperLeftCorner + Im.Style.FramePadding,
             ImGuiColor.Text.Get(), LunaStyle.DyeIcon.Span);
