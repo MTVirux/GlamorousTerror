@@ -70,26 +70,20 @@ public sealed class GlamourerChangelog : IUiService
         }
     }
 
-    private static void Add1_6_1_0(Changelog log)
-        => log.NextVersion("Version 1.6.1.0"u8)
-            .RegisterEntry("Reworked the festival popup to use a notification instead. The query can be set to ask for every festival or never ask again, but will be set to ask again for the first time regardless of your current settings."u8)
-            .RegisterEntry("Fixed display of NPCs in the automation selector and secondary identifier list."u8)
-            .RegisterHighlight("Added per-slot application of items and dyes to the current player character in all tabs (1.6.0.2)."u8)
-            .RegisterEntry("Fixed an issue when applying advanced dyes on equivalent left and right rings (1.6.0.2)."u8)
-            .RegisterEntry("Fixed the saving of design colors and sort modes (1.6.0.2)."u8)
-            .RegisterEntry("Fixed the context menu rename selection (1.6.0.2)."u8)
-            .RegisterEntry("Fixed an exception when a tab selector became too small somehow (1.6.0.2)."u8)
-            .RegisterEntry("Fixed disabled header buttons and lock color (1.6.0.2)."u8)
-            .RegisterEntry("Fixed multiple issues with the NPC tab and combo (1.6.0.2)."u8);
-
     private static void AddGlamorousTerrorFeatures(Changelog log)
         => log.NextVersion("Glamorous Terror Features"u8)
+            .RegisterHighlight("Immersive Dresser — floating three-panel glamour editor with optional game-UI hide, camera height slider, disable-first-person toggle, free-cam button (Cammy), design clipboard/save/undo actions, and panel lock. Open via right-click on your own character or /glamour dresser."u8)
             .RegisterHighlight("Added a context menu entry when right-clicking any character in-game, allowing you to copy, apply, or preview designs between characters."u8)
+            .RegisterHighlight("Gear name language selection — override the display language for equipment item names."u8)
+            .RegisterHighlight("Cross-language equipment search — search for items in any language regardless of display settings."u8)
+            .RegisterHighlight("Icon Equipment Drawer — optional icon grid replacement for the equipment combo list, with favourites, cross-language text search, job and dye channel filters, sort modes, and grouping by model. Right-click an item in the picker to favourite it."u8)
             .RegisterEntry("Preview-on-hover for equipment, customizations, and designs in the Actor tab content."u8)
             .RegisterEntry("Wildcard automation targets — use * in character names for pattern matching."u8)
             .RegisterEntry("Fun Modes converted from Cheat Codes — all modes are now directly available as checkboxes with no password restrictions."u8)
-            .RegisterHighlight("Gear name language selection — override the display language for equipment item names."u8)
-            .RegisterHighlight("Cross-language equipment search — search for items in any language regardless of display settings."u8);
+            .RegisterEntry("Favourites for equipment items, stains, hairstyles, face paints, and bonus items — favourited entries are highlighted in the icon picker and filterable via the star toggle."u8)
+            .RegisterEntry("\"Show Only Owned Items in Combos\" filter with per-source toggles (Inventory, Glamour Dresser, Armoire, Saddlebags, Retainers, Quest/Achievement). Tracked per-character with automatic pruning as items leave your inventories."u8)
+            .RegisterEntry("Character rotation override inside the Immersive Dresser — drag yaw, pitch, and roll independently of the game's animation."u8)
+            .RegisterEntry("/gt command alias for /glamour."u8);
             
 
     private static void Add1_6_0_0(Changelog log)
