@@ -126,13 +126,20 @@ public sealed class MainWindow : Window, IDisposable
     }
 
     private string GetLabel()
-        => (Glamourer.Version.Length is 0, _config.Ephemeral.IncognitoMode) switch
+    {
+#if DEBUG
+        const string suffix = " (Testing Version)";
+#else
+        const string suffix = "";
+#endif
+        return (Glamourer.Version.Length is 0, _config.Ephemeral.IncognitoMode) switch
         {
-            (true, true)   => "Glamourer (Incognito Mode)###GlamourerMainWindow",
-            (true, false)  => "Glamourer###GlamourerMainWindow",
-            (false, false) => $"Glamourer v{Glamourer.Version}###GlamourerMainWindow",
-            (false, true)  => $"Glamourer v{Glamourer.Version} (Incognito Mode)###GlamourerMainWindow",
+            (true, true)   => $"Glamorous Terror (Incognito Mode){suffix}###GlamourerMainWindow",
+            (true, false)  => $"Glamorous Terror{suffix}###GlamourerMainWindow",
+            (false, false) => $"Glamorous Terror v{Glamourer.Version}{suffix}###GlamourerMainWindow",
+            (false, true)  => $"Glamorous Terror v{Glamourer.Version} (Incognito Mode){suffix}###GlamourerMainWindow",
         };
+    }
 
     private void DrawProblemWindow(Utf8StringHandler<TextStringHandlerBuffer> text)
     {
