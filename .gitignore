@@ -10,7 +10,8 @@ private/
 .cursor-cache/
 .cursor-tmp/
 
-.claude/
+CLAUDE.md
+.CLAUDE/
 .claude-cache/
 .claude.json
 
