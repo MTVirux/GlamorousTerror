@@ -37,6 +37,11 @@ public sealed partial class EquipmentDrawer
     private bool          _iconPickerSelectionMade;
     private float         _iconPickerClickY;
     private int           _iconPickerScrollResetFrames;
+    private bool          _iconPickerActive;
+    private bool          _iconPickerRepositionRequested;
+
+    private static ReadOnlySpan<byte> IconPickerWindow
+        => "###GTIconPickerWindow"u8;
 
     private readonly Dictionary<EquipSlot, float>     _iconPickerSlotScroll      = new();
     private readonly Dictionary<BonusItemFlag, float> _iconPickerBonusSlotScroll = new();
@@ -132,7 +137,7 @@ public sealed partial class EquipmentDrawer
             Im.Keyboard.SetFocusHere();
 
         var buttonWidth = Im.Style.FrameHeight + Im.Style.ItemSpacing.X;
-        var inputWidth  = Im.ContentRegion.Available.X - buttonWidth * 3;
+        var inputWidth  = Im.ContentRegion.Available.X - buttonWidth * 4;
         Im.Item.SetNextWidth(inputWidth);
         Im.Input.Text("##IconPickerName"u8, ref _iconPickerNameFilter, "Search..."u8);
 
@@ -158,6 +163,29 @@ public sealed partial class EquipmentDrawer
             }
         }
         Im.Tooltip.OnHover("Keep picker open after selecting an item."u8);
+
+        Im.Line.Same();
+        var pinColor = _config.IconPickerPinned ? 0xFF00CFFFu : ImGuiColor.TextDisabled.Get();
+        if (ImEx.Icon.Button(FontAwesomeIcon.Thumbtack.Icon(),
+                "Pin the picker so it does not close when clicking off.\nClick the equipment icon again to close, or another to switch slots."u8,
+                false, default, pinColor, new Vector2(Im.Style.FrameHeight)))
+        {
+            _config.IconPickerPinned ^= true;
+            _config.Save();
+            // The pin toggle lives inside the picker body, so we are mid-render. Carry the
+            // open state across the popup<->window swap; close the now-stale popup so we
+            // do not render two pickers next frame when transitioning into pinned mode.
+            if (_config.IconPickerPinned)
+            {
+                _iconPickerActive              = true;
+                _iconPickerRepositionRequested = true;
+                Im.Popup.CloseCurrent();
+            }
+            else
+            {
+                _iconPickerActive = false;
+            }
+        }
 
         Im.Line.Same();
         var settingsColor = _iconPickerShowSettings ? 0xFF00CFFFu : ImGuiColor.TextDisabled.Get();
@@ -352,6 +380,12 @@ public sealed partial class EquipmentDrawer
     }
 
     private void PositionIconPickerPopup()
+        => ApplyIconPickerLayout(Condition.Appearing);
+
+    private void PositionIconPickerWindow()
+        => ApplyIconPickerLayout(_iconPickerRepositionRequested ? Condition.Always : Condition.Appearing);
+
+    private void ApplyIconPickerLayout(Condition positionCondition)
     {
         var windowPos     = Im.Window.Position;
         var windowSize    = Im.Window.Size;
@@ -376,10 +410,59 @@ public sealed partial class EquipmentDrawer
 
         Im.Window.SetNextPosition(
             new Vector2(anchorX, anchorY),
-            Condition.Appearing,
+            positionCondition,
             new Vector2(openLeft ? 1 : 0, 0));
 
         Im.Window.SetNextSizeConstraints(new Vector2(minWidth, 0), new Vector2(float.MaxValue, maxHeight));
+    }
+
+    /// <summary>
+    /// Centralized handler for icon clicks that open / switch / toggle-close the picker.
+    /// In pinned mode, clicking the same target closes the window; clicking a different
+    /// target switches it. In unpinned mode, opens the popup as before.
+    /// </summary>
+    private void OpenOrToggleIconPicker(EquipSlot slot, BonusItemFlag bonusSlot, bool isWeapon, bool isBonus, float clickY)
+    {
+        if (_config.IconPickerPinned && _iconPickerActive)
+        {
+            var sameTarget = isBonus
+                ? _iconPickerIsBonus && _iconPickerBonusSlot == bonusSlot
+                : !_iconPickerIsBonus && _iconPickerIsWeapon == isWeapon && _iconPickerSlot == slot;
+            if (sameTarget)
+            {
+                _iconPickerActive = false;
+                return;
+            }
+        }
+
+        _iconPickerSlot       = slot;
+        _iconPickerBonusSlot  = bonusSlot;
+        _iconPickerIsWeapon   = isWeapon;
+        _iconPickerIsBonus    = isBonus;
+        _iconPickerClickY     = clickY;
+        _iconPickerNameFilter = string.Empty;
+
+        if (_config.IconPickerPinned)
+        {
+            _iconPickerRepositionRequested = true;
+            _iconPickerActive              = true;
+        }
+        else
+        {
+            Im.Popup.Open(IconPickerPopup);
+        }
+    }
+
+    /// <summary>
+    /// Closes the picker after a selection. In popup mode this calls Im.Popup.CloseCurrent;
+    /// in pinned-window mode it clears the active flag.
+    /// </summary>
+    private void CloseIconPickerAfterSelection()
+    {
+        if (_config.IconPickerPinned)
+            _iconPickerActive = false;
+        else
+            Im.Popup.CloseCurrent();
     }
 
     internal void DrawEquipIcon(in EquipDrawData data)
@@ -402,14 +485,7 @@ public sealed partial class EquipmentDrawer
             }
 
             if (clicked && !data.Locked)
-            {
-                _iconPickerSlot       = data.Slot;
-                _iconPickerIsWeapon   = false;
-                _iconPickerIsBonus    = false;
-                _iconPickerClickY     = Im.Item.UpperLeftCorner.Y;
-                _iconPickerNameFilter = string.Empty;
-                Im.Popup.Open(IconPickerPopup);
-            }
+                OpenOrToggleIconPicker(data.Slot, default, false, false, Im.Item.UpperLeftCorner.Y);
 
             if (ResetOrClear(data.Locked, rightClicked, data.AllowRevert, true, data.CurrentItem, data.GameItem,
                     ItemManager.NothingItem(data.Slot), out var item))
@@ -432,14 +508,32 @@ public sealed partial class EquipmentDrawer
 
     private void DrawEquipIconPickerPopup(in EquipDrawData data)
     {
-        if (_iconPickerSlot != data.Slot || _iconPickerIsWeapon)
+        if (_iconPickerSlot != data.Slot || _iconPickerIsWeapon || _iconPickerIsBonus)
             return;
 
-        PositionIconPickerPopup();
-        using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.NoMove);
-        if (!popup)
-            return;
+        if (_config.IconPickerPinned)
+        {
+            if (!_iconPickerActive)
+                return;
 
+            PositionIconPickerWindow();
+            using var window = Im.Window.Begin(IconPickerWindow,
+                WindowFlags.NoTitleBar | WindowFlags.NoCollapse | WindowFlags.NoSavedSettings | WindowFlags.NoDocking);
+            if (window)
+                DrawEquipIconPickerBody(data);
+            _iconPickerRepositionRequested = false;
+        }
+        else
+        {
+            PositionIconPickerPopup();
+            using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.NoMove);
+            if (popup)
+                DrawEquipIconPickerBody(data);
+        }
+    }
+
+    private void DrawEquipIconPickerBody(in EquipDrawData data)
+    {
         ApplyIconPickerScroll(_iconPickerSlot, _iconPickerSlotScroll);
 
         _iconPickerPopupOpen   = true;
@@ -498,7 +592,7 @@ public sealed partial class EquipmentDrawer
             data.SetItem(item);
             _iconPickerSelectionMade = true;
             if (!_config.KeepIconPickerOpen)
-                Im.Popup.CloseCurrent();
+                CloseIconPickerAfterSelection();
         }
 
         if (Im.Item.RightClicked())
@@ -538,14 +632,7 @@ public sealed partial class EquipmentDrawer
             }
 
             if (clicked && !data.Locked)
-            {
-                _iconPickerBonusSlot  = data.Slot;
-                _iconPickerIsWeapon   = false;
-                _iconPickerIsBonus    = true;
-                _iconPickerClickY     = Im.Item.UpperLeftCorner.Y;
-                _iconPickerNameFilter = string.Empty;
-                Im.Popup.Open(IconPickerPopup);
-            }
+                OpenOrToggleIconPicker(default, data.Slot, false, true, Im.Item.UpperLeftCorner.Y);
 
             if (ResetOrClear(data.Locked, rightClicked, data.AllowRevert, true, data.CurrentItem, data.GameItem,
                     EquipItem.BonusItemNothing(data.Slot), out var item))
@@ -563,14 +650,32 @@ public sealed partial class EquipmentDrawer
 
     private void DrawBonusIconPickerPopup(in BonusDrawData data)
     {
-        if (_iconPickerBonusSlot != data.Slot || _iconPickerIsWeapon)
+        if (_iconPickerBonusSlot != data.Slot || _iconPickerIsWeapon || !_iconPickerIsBonus)
             return;
 
-        PositionIconPickerPopup();
-        using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.NoMove);
-        if (!popup)
-            return;
+        if (_config.IconPickerPinned)
+        {
+            if (!_iconPickerActive)
+                return;
 
+            PositionIconPickerWindow();
+            using var window = Im.Window.Begin(IconPickerWindow,
+                WindowFlags.NoTitleBar | WindowFlags.NoCollapse | WindowFlags.NoSavedSettings | WindowFlags.NoDocking);
+            if (window)
+                DrawBonusIconPickerBody(data);
+            _iconPickerRepositionRequested = false;
+        }
+        else
+        {
+            PositionIconPickerPopup();
+            using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.NoMove);
+            if (popup)
+                DrawBonusIconPickerBody(data);
+        }
+    }
+
+    private void DrawBonusIconPickerBody(in BonusDrawData data)
+    {
         ApplyIconPickerScroll(_iconPickerBonusSlot, _iconPickerBonusSlotScroll);
 
         _iconPickerPopupOpen   = true;
@@ -629,7 +734,7 @@ public sealed partial class EquipmentDrawer
             data.SetItem(item);
             _iconPickerSelectionMade = true;
             if (!_config.KeepIconPickerOpen)
-                Im.Popup.CloseCurrent();
+                CloseIconPickerAfterSelection();
         }
 
         if (Im.Item.RightClicked())
@@ -703,13 +808,7 @@ public sealed partial class EquipmentDrawer
             }
 
             if (clicked && !data.Locked)
-            {
-                _iconPickerSlot       = slot;
-                _iconPickerIsWeapon   = true;
-                _iconPickerClickY     = Im.Item.UpperLeftCorner.Y;
-                _iconPickerNameFilter = string.Empty;
-                Im.Popup.Open(IconPickerPopup);
-            }
+                OpenOrToggleIconPicker(slot, default, true, false, Im.Item.UpperLeftCorner.Y);
 
             DrawGearDragDrop(data);
             DrawIconStainIndicators(data);
@@ -732,11 +831,30 @@ public sealed partial class EquipmentDrawer
         if (_iconPickerSlot != slot || !_iconPickerIsWeapon)
             return;
 
-        PositionIconPickerPopup();
-        using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.NoMove);
-        if (!popup)
-            return;
+        if (_config.IconPickerPinned)
+        {
+            if (!_iconPickerActive)
+                return;
 
+            PositionIconPickerWindow();
+            using var window = Im.Window.Begin(IconPickerWindow,
+                WindowFlags.NoTitleBar | WindowFlags.NoCollapse | WindowFlags.NoSavedSettings | WindowFlags.NoDocking);
+            if (window)
+                DrawWeaponIconPickerBody(ref mainhand, ref offhand, isMainhand, comboType, slot);
+            _iconPickerRepositionRequested = false;
+        }
+        else
+        {
+            PositionIconPickerPopup();
+            using var popup = Im.Popup.Begin(IconPickerPopup, WindowFlags.NoMove);
+            if (popup)
+                DrawWeaponIconPickerBody(ref mainhand, ref offhand, isMainhand, comboType, slot);
+        }
+    }
+
+    private void DrawWeaponIconPickerBody(ref EquipDrawData mainhand, ref EquipDrawData offhand, bool isMainhand,
+        FullEquipType comboType, EquipSlot slot)
+    {
         ApplyIconPickerScroll(slot, _iconPickerSlotScroll);
 
         _iconPickerPopupOpen   = true;
@@ -835,7 +953,7 @@ public sealed partial class EquipmentDrawer
 
             _iconPickerSelectionMade = true;
             if (!_config.KeepIconPickerOpen)
-                Im.Popup.CloseCurrent();
+                CloseIconPickerAfterSelection();
         }
 
         if (Im.Item.RightClicked())
