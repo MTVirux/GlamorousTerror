@@ -38,6 +38,9 @@ public sealed partial class EquipmentDrawer
     private float         _iconPickerClickY;
     private int           _iconPickerScrollResetFrames;
 
+    private readonly Dictionary<EquipSlot, float>     _iconPickerSlotScroll      = new();
+    private readonly Dictionary<BonusItemFlag, float> _iconPickerBonusSlotScroll = new();
+
     // Filter & sort state (session-scoped, not persisted)
     private string             _iconPickerNameFilter       = string.Empty;
     private bool               _iconPickerFavoritesOnly;
@@ -50,6 +53,22 @@ public sealed partial class EquipmentDrawer
     private partial void GTResetIconState()
     {
         _iconPickerPopupOpen = false;
+    }
+
+    private void ApplyIconPickerScroll<TKey>(TKey key, Dictionary<TKey, float> dict) where TKey : notnull
+    {
+        if (Im.Window.Appearing)
+            _iconPickerScrollResetFrames = 2;
+
+        if (_iconPickerScrollResetFrames > 0)
+        {
+            Im.Scroll.Y = _config.RememberIconPickerScroll ? dict.GetValueOrDefault(key, 0f) : 0f;
+            --_iconPickerScrollResetFrames;
+        }
+        else if (_config.RememberIconPickerScroll)
+        {
+            dict[key] = Im.Scroll.Y;
+        }
     }
 
     private static int GetDyeChannelCount(in EquipItem item)
@@ -158,6 +177,14 @@ public sealed partial class EquipmentDrawer
             }
             Im.Tooltip.OnHover(
                 "When enabled, items that share the same visual model are grouped under a single icon in the picker."u8);
+
+            if (Im.Checkbox("Remember Scroll Per Slot"u8, _config.RememberIconPickerScroll))
+            {
+                _config.RememberIconPickerScroll ^= true;
+                _config.Save();
+            }
+            Im.Tooltip.OnHover(
+                "Remember the icon picker's scroll position separately for each slot."u8);
         }
 
         // Row 2: Job filter | Dye channel filter | Sort
@@ -413,14 +440,7 @@ public sealed partial class EquipmentDrawer
         if (!popup)
             return;
 
-        if (Im.Window.Appearing)
-            _iconPickerScrollResetFrames = 2;
-
-        if (_iconPickerScrollResetFrames > 0)
-        {
-            Im.Scroll.Y = 0;
-            --_iconPickerScrollResetFrames;
-        }
+        ApplyIconPickerScroll(_iconPickerSlot, _iconPickerSlotScroll);
 
         _iconPickerPopupOpen   = true;
         _iconPickerHoveredItem = null;
@@ -551,14 +571,7 @@ public sealed partial class EquipmentDrawer
         if (!popup)
             return;
 
-        if (Im.Window.Appearing)
-            _iconPickerScrollResetFrames = 2;
-
-        if (_iconPickerScrollResetFrames > 0)
-        {
-            Im.Scroll.Y = 0;
-            --_iconPickerScrollResetFrames;
-        }
+        ApplyIconPickerScroll(_iconPickerBonusSlot, _iconPickerBonusSlotScroll);
 
         _iconPickerPopupOpen   = true;
         _iconPickerHoveredItem = null;
@@ -724,14 +737,7 @@ public sealed partial class EquipmentDrawer
         if (!popup)
             return;
 
-        if (Im.Window.Appearing)
-            _iconPickerScrollResetFrames = 2;
-
-        if (_iconPickerScrollResetFrames > 0)
-        {
-            Im.Scroll.Y = 0;
-            --_iconPickerScrollResetFrames;
-        }
+        ApplyIconPickerScroll(slot, _iconPickerSlotScroll);
 
         _iconPickerPopupOpen   = true;
         _iconPickerHoveredItem = null;
