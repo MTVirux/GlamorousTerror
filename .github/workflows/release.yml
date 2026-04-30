@@ -28,14 +28,18 @@ jobs:
         run: |
           $ver = '${{ github.ref_name }}'
           invoke-expression 'dotnet build --no-restore --configuration Release --nologo -p:Version=$ver -p:FileVersion=$ver -p:AssemblyVersion=$ver'
-      - name: write version into jsons
+      - name: Verify repo.json matches tag
         run: |
-          $ver = '${{ github.ref_name }}'
-          $path = './Glamourer/bin/Release/GlamorousTerror.json'
-          $json = Get-Content -Raw $path | ConvertFrom-Json
-          $json.AssemblyVersion = $ver
-          $content = $json | ConvertTo-Json
-          set-content -Path $path -Value $content
+          $expected = '${{ github.ref_name }}'
+          $repo = (Get-Content -Raw './repo.json' | ConvertFrom-Json)[0]
+          if ($repo.AssemblyVersion -ne $expected) {
+            Write-Error "repo.json AssemblyVersion ($($repo.AssemblyVersion)) does not match tag ($expected). Did release.ps1 fail to commit?"
+            exit 1
+          }
+      - name: Generate bin manifest from repo.json
+        run: |
+          $repo = Get-Content -Raw './repo.json' | ConvertFrom-Json
+          $repo[0] | ConvertTo-Json -Depth 10 | Set-Content './Glamourer/bin/Release/GlamorousTerror.json'
       - name: Archive
         run: Compress-Archive -Path Glamourer/bin/Release/* -DestinationPath GlamorousTerror.zip
       - name: Upload a Build Artifact
