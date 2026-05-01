@@ -58,7 +58,7 @@ Right-clicking any player character in-game adds a **"Glamorous Terror"** entry 
 | File | Role |
 |------|------|
 | `Glamourer/GlamorousTerror/ContextMenu/ContextMenuService.cs` | Hooks Dalamud's `IContextMenu`, adds "Glamorous Terror" (and "Immersive Dresser") to character right-click menus |
-| `Glamourer/GlamorousTerror/ContextMenu/CharacterPopupMenu.cs` | ~850-line custom ImGui popup with all menu logic |
+| `Glamourer/GlamorousTerror/ContextMenu/CharacterPopupMenu.cs` | ~1000-line custom ImGui popup with all menu logic |
 | `Glamourer/GlamorousTerror/PreviewOnHover/PreviewService.cs` | Preview engine shared with equipment/customization drawers |
 
 **ContextMenuService** implements `IRequiredService`. On `OnMenuOpened`, it filters for character-type context menus, creates a `MenuItem` with `PrefixChar = 'G'`, and fires `_popupMenu.Open(actor, name)` on click.
@@ -485,8 +485,8 @@ Only one mode per category can be active:
 | File | Lines | Role |
 |------|-------|------|
 | `Glamourer/Services/CodeService.cs` | ~210 | `CodeFlag` enum, `Toggle()`, `DisableAll()`, `GetMutuallyExclusive()`, `GetName()`, `GetDescription()` |
-| `Glamourer/State/FunModule.cs` | ~440 | `IRequiredService` applying transformations on character load/equip/weapon changes |
-| `Glamourer/Gui/Tabs/SettingsTab/CodeDrawer.cs` | ~95 | Settings UI: checkbox list, Disable All button, Who Am I / Who Is That clipboard buttons |
+| `Glamourer/State/FunModule.cs` | ~500 | `IRequiredService` applying transformations on character load/equip/weapon changes |
+| `Glamourer/Gui/Tabs/SettingsTab/CodeDrawer.cs` | ~80 | Settings UI: checkbox list, Disable All button, Who Am I / Who Is That clipboard buttons |
 | `Glamourer/State/FunEquipSet.cs` | — | Festival-specific outfit definitions |
 
 **CodeService** — Reads/writes `Configuration.EnabledCheats` directly:
@@ -906,21 +906,22 @@ Replaces the name-based equipment combo list with a compact **icon grid**. Click
   - Text search (case-insensitive substring, auto-focused on open)
   - **Star** button — favorites-only filter
   - **K** button — toggles `KeepIconPickerOpen` (if set, the popup stays open after each selection)
-  - **Cog** button — expands an inline settings panel with `DrawOwnedOnlyFilter(config)` + "Group by Model"
+  - **Thumbtack (pin)** button — toggles `IconPickerPinned`. When pinned the picker is hoisted out of the transient popup into a regular ImGui window that survives click-off; click the source equipment icon again to close, or another icon to switch slots
+  - **Cog** button — expands an inline settings panel with `DrawOwnedOnlyFilter(config)` + "Group by Model" + "Remember Scroll Per Slot"
   - Job filter combo (by role: Tanks, Healers, Melee, Physical Ranged, Magical Ranged, Crafters, Gatherers; plus "Unrestricted" shortcut for gear equippable by all jobs)
   - Dye channel filter combo (Any, 0, 1, 2)
   - Sort combo (A → Z, Z → A, ID ↑, ID ↓)
 - **Grouping by model** (`GroupIconPickerByModel`, default `true`) — deduplicates items that share the same `(Type, PrimaryId, SecondaryId, Variant)`, keeping only the first after sorting
 - **Owned-only gate** runs before the filter for each item (fast reject)
 - **Preview-on-hover** — hovering an icon while CTRL is held previews the item (see [Preview-on-Hover](#2-preview-on-hover))
-- **Scroll reset** — the popup's scroll position is forced to 0 for 2 frames after opening (prevents inheriting the previous popup's scroll)
+- **Scroll behavior** — by default the popup's scroll position is forced to 0 for 2 frames after opening (prevents inheriting the previous popup's scroll). When `RememberIconPickerScroll` is enabled, the picker instead restores the per-`(slot, isWeapon, isBonus)` scroll position recorded the last time the user closed/switched the picker for that slot
 - **Max rows** — popup height is capped at `IconPickerMaxRows` rows (default `10`), configurable via slider in Settings
 
 ### Implementation
 
 | File | Role |
 |------|------|
-| `Glamourer/GlamorousTerror/IconEquipment/EquipmentDrawer.IconMode.cs` | ~880-line partial class extension of `EquipmentDrawer` — all icon mode state, filter/sort logic, popup layout, item/bonus/weapon icon draws |
+| `Glamourer/GlamorousTerror/IconEquipment/EquipmentDrawer.IconMode.cs` | ~1000-line partial class extension of `EquipmentDrawer` — all icon mode state, filter/sort logic, popup/window layout, pin handling, item/bonus/weapon icon draws |
 | `Glamourer/Gui/Equipment/EquipmentDrawer.cs` | Upstream drawer declares `GTTryDrawEquipIcon`, `GTTryDrawBonusItemIcon`, `GTTryDrawWeaponsIcon`, `GTResetIconState` partial-method hooks that early-short-circuit when the icon drawer is active |
 | `Glamourer/GlamorousTerror/Config/SettingsTab.GT.cs` | Master toggle + sub-settings (Group by Model, Keep Picker Open, Max Rows slider) |
 
@@ -931,10 +932,12 @@ Replaces the name-based equipment combo list with a compact **icon grid**. Click
 | `_iconPickerSlot` / `_iconPickerBonusSlot` | Which slot the open popup belongs to |
 | `_iconPickerIsWeapon` / `_iconPickerIsBonus` | Popup variant |
 | `_iconPickerPopupOpen` | Set `true` each frame the popup renders (for `ApplyHoverPreview`); resets via `GTResetIconState()` at start of frame |
+| `_iconPickerActive`, `_iconPickerRepositionRequested` | Pinned-mode state — when `IconPickerPinned`, the picker is rendered as a regular window instead of a popup; carry-over and reposition flags handle the popup↔window transition |
 | `_iconPickerHoveredItem` | Item under the mouse inside the popup |
 | `_iconPickerSelectionMade` | Click-to-commit flag |
 | `_iconPickerClickY` | Vertical anchor point so the popup opens at the clicked icon's Y |
-| `_iconPickerScrollResetFrames` | Countdown that zeros `Im.Scroll.Y` for 2 frames after popup appears |
+| `_iconPickerScrollResetFrames` | Countdown that zeros `Im.Scroll.Y` for 2 frames after popup appears (when `RememberIconPickerScroll` is off) |
+| Per-slot scroll dictionaries | When `RememberIconPickerScroll` is on, the picker restores the previous scroll for the `(slot, isWeapon, isBonus)` key it was opened for |
 | `_iconPickerNameFilter`, `_iconPickerFavoritesOnly`, `_iconPickerJobFilter`, `_iconPickerNeutralJobFilter`, `_iconPickerDyeChannelFilter`, `_iconPickerSortMode`, `_iconPickerShowSettings` | Filter & sort state |
 
 **Popup positioning** (`PositionIconPickerPopup`) opens the popup to the left or right of the source window's center (whichever side has more space), clamps the anchor inside the viewport, and sizes the popup to fit `IconPickerMaxRows` rows and 8 columns (`IconPickerColumns = 8`).
@@ -959,6 +962,8 @@ Replaces the name-based equipment combo list with a compact **icon grid**. Click
 | `UseIconEquipmentDrawer` | `bool` | `false` | Master toggle |
 | `GroupIconPickerByModel` | `bool` | `true` | Dedup items sharing the same visual model |
 | `KeepIconPickerOpen` | `bool` | `false` | Popup stays open after each selection |
+| `IconPickerPinned` | `bool` | `false` | Pin the picker into a regular window so click-off does not close it |
+| `RememberIconPickerScroll` | `bool` | `false` | Remember the picker's scroll position separately for each slot |
 | `IconPickerMaxRows` | `int` | `10` | Max visible rows (1–20) before scrolling |
 
 ---
@@ -1235,6 +1240,8 @@ All GlamorousTerror-specific properties live in `Glamourer/GlamorousTerror/Confi
 | `IconPickerMaxRows` | `int` | `10` | Icon Equipment Drawer |
 | `GroupIconPickerByModel` | `bool` | `true` | Icon Equipment Drawer |
 | `KeepIconPickerOpen` | `bool` | `false` | Icon Equipment Drawer |
+| `IconPickerPinned` | `bool` | `false` | Icon Equipment Drawer |
+| `RememberIconPickerScroll` | `bool` | `false` | Icon Equipment Drawer |
 | `EnabledCheats` | `CodeService.CodeFlag` | `0` | Fun Modes |
 | `FestivalMode` | `FestivalSetting` | `Undefined` | Fun Modes (festivals) |
 | `LastFestivalPopup` | `DateOnly` | `MinValue` | Fun Modes (festivals) |
