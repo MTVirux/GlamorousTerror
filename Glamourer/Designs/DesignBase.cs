@@ -276,14 +276,16 @@ public class DesignBase
         return ret;
 
         static JObject Serialize(CustomItemId id, StainIds stains, bool crest, bool apply, bool applyStain, bool applyCrest)
-            => stains.AddToObject(new JObject
+            => new()
             {
                 ["ItemId"]     = id.Id,
                 ["Crest"]      = crest,
                 ["Apply"]      = apply,
                 ["ApplyStain"] = applyStain,
                 ["ApplyCrest"] = applyCrest,
-            });
+                ["Stain"]      = stains.Stain1.Id,
+                ["Stain2"]     = stains.Stain2.Id,
+            };
     }
 
     protected JObject SerializeBonusItems()
