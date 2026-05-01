@@ -95,7 +95,7 @@ public sealed class ContextMenuService : IDisposable, IRequiredService
             var target = (MenuTargetDefault)args.Target;
 
             // Character context menu: show "Glamorous Terror" entry when targeting a player character.
-            if (target.TargetObjectId != 0 && target.TargetObject is { } gameObject && gameObject.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Player)
+            if (target.TargetObjectId != 0 && target.TargetObject is { } gameObject && gameObject.ObjectKind == Dalamud.Game.ClientState.Objects.Enums.ObjectKind.Pc)
             {
                 _lastCharacterActor   = (nint)gameObject.Address;
                 _lastCharacterName    = target.TargetName;
