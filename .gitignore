@@ -5,6 +5,7 @@ Glamourer.json
 private/
 .github/
 !/.github/workflows/
+scripts/
 
 .cursor/
 .cursor-cache/
