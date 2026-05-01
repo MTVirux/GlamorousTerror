@@ -25,10 +25,13 @@ public sealed class FilenameService(IDalamudPluginInterface pi) : BaseFilePathPr
     public readonly string PredefinedTagFile         = Path.Combine(pi.ConfigDirectory.FullName, "predefined_tags.json");
     public readonly string FilterFile                = Path.Combine(pi.ConfigDirectory.FullName, "filters.json");
     public readonly string FileSystemFolder          = Path.Combine(pi.ConfigDirectory.FullName, "design_filesystem");
-    public readonly string FileSystemEmptyFolders    = Path.Combine(pi.ConfigDirectory.FullName, "design_filesystem", "empty_folders.json");
+    public readonly string FileSystemOrganization    = Path.Combine(pi.ConfigDirectory.FullName, "design_filesystem", "organization.json");
     public readonly string FileSystemExpandedFolders = Path.Combine(pi.ConfigDirectory.FullName, "design_filesystem", "expanded_folders.json");
     public readonly string FileSystemLockedNodes     = Path.Combine(pi.ConfigDirectory.FullName, "design_filesystem", "locked_nodes.json");
     public readonly string FileSystemSelectedNodes   = Path.Combine(pi.ConfigDirectory.FullName, "design_filesystem", "selected_nodes.json");
+
+    public readonly string MigrationFileSystemEmptyFolders =
+        Path.Combine(pi.ConfigDirectory.FullName, "design_filesystem", "empty_folders.json");
 
     public IEnumerable<FileInfo> Designs()
     {
@@ -57,7 +60,7 @@ public sealed class FilenameService(IDalamudPluginInterface pi) : BaseFilePathPr
             new(UnlockFileItems),
             new(FavoriteFile),
             new(DesignColorFile),
-            new(FileSystemEmptyFolders),
+            new(MigrationFileSystemEmptyFolders),
             new(FileSystemLockedNodes),
         };
         // Do not back up expanded folders, selected nodes, ui configuration or ephemeral config.
