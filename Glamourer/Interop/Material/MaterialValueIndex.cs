@@ -109,7 +109,9 @@ public readonly record struct MaterialValueIndex(
 
         var from = SlotIndex * MaterialService.MaterialsPerModel;
         textures  = model.AsCharacterBase->ColorTableTexturesSpan.Slice(from, MaterialService.MaterialsPerModel);
-        materials = model.AsCharacterBase->MaterialsSpan.Slice(from, MaterialService.MaterialsPerModel);
+        materials = new ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<MaterialResourceHandle>>(
+            (FFXIVClientStructs.Interop.Pointer<MaterialResourceHandle>*)model.AsCharacterBase->Materials + from,
+            MaterialService.MaterialsPerModel);
         return true;
     }
 

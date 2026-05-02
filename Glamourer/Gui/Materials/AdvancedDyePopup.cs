@@ -96,7 +96,7 @@ public sealed unsafe class AdvancedDyePopup(
     }
 
     private void DrawTabBar(ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<Texture>> textures,
-        ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<Material>> materials, ref bool firstAvailable)
+        ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<MaterialResourceHandle>> materials, ref bool firstAvailable)
     {
         using var bar = Im.TabBar.Begin("tabs"u8);
         if (!bar)
@@ -199,7 +199,7 @@ public sealed unsafe class AdvancedDyePopup(
     }
 
     private void DrawContent(ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<Texture>> textures,
-        ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<Material>> materials)
+        ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<MaterialResourceHandle>> materials)
     {
         var firstAvailable = true;
         DrawTabBar(textures, materials, ref firstAvailable);
@@ -209,7 +209,7 @@ public sealed unsafe class AdvancedDyePopup(
     }
 
     private void DrawWindow(ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<Texture>> textures,
-        ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<Material>> materials)
+        ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<MaterialResourceHandle>> materials)
     {
         var flags = WindowFlags.NoFocusOnAppearing
           | WindowFlags.NoCollapse
