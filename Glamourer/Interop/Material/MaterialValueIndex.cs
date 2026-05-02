@@ -5,7 +5,6 @@ using Newtonsoft.Json;
 using Penumbra.GameData.Enums;
 using Penumbra.GameData.Files.MaterialStructs;
 using Penumbra.GameData.Interop;
-using CsMaterial = FFXIVClientStructs.FFXIV.Client.Graphics.Render.Material;
 
 namespace Glamourer.Interop.Material;
 
@@ -97,7 +96,7 @@ public readonly record struct MaterialValueIndex(
     }
 
     public unsafe bool TryGetTextures(Actor actor, out ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<Texture>> textures,
-        out ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<CsMaterial>> materials)
+        out ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<MaterialResourceHandle>> materials)
     {
         if (!TryGetModel(actor, out var model)
          || SlotIndex >= model.AsCharacterBase->SlotCount
@@ -150,7 +149,7 @@ public readonly record struct MaterialValueIndex(
     }
 
     public unsafe bool TryGetTexture(ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<Texture>> textures,
-        ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<CsMaterial>> materials,
+        ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<MaterialResourceHandle>> materials,
         out Texture** texture, out ColorRow.Mode mode)
     {
         mode = MaterialIndex >= materials.Length
