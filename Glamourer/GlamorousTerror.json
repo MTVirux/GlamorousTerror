@@ -2,8 +2,8 @@
   "_comment": "Local-dev stub. CI overwrites this with repo.json content at release time. Edit repo.json (the single source of truth); this file only exists so local debug builds load with sensible metadata.",
   "Author": "MTVirux",
   "Name": "Glamourous Terror",
-  "Punchline": "Custom build of Glamourer by MTVirux",
-  "Description": "Custom build of Glamourer by MTVirux.\nRequires Penumbra to function.\nIt's recommended you disable the original Glamourer.\nDM @mtvirux on discord for assistance or bug reports.",
+  "Punchline": "Custom build of Glamourer by MTVirux with added features",
+  "Description": "DM @mtvirux on discord for assistance or bug reports. THIS REPLACES GLAMOURER, so make sure to uninstall either Glamourer or GlamorousTerror before installing the other.",
   "Tags": [
     "Appearance",
     "Glamour",
