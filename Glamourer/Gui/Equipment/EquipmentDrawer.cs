@@ -269,7 +269,7 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
             }
         }
 
-        using var dragTarget = Im.DragDrop.Target();
+        using var dragTarget = Im.DragDrop.TargetUnclipped();
         if (dragTarget.IsDropping("stainDragDrop"u8) && _draggedStain.HasValue)
         {
             data.SetStains(data.CurrentStains.With(index, _draggedStain.Value.RowIndex));
@@ -336,7 +336,7 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
             }
         }
 
-        using var dragTarget = Im.DragDrop.Target();
+        using var dragTarget = Im.DragDrop.TargetUnclipped();
         if (!dragTarget)
             return;
 
@@ -602,8 +602,8 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
         public static void Equip(EquipmentDrawer parent, in EquipDrawData data)
         {
             data.CurrentItem.DrawIcon(parent._textures, parent._iconSize, data.Slot);
+            var left  = Im.Item.InvisibleButton("button"u8);
             var right = Im.Item.RightClicked();
-            var left  = Im.Item.Clicked();
             Im.Line.Same();
             using var group = Im.Group();
             parent.DrawItem(data, out var label, right, left);
@@ -636,8 +636,8 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
         public static void Bonus(EquipmentDrawer parent, in BonusDrawData data)
         {
             data.CurrentItem.DrawIcon(parent._textures, parent._iconSize, data.Slot);
+            var left  = Im.Item.InvisibleButton("button"u8);
             var right = Im.Item.RightClicked();
-            var left  = Im.Item.Clicked();
             Im.Line.Same();
             using var group = Im.Group();
             parent.DrawBonusItem(data, out var label, right, left);
@@ -661,7 +661,7 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
             using var style = ImStyleDouble.ItemSpacing.PushX(Im.Style.ItemInnerSpacing.X);
 
             mainhand.CurrentItem.DrawIcon(parent._textures, parent._iconSize, EquipSlot.MainHand);
-            var left = Im.Item.Clicked();
+            var left = Im.Item.InvisibleButton("button"u8);
             Im.Line.Same();
             using (Im.Group())
             {
@@ -693,8 +693,8 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
                 return;
 
             offhand.CurrentItem.DrawIcon(parent._textures, parent._iconSize, EquipSlot.OffHand);
+            left = Im.Item.InvisibleButton("button"u8);
             var right = Im.Item.RightClicked();
-            left = Im.Item.Clicked();
             Im.Line.Same();
             using (Im.Group())
             {
@@ -826,8 +826,8 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
         public static void Equip(EquipmentDrawer parent, in EquipDrawData data)
         {
             data.CurrentItem.DrawIcon(parent._textures, parent._iconSize, data.Slot);
+            var left  = Im.Item.InvisibleButton("button"u8);
             var right = Im.Item.RightClicked();
-            var left  = Im.Item.Clicked();
             Im.Line.Same();
             using var group = Im.Group();
             parent.DrawItem(data, out _, right, left);
@@ -858,8 +858,8 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
         public static void Bonus(EquipmentDrawer parent, in BonusDrawData data)
         {
             data.CurrentItem.DrawIcon(parent._textures, parent._iconSize, data.Slot);
+            var left  = Im.Item.InvisibleButton("button"u8);
             var right = Im.Item.RightClicked();
-            var left  = Im.Item.Clicked();
             Im.Line.Same();
             parent.DrawBonusItem(data, out _, right, left);
             if (data.DisplayApplication)
@@ -881,7 +881,7 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
             using var style = ImStyleDouble.ItemSpacing.PushX(Im.Style.ItemInnerSpacing.X);
 
             mainhand.CurrentItem.DrawIcon(parent._textures, parent._iconSize, EquipSlot.MainHand);
-            var left = Im.Item.Clicked();
+            var left = Im.Item.InvisibleButton("button"u8);
             Im.Line.Same();
             using (Im.Group())
             {
@@ -910,8 +910,8 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
                 return;
 
             offhand.CurrentItem.DrawIcon(parent._textures, parent._iconSize, EquipSlot.OffHand);
+            left = Im.Item.InvisibleButton("button"u8);
             var right = Im.Item.RightClicked();
-            left = Im.Item.Clicked();
             Im.Line.Same();
             using (Im.Group())
             {
@@ -947,8 +947,8 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
             parent.DrawStain(data);
             Im.Line.Same();
             data.CurrentItem.DrawIcon(parent._textures, parent._smallIconSize, data.Slot);
+            var left  = Im.Item.InvisibleButton("button"u8);
             var right = Im.Item.RightClicked();
-            var left  = Im.Item.Clicked();
 
             parent.DrawItem(data, out _, right, left);
             if (data.DisplayApplication)
@@ -970,8 +970,8 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
                 Im.Style.FrameHeight));
             Im.Line.Same();
             data.CurrentItem.DrawIcon(parent._textures, parent._smallIconSize, data.Slot);
+            var left  = Im.Item.InvisibleButton("button"u8);
             var right = Im.Item.RightClicked();
-            var left  = Im.Item.Clicked();
 
             parent.DrawBonusItem(data, out _, right, left);
             if (data.DisplayApplication)
@@ -990,7 +990,7 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
             parent.DrawStain(mainhand);
             Im.Line.Same();
             mainhand.CurrentItem.DrawIcon(parent._textures, parent._smallIconSize, mainhand.Slot);
-            var left = Im.Item.Clicked();
+            var left = Im.Item.InvisibleButton("button"u8);
 
             parent.DrawMainhand(ref mainhand, ref offhand, out _, allWeapons, left);
             if (mainhand.DisplayApplication)
@@ -1013,8 +1013,8 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
             parent.DrawStain(offhand);
             Im.Line.Same();
             offhand.CurrentItem.DrawIcon(parent._textures, parent._smallIconSize, offhand.Slot);
+            left  = Im.Item.InvisibleButton("button"u8);
             var right = Im.Item.RightClicked();
-            left = Im.Item.Clicked();
 
             parent.DrawOffhand(mainhand, validOffhand, offhand, out _, right, left);
             if (offhand.DisplayApplication)
