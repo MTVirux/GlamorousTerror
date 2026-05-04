@@ -2,8 +2,7 @@
 
 > **To Otter:** I hereby give full permission for any and all changes in this fork to be ported back into upstream Glamourer, and I'd genuinely thank you if you did. No credit required.
 
-**Glamourer but with extra features.**
-A custom fork of [Glamourer](https://github.com/Ottermandias/Glamourer) with an added features, in-game context menus, and an immersive glamour dresser.
+A custom fork of [Glamourer](https://github.com/Ottermandias/Glamourer) with added features, in-game context menus, and an immersive glamour dresser.
 
 `/glamourer` (or `/glam`, `/glamorous`, `/gt`) - toggle the main window
 
