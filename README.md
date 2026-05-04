@@ -58,7 +58,7 @@ https://raw.githubusercontent.com/MTVirux/SeaOfTerror/master/repo.json
 |---------|-------------|
 | `/glamourer`, `/glam`, `/glamorous`, `/gt` | Toggle the main Glamourer window |
 | `/glamour` | Apply designs, items, customizations, automation, and more - use `help` or `?` for the full argument list |
-| `/glamour dresser` | Open the Immersive Dresser on your own character |
+| `/gt dresser` | Open the Immersive Dresser |
 
 ---
 
