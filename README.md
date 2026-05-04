@@ -57,3 +57,12 @@ https://raw.githubusercontent.com/MTVirux/SeaOfTerror/master/repo.json
 | `/glamourer`, `/glam`, `/glamorous`, `/gt` | Toggle the main Glamourer window |
 | `/glamour` | Apply designs, items, customizations, automation, and more - use `help` or `?` for the full argument list |
 | `/glamour dresser` | Open the Immersive Dresser on your own character |
+
+---
+
+## Support
+
+- **Bug reports & feature requests:** [open an issue](https://github.com/MTVirux/GlamorousTerror/issues) on the GitHub repo.
+- **Direct contact:** DM `@mtvirux` on Discord.
+
+When reporting a bug, please include your Dalamud log (`/xllog`), the GlamorousTerror version, and clear steps to reproduce. Issues that affect upstream Glamourer should be reported to [Ottermandias/Glamourer](https://github.com/Ottermandias/Glamourer) instead.
