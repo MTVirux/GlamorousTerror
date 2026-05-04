@@ -31,7 +31,7 @@ That's it, thank you for coming to my TED Talk.
 | **Equipment Name Language Override** | Display equipment names in a different language than your client, independent of search language. |
 | **Wildcard Automation** | Extends automation triggers with wildcard / pattern matching for character identifiers, for setups that span multiple alts or world-roaming targets. |
 | **Character Rotation** | Rotate the character preview directly inside the Glamourer window. |
-| **Fun Modes** | Remove the *completely unecessary* gatekeeping of features behind |
+| **Fun Modes** | Remove the *completely unecessary* gatekeeping of features behind codes that can only be found in Discord.|
 
 ---
 
