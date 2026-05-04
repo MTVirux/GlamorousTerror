@@ -4,6 +4,8 @@
 
 A custom fork of [Glamourer](https://github.com/Ottermandias/Glamourer) with added features, in-game context menus, and an immersive glamour dresser.
 
+This fork tries to stay as up-to-date with upstream Glamourer as possible - new releases from Ottermandias are merged in regularly, so you should get the same fixes and additions as the original alongside the fork-specific features.
+
 `/glamourer` (or `/glam`, `/glamorous`, `/gt`) - toggle the main window
 
 ---
