@@ -7,9 +7,7 @@ public struct CustomizeParameterData
     public Vector4 DecalColor;
     public Vector4 LipDiffuse;
     public Vector3 SkinDiffuse;
-    public Vector3 SkinSpecular;
     public Vector3 HairDiffuse;
-    public Vector3 HairSpecular;
     public Vector3 HairHighlight;
     public Vector3 LeftEye;
     public float   LeftLimbalIntensity;
@@ -29,10 +27,8 @@ public struct CustomizeParameterData
             {
                 CustomizeParameterFlag.SkinDiffuse           => new CustomizeParameterValue(SkinDiffuse),
                 CustomizeParameterFlag.MuscleTone            => new CustomizeParameterValue(MuscleTone),
-                CustomizeParameterFlag.SkinSpecular          => new CustomizeParameterValue(SkinSpecular),
                 CustomizeParameterFlag.LipDiffuse            => new CustomizeParameterValue(LipDiffuse),
                 CustomizeParameterFlag.HairDiffuse           => new CustomizeParameterValue(HairDiffuse),
-                CustomizeParameterFlag.HairSpecular          => new CustomizeParameterValue(HairSpecular),
                 CustomizeParameterFlag.HairHighlight         => new CustomizeParameterValue(HairHighlight),
                 CustomizeParameterFlag.LeftEye               => new CustomizeParameterValue(LeftEye),
                 CustomizeParameterFlag.LeftLimbalIntensity   => new CustomizeParameterValue(LeftLimbalIntensity),
@@ -55,10 +51,8 @@ public struct CustomizeParameterData
         {
             CustomizeParameterFlag.SkinDiffuse           => SetIfDifferent(ref SkinDiffuse,           value.InternalTriple),
             CustomizeParameterFlag.MuscleTone            => SetIfDifferent(ref MuscleTone,            value.Single),
-            CustomizeParameterFlag.SkinSpecular          => SetIfDifferent(ref SkinSpecular,          value.InternalTriple),
             CustomizeParameterFlag.LipDiffuse            => SetIfDifferent(ref LipDiffuse,            value.InternalQuadruple),
             CustomizeParameterFlag.HairDiffuse           => SetIfDifferent(ref HairDiffuse,           value.InternalTriple),
-            CustomizeParameterFlag.HairSpecular          => SetIfDifferent(ref HairSpecular,          value.InternalTriple),
             CustomizeParameterFlag.HairHighlight         => SetIfDifferent(ref HairHighlight,         value.InternalTriple),
             CustomizeParameterFlag.LeftEye               => SetIfDifferent(ref LeftEye,               value.InternalTriple),
             CustomizeParameterFlag.LeftLimbalIntensity   => SetIfDifferent(ref LeftLimbalIntensity,   value.Single),
