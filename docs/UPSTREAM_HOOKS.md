@@ -135,19 +135,66 @@ private partial bool GTFallbackNameMatch(in CacheItem item);
 
 - Add `partial` keyword to class declaration
 - Wildcard methods moved to `AutoDesignApplier.Wildcard.cs`
-- `GetPlayerSet()` calls `TryGettingSetExactOrWildcard()` which is in the partial
+- `GetPlayerSet()` Player branch calls `TryGettingSetExactOrWildcard(identifier, out set)` as the final fallthrough
 
 ### 12. `Glamourer/Gui/Tabs/ActorTab/ActorPanel.cs`
 
-- **Line ~157**: Call `customizationDrawer.ApplyHoverPreview(...)` (1 line)
-- **Line ~238**: Call `equipmentDrawer.ApplyHoverPreview(...)` (1 line)
+- Call `_customizationDrawer.ApplyHoverPreview(_stateManager, _selection.State!)` at the end of `DrawCustomizationsHeader`
+- After `EquipmentDrawer.DrawKeepItemFilter(_config)`, call `EquipmentDrawer.DrawOwnedOnlyFilter(_config)`
+- Wrap the equipment-slot iteration in `if (_config.UseIconEquipmentDrawer) { ...icon rows... } else { ...combo rows... }`. The icon branch uses `DrawSingleWeaponIcon` (GT-only) and `EquipSlotExtensions.EquipmentSlots`/`AccessorySlots` to lay out 3 rows.
+- After `_equipmentDrawer.DrawDragDropTooltip()`, call `_equipmentDrawer.ApplyHoverPreview(...)` and `_equipmentDrawer.ApplyAllStainHoverPreview(...)`
+
+### 13. `Glamourer/Gui/Tabs/DesignTab/DesignPanel.cs`
+
+- Same icon-mode branch as `ActorPanel`, plus `EquipmentDrawer.DrawOwnedOnlyFilter(_config)` after the keep-item filter
+
+### 14. `Glamourer/Gui/Tabs/NpcTab/NpcPanel.cs`
+
+- Same icon-mode branch as `ActorPanel`, no preview/owned-filter (NPCs are read-only)
+
+### 15. `Glamourer/Services/CommandService.cs`
+
+- Add ctor param `ImmersiveDresserManager immersiveDresser`, store in `_immersiveDresser`
+- Register command aliases `/glam`, `/glamorous`, `/gt` (dispatch to `OnGlamourer`)
+- Add `case "dresser": case "im":` in `OnGlamourer` argument switch — calls `_immersiveDresser.Open()`
+
+### 16. `Glamourer/Gui/Equipment/GlamourerColorCombo.cs`
+
+GT additions to power preview-on-hover for stain combos:
+
+- After ctor, add `ResetFrameState()`, `HoveredStain`/`IsPopupOpen`/`StainSelected` properties, `ResetSelection()`, and an override of `PreDrawList()` that sets `IsPopupOpen = true` before delegating to base
+- In `DrawItem`, capture `var ret = base.DrawItem(...)`, then `if (Im.Item.Hovered()) HoveredStain = new StainId((byte)item.Id);` before `return ret;`
+- In `Draw(...)`, set `StainSelected = true;` inside the `if (ret) { ... }` block before `return true;`
+
+### 17. `Glamourer/Services/FilenameService.cs`
+
+GT adds a per-character path helper:
+
+```csharp
+public string UnlockFileItemsForCharacter(ulong contentId)
+    => Path.Combine(ConfigurationDirectory, $"unlocks_items_{contentId:X16}.dat");
+```
+
+Use `ConfigurationDirectory` (from `BaseFilePathProvider`), not `pi.ConfigDirectory.FullName`, to avoid the CS9107 capture warning on the primary-constructor parameter.
+
+### 18. `Glamourer/Gui/Equipment/{ItemCombo,BonusItemCombo,WeaponCombo}.cs`
+
+Each subclass primary ctor must take `ItemNameService itemNameService, ItemUnlockManager itemUnlockManager` and forward them to `BaseItemCombo(...)`.
+
+---
+
+## Configuration Field Conflicts (1.6.0.5 → 1.6.1.4)
+
+Upstream 1.6.1.4 introduced its own `EnableGameContextMenu` config field on `Configuration`. The duplicate field was removed from `Configuration.GT.cs`; the GT context-menu wiring (`contextMenuService.Enable/Disable()`) still hangs off the GT settings checkbox. Two checkboxes now bind to the same flag — upstream's (added in 1.6.1.4) and the GT one in `SettingsTab.GT.cs`. Consolidate before publish.
 
 ---
 
 ## Sync Procedure
 
-1. Merge/rebase upstream Glamourer changes
-2. Resolve conflicts in the upstream files listed above
-3. Re-apply `partial` keywords and GT hook calls where removed
-4. Verify `Glamourer/GlamorousTerror/` files compile (partial implementations must match declarations)
-5. Build: `dotnet build Glamourer/Glamourer.csproj -c Debug`
+1. Branch off `main` to `upstream-port-vX.Y.Z.W`; tag the pre-overlay commit as `backup/pre-upstream-port-vX.Y.Z.W`
+2. Snapshot `Glamourer/GlamorousTerror/` and the GT-modified upstream files into `_custom_backup/` (gitignored)
+3. Update submodules: rebase MTVirux Penumbra forks onto the latest upstream Ottermandias commits, push to a new branch on the MTVirux fork (`wildcard-on-vX.Y.Z.W`), and bump `.gitmodules` `branch = ` to that
+4. `git checkout <new-tag> -- <list-of-Glamourer/-paths>` and `git rm` upstream copies of files we keep in GT folders (`Unlocks/*`, `Interop/ContextMenuService.cs`)
+5. Re-apply hooks above. Verify partial method signatures match GT-folder declarations.
+6. Build: `.\scripts\build\debug.ps1` until 0 errors / 0 warnings
+7. Smoke-test the Critical Invariants checklist from `CLAUDE.md` in-game
