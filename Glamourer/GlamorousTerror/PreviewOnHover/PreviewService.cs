@@ -84,6 +84,11 @@ public sealed class PreviewState
     public int OriginalStainIndex { get; set; }
     public bool StainSelectionMade { get; set; }
 
+    // Last value applied via Preview*; restore only when current state still matches it,
+    // so external mutations (right-click clear, IPC, etc.) aren't reverted by the fall-through end.
+    public EquipItem? LastAppliedItem { get; set; }
+    public StainIds? LastAppliedStain { get; set; }
+
     // AllSlotsStain preview tracking: original stains for every slot, keyed by slot.
     public Dictionary<EquipSlot, StainIds> OriginalAllSlotStains { get; } = new();
 
@@ -289,6 +294,8 @@ public sealed class PreviewState
         OriginalStainIndex = default;
         StainSelectionMade = false;
         OriginalAllSlotStains.Clear();
+        LastAppliedItem = null;
+        LastAppliedStain = null;
         // Clear popup tracking
         PopupActiveThisFrame = false;
         ActivePopupType = PopupType.None;
@@ -933,6 +940,7 @@ public sealed class PreviewService(
         if (!State.IsSingleItemPreview(slot))
             return;
 
+        State.LastAppliedItem = item;
         var currentItem = state.ModelData.Item(slot);
         if (currentItem.ItemId != item.ItemId)
             stateManager.ChangeItem(state, slot, item, ApplySettings.Manual);
@@ -949,6 +957,7 @@ public sealed class PreviewService(
         if (!State.IsSingleBonusItemPreview(slot))
             return;
 
+        State.LastAppliedItem = item;
         var currentItem = state.ModelData.BonusItem(slot);
         if (currentItem.Id != item.Id)
             stateManager.ChangeBonusItem(state, slot, item, ApplySettings.Manual);
@@ -983,11 +992,10 @@ public sealed class PreviewService(
             return;
 
         var currentStains = state.ModelData.Stain(slot);
+        var newStains     = currentStains.With(stainIndex, stainValue);
+        State.LastAppliedStain = newStains;
         if (currentStains[stainIndex] != stainValue)
-        {
-            var newStains = currentStains.With(stainIndex, stainValue);
             stateManager.ChangeStains(state, slot, newStains, ApplySettings.Manual);
-        }
     }
 
     /// <summary>
@@ -1023,12 +1031,18 @@ public sealed class PreviewService(
             {
                 case PreviewType.SingleItem when State.OriginalItem.HasValue && State.OriginalItemSlot.HasValue:
                     var currentItem = State.TargetState.ModelData.Item(State.OriginalItemSlot.Value);
+                    // Only restore if state still matches what we last previewed; otherwise an external
+                    // change (right-click clear, IPC) has happened and restoring would clobber it.
+                    if (!State.LastAppliedItem.HasValue || currentItem.ItemId != State.LastAppliedItem.Value.ItemId)
+                        break;
                     if (currentItem.ItemId != State.OriginalItem.Value.ItemId)
                         stateManager.ChangeItem(State.TargetState, State.OriginalItemSlot.Value, State.OriginalItem.Value, ApplySettings.Manual);
                     break;
 
                 case PreviewType.SingleItem when State.OriginalItem.HasValue && State.OriginalBonusSlot.HasValue:
                     var currentBonus = State.TargetState.ModelData.BonusItem(State.OriginalBonusSlot.Value);
+                    if (!State.LastAppliedItem.HasValue || currentBonus.Id != State.LastAppliedItem.Value.Id)
+                        break;
                     if (currentBonus.Id != State.OriginalItem.Value.Id)
                         stateManager.ChangeBonusItem(State.TargetState, State.OriginalBonusSlot.Value, State.OriginalItem.Value, ApplySettings.Manual);
                     break;
@@ -1041,6 +1055,8 @@ public sealed class PreviewService(
 
                 case PreviewType.SingleStain:
                     var currentStain = State.TargetState.ModelData.Stain(State.OriginalStainSlot);
+                    if (!State.LastAppliedStain.HasValue || currentStain != State.LastAppliedStain.Value)
+                        break;
                     if (currentStain != State.OriginalStain)
                         stateManager.ChangeStains(State.TargetState, State.OriginalStainSlot, State.OriginalStain, ApplySettings.Manual);
                     break;

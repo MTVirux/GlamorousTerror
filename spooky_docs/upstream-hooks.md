@@ -107,6 +107,7 @@ private partial bool GTTryDrawWeaponsIcon(in DesignData designData, State.ActorS
 - **Constructor**: Add `ItemNameService`, `ItemUnlockManager` parameters
 - Replace `WouldBeVisible()` body with `GTPreFilterItem` / `GTFallbackNameMatch` calls
 - Remove inline `MatchesCrossLanguage()` method
+- **`DrawBehavior(in EquipItem, out EquipItem, float)`**: Mirror `Draw`'s state lifecycle so compact-mode surfaces (Equipment Bar) get hover-preview tracking. At the top, reset `IsPopupOpen = false; HoveredItem = null;`. In both selection branches (`CustomVariant.Id is not 0 && Identify(...)` and `if (ret) { ... }`), set `ItemSelected = true;` before `return true;`.
 
 **Partial method declarations** (inside `ItemFilter`):
 ```csharp
@@ -223,7 +224,17 @@ private string GetLabel()
 }
 ```
 
-### 20. `Glamourer/Gui/GlamourerChangelog.cs`
+### 20. `Glamourer/Gui/EquipmentBarWindow.cs`
+
+After `_equipmentDrawer.DrawDragDropTooltip();` in `Draw()`, call:
+
+```csharp
+_equipmentDrawer.ApplyHoverPreview(_stateManager, _selection.State!);
+```
+
+This wires preview-on-hover into the floating equipment bar (which uses compact-mode combos). `ApplyAllStainHoverPreview` is **not** needed here because the bar does not draw `DrawAllStain`. `_selection.State` is non-null here because `DrawConditions()` already gates on it.
+
+### 21. `Glamourer/Gui/GlamourerChangelog.cs`
 
 Upstream rewrites this file each version to append a new `Add1_X_Y_Z(Changelog)` entry. After overlaying, re-add the GT changelog block:
 
@@ -246,6 +257,6 @@ Upstream 1.6.1.4 introduced its own `EnableGameContextMenu` config field on `Con
 3. Update submodules: rebase MTVirux Penumbra forks onto the latest upstream Ottermandias commits, push to a new branch on the MTVirux fork (`wildcard-on-vX.Y.Z.W`), and bump `.gitmodules` `branch = ` to that
 4. `git checkout <new-tag> -- <list-of-Glamourer/-paths>` and `git rm` upstream copies of files we keep in GT folders (`Unlocks/*`, `Interop/ContextMenuService.cs`)
 5. Re-apply hooks above. Verify partial method signatures match GT-folder declarations.
-6. Restore the `AddGlamorousTerrorFeatures` block in `GlamourerChangelog.cs` (see #20) — upstream overwrites it on every version bump
+6. Restore the `AddGlamorousTerrorFeatures` block in `GlamourerChangelog.cs` (see #21) — upstream overwrites it on every version bump
 7. Build: `.\scripts\build\debug.ps1` until 0 errors / 0 warnings
 8. Smoke-test the Critical Invariants checklist from `CLAUDE.md` in-game

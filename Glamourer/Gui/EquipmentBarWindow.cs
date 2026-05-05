@@ -110,6 +110,8 @@ public class EquipmentBarWindow : Window, IDisposable
 
         _equipmentDrawer.DrawDragDropTooltip();
 
+        _equipmentDrawer.ApplyHoverPreview(_stateManager, _selection.State!);
+
         if (_selection.Data.Objects.Count > 0)
         {
             using var popupStyle = new Im.ColorStyleDisposable();

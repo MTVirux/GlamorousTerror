@@ -74,17 +74,24 @@ public abstract partial class BaseItemCombo : FilterComboBase<BaseItemCombo.Cach
 
     public bool DrawBehavior(in EquipItem item, out EquipItem newItem, float width)
     {
+        IsPopupOpen = false;
+        HoveredItem = null;
+
         using var id = Im.Id.Push(Label);
         CurrentItem   = item;
         CustomVariant = 0;
         var ret = DrawBehavior(StringU8.Empty, width, out var cache);
 
         if (CustomVariant.Id is not 0 && Identify(out newItem))
+        {
+            ItemSelected = true;
             return true;
+        }
 
         if (ret)
         {
-            newItem = cache.Item;
+            newItem      = cache.Item;
+            ItemSelected = true;
             return true;
         }
 

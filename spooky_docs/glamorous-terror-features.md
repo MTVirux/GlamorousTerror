@@ -137,6 +137,8 @@ The central preview engine in `Glamourer/GlamorousTerror/PreviewOnHover/PreviewS
 | `OriginalData` | `DesignData` | Snapshot of actor state before preview started |
 | `OriginalMaterials` | material data | Material state snapshot for restoration |
 | `OriginalAllSlotStains` | `Dictionary<EquipSlot, StainIds>` | Per-slot stain snapshot for `AllSlotsStain` restore |
+| `LastAppliedItem` | `EquipItem?` | Last item written by `PreviewSingleItem`/`PreviewSingleBonusItem`; restore is gated on the current state still matching this so external mutations (right-click clear, IPC) aren't reverted |
+| `LastAppliedStain` | `StainIds?` | Last stain set written by `PreviewSingleStain`; same gating rule as `LastAppliedItem` for `SingleStain` restores |
 | `ToSelf` | `bool` | Whether previewing changes to self |
 | `PopupActiveThisFrame` | `bool` | Per-frame flag set by popup drawing code |
 | `ActivePopupType` | `PopupType` | Icon, List, or Color |
@@ -165,8 +167,10 @@ The central preview engine in `Glamourer/GlamorousTerror/PreviewOnHover/PreviewS
 **BaseItemCombo** tracks hover state per combo:
 
 - `HoveredItem` (`EquipItem?`) — set in `DrawItem()` when `Im.Item.Hovered()` is true after a selectable
-- `IsPopupOpen` (`bool`) — set to `true` in `PreDrawList()` (which is only called when the popup is actually rendering), reset to `false` at the start of each `Draw()` call
-- `ItemSelected` (`bool`) — set to `true` when an item is clicked
+- `IsPopupOpen` (`bool`) — set to `true` in `PreDrawList()` (which is only called when the popup is actually rendering), reset to `false` at the start of each `Draw()` / `DrawBehavior()` call
+- `ItemSelected` (`bool`) — set to `true` when an item is clicked, in **both** the `Draw` and `DrawBehavior` selection branches
+
+**CRITICAL: `Draw` and `DrawBehavior` parity** — `Draw` renders the combo button; `DrawBehavior` runs only the popup behavior (used by surfaces that draw their own button — compact mode and the Equipment Bar). Both must reset `IsPopupOpen`/`HoveredItem` at frame start and set `ItemSelected = true` on selection. Upstream's `DrawBehavior` does not, so GT extends it. Without this, compact-mode dropdowns leak state between frames: after the first popup opens, `IsPopupOpen` stays `true`, `ApplyHoverPreview`'s loop keeps `return`ing on that slot, and other slots' previews never run.
 
 **GlamourerColorCombo** tracks hover state for stain/dye previews:
 
@@ -274,7 +278,7 @@ Key parameters:
 - `Im.Io.KeyControl` — Passes actual CTRL key state each frame to `HandleCustomizationPopupFrame`
 - `HandleCustomizationPopupFrame` logic: if hovering AND (`!RequiresCtrl || ctrlHeld`) → apply preview; otherwise restore original
 
-### Wiring in ActorPanel
+### Wiring in Panels
 
 In `Glamourer/Gui/Tabs/ActorTab/ActorPanel.cs`:
 
@@ -284,6 +288,8 @@ In `Glamourer/Gui/Tabs/ActorTab/ActorPanel.cs`:
   2. `_equipmentDrawer.ApplyAllStainHoverPreview(_stateManager, _selection.State!)` — Dye All Slots combo
 
 The Immersive Dresser's `OptionsPanel` likewise calls `ApplyAllStainHoverPreview` after `DrawAllStain` (the panel that actually draws the all-stain combo).
+
+`Glamourer/Gui/EquipmentBarWindow.cs` (the floating equipment bar) calls `_equipmentDrawer.ApplyHoverPreview(_stateManager, _selection.State!)` after `DrawDragDropTooltip()`. The bar does **not** draw `DrawAllStain`, so `ApplyAllStainHoverPreview` is intentionally omitted — per the rule that the all-stain dispatcher must be called only from panels that contain that combo.
 
 ### Data Flow (Equipment Example)
 
@@ -371,6 +377,10 @@ These bugs were discovered and fixed during integration. Document them to preven
 6. **AllSlotsStain must live in its own dispatcher**: The Dye All Slots combo shares the one `_stainCombo` instance with per-slot stain draws, so the per-slot dispatcher and `ApplyAllStainHoverPreview` must be mutually exclusive about which preview type they end. The per-slot fall-through ends `SingleItem`/`SingleStain`; the all-stain fall-through ends only `AllSlotsStain`. Calling only one dispatcher (e.g., forgetting `ApplyAllStainHoverPreview` in a panel that draws `DrawAllStain`) will leave the all-stain preview stuck on the character.
 
 7. **Icon picker CTRL gate**: The icon picker popup inside the icon equipment drawer uses the same pattern as customization popups — preview only when CTRL is held. The selection path bypasses the CTRL gate (clicking without CTRL commits immediately). Any change to the popup must preserve both branches.
+
+8. **Compact-mode `DrawBehavior` parity**: `BaseItemCombo` exposes both `Draw` (renders the combo button + popup) and `DrawBehavior` (popup only — used by `CompactDrawer.ItemCombo` and `CompactSmallDrawer.ItemCombo`, which means the Equipment Bar in particular). Upstream's `DrawBehavior` neither resets `IsPopupOpen`/`HoveredItem` per frame nor sets `ItemSelected` on click. GT must extend it to match `Draw`. Without this fix the very first popup that opens latches `IsPopupOpen = true` for that slot's combo forever, which makes `ApplyHoverPreview`'s loop short-circuit on that stale slot and silently drop preview for every other slot once the user makes a selection.
+
+9. **External mutation while preview active (`LastAppliedItem`/`LastAppliedStain`)**: `RestoreSingleValuePreview` for `SingleItem` and `SingleStain` is gated on whether the current state still matches the value the preview last wrote. `PreviewSingleItem`/`PreviewSingleBonusItem`/`PreviewSingleStain` record their write into `State.LastAppliedItem` / `State.LastAppliedStain`; the restore branches early-return when the field is null or the live state has diverged. This prevents the fall-through `EndSingleValuePreview` from clobbering side actions that fired the same frame the popup closed — most notably right-click clear (`ResetOrClear` → `SetItem(NothingItem)`), which would otherwise be reverted to the originally-captured item. The fields are reset in `PreviewState.End()`. `SingleCustomization` and `AllSlotsStain` are not affected by this gating because they don't share the right-click clear pathway.
 
 ---
 
