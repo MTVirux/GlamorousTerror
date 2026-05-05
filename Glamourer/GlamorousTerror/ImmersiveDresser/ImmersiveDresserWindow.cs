@@ -54,10 +54,9 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
     internal float _lastValidCameraY;
 
     private unsafe delegate void CameraUpdateDelegate(CameraBase* self);
-    private unsafe delegate byte CanChangePerspectiveDelegate();
 
-    private readonly Hook<CameraUpdateDelegate>?        _cameraUpdateHook;
-    private readonly Hook<CanChangePerspectiveDelegate>? _canChangePerspectiveHook;
+    private readonly IGameInteropProvider _interop;
+    private Hook<CameraUpdateDelegate>?   _cameraUpdateHook;
 
     public unsafe ImmersiveDresserManager(EquipmentDrawer equipmentDrawer, CustomizationDrawer customizationDrawer,
         CustomizeParameterDrawer parameterDrawer, PreviewService previewService, StateManager stateManager,
@@ -72,17 +71,26 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         _config         = config;
         _previewService = previewService;
         _rotationDrawer = rotationDrawer;
+        _interop        = interop;
         Left            = new EquipmentPanel(this, equipmentDrawer, customizationDrawer, stateManager, objects);
         Right           = new AccessoryPanel(this, equipmentDrawer, parameterDrawer, stateManager, objects);
         Options         = new OptionsPanel(this, equipmentDrawer, stateManager, objects, config, commandManager, designConverter, designManager, editorHistory);
+    }
 
+    /// <summary>
+    /// Lazily install the camera update hook on the *active in-world* camera's vtable.
+    /// Must run after login because the lobby camera has a different vtable from the world camera —
+    /// hooking it at plugin construction time silently misses the world camera once the player zones in.
+    /// </summary>
+    private unsafe void EnsureCameraHook()
+    {
+        if (_cameraUpdateHook != null)
+            return;
         var camera = CameraManager.Instance()->GetActiveCamera();
-        if (camera != null)
-        {
-            var vtable = *(nint**)(&camera->CameraBase);
-            _cameraUpdateHook           = interop.HookFromAddress<CameraUpdateDelegate>(vtable[3], CameraUpdateDetour);
-            _canChangePerspectiveHook   = interop.HookFromAddress<CanChangePerspectiveDelegate>(vtable[22], CanChangePerspectiveDetour);
-        }
+        if (camera == null)
+            return;
+        var vtable = *(nint**)(&camera->CameraBase);
+        _cameraUpdateHook = _interop.HookFromAddress<CameraUpdateDelegate>(vtable[3], CameraUpdateDetour);
     }
 
     public void Open()
@@ -95,8 +103,8 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         _savedDisableUserUiHide      = _uiBuilder.DisableUserUiHide;
         _uiBuilder.DisableUserUiHide = true;
         _framework.Update           += OnFrameworkUpdate;
+        EnsureCameraHook();
         _cameraUpdateHook?.Enable();
-        _canChangePerspectiveHook?.Enable();
         if (_config.AutoHideGameUi)
         {
             HideGameUi();
@@ -126,7 +134,6 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         }
 
         _cameraUpdateHook?.Disable();
-        _canChangePerspectiveHook?.Disable();
         Left.IsOpen    = false;
         Right.IsOpen   = false;
         Options.IsOpen = false;
@@ -144,25 +151,31 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         if (_isOpen)
             Close();
         _cameraUpdateHook?.Dispose();
-        _canChangePerspectiveHook?.Dispose();
     }
 
     private unsafe void OnFrameworkUpdate(IFramework _)
     {
-        if (_isOpen && _keyState[VirtualKey.ESCAPE])
+        if (!_isOpen)
+            return;
+
+        if (_keyState[VirtualKey.ESCAPE])
         {
             _keyState[VirtualKey.ESCAPE] = false;
             Close();
             return;
         }
 
-    }
-
-    private unsafe byte CanChangePerspectiveDetour()
-    {
         if (_config.DisableFirstPerson)
-            return 0;
-        return _canChangePerspectiveHook!.Original();
+        {
+            var cam = CameraManager.Instance()->GetActiveCamera();
+            if (cam != null && cam->ZoomMode == CameraZoomMode.FirstPerson)
+            {
+                cam->ZoomMode       = CameraZoomMode.ThirdPerson;
+                cam->ControlMode    = CameraControlMode.ThirdPersonFixed;
+                cam->Distance       = cam->MinDistance > 0 ? cam->MinDistance : 1.5f;
+                cam->InterpDistance = cam->Distance;
+            }
+        }
     }
 
     private unsafe void CameraUpdateDetour(CameraBase* self)
