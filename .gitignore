@@ -6,6 +6,7 @@ private/
 .github/
 !/.github/workflows/
 scripts/
+_custom_backup/
 
 .cursor/
 .cursor-cache/
