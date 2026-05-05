@@ -58,7 +58,7 @@ public sealed partial class SettingsTab(
                 config.EnableAutoDesigns = v;
                 autoDesignApplier.OnEnableAutoDesignsChanged(v);
             });
-        Im.Cursor.Y += Im.Style.FrameHeightWithSpacing * 4;
+        Im.Cursor.Y += Im.Style.FrameHeightWithSpacing;
 
         using (Im.Child.Begin("SettingsChild"u8))
         {
