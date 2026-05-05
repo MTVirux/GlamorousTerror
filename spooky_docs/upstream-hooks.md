@@ -77,6 +77,7 @@ _windowSystem.AddWindow(immersiveDresser.Options);
 - Add `partial` keyword to class declaration
 - Call `DrawGlamorousTerrorSettings()` in the draw method (line ~229)
 - GT methods are defined in `SettingsTab.GT.cs`
+- After the "Enable Auto Designs" checkbox, change the cursor offset from `Im.Style.FrameHeightWithSpacing * 4` to `Im.Style.FrameHeightWithSpacing`. Upstream reserves 4 lines for the stacked support-button column; GT only draws a single "Show Changelogs" button (see #19), so the larger offset leaves a visible empty gap above the settings child.
 
 ### 5. `Glamourer/Gui/Equipment/EquipmentDrawer.cs`
 
