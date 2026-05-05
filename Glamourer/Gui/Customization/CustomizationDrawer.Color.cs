@@ -1,5 +1,4 @@
-﻿using Glamourer.Services;
-using Dalamud.Interface;
+﻿using Dalamud.Interface;
 using Glamourer.GameData;
 using Penumbra.GameData.Enums;
 using Penumbra.GameData.Structs;
@@ -17,11 +16,6 @@ public partial class CustomizationDrawer
 
     private CustomizeValue _draggedColorValue;
     private CustomizeIndex _draggedColorType;
-
-    private bool           _colorPopupOpen;
-    private CustomizeIndex _colorPopupIndex;
-    private CustomizeValue _colorHoveredValue;
-    private bool           _colorSelectionMade;
 
 
     private void DrawDragDropSource(CustomizeIndex index, CustomizeData custom)
@@ -140,10 +134,6 @@ public partial class CustomizationDrawer
         if (!popup)
             return;
 
-        _colorPopupOpen    = true;
-        _colorPopupIndex   = _currentIndex;
-        _colorHoveredValue = default;
-
         using var style = ImStyleDouble.ItemSpacing.Push(Vector2.Zero)
             .Push(ImStyleSingle.FrameRounding, 0);
         for (var i = 0; i < _currentCount; ++i)
@@ -152,12 +142,8 @@ public partial class CustomizationDrawer
             if (Im.Color.Button($"{custom.Value}", custom.Color) && !_locked)
             {
                 UpdateValue(custom.Value);
-                _colorSelectionMade = true;
                 Im.Popup.CloseCurrent();
             }
-
-            if (Im.Item.Hovered())
-                _colorHoveredValue = custom.Value;
 
             if (i == current)
             {
@@ -179,5 +165,4 @@ public partial class CustomizationDrawer
 
         return (current, custom!.Value);
     }
-
 }

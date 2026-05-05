@@ -207,9 +207,9 @@ public class DesignBase
     {
         public static readonly FlagRestrictionResetter Nothing = default;
 
-        private readonly       DesignBase              _design;
-        private readonly       ApplicationCollection   _oldFlags;
-        private readonly       bool                    _alive;
+        private readonly DesignBase            _design;
+        private readonly ApplicationCollection _oldFlags;
+        private readonly bool                  _alive;
 
         public FlagRestrictionResetter(DesignBase d, ApplicationCollection restrictions)
         {
@@ -282,7 +282,8 @@ public class DesignBase
                 ["Crest"]      = crest,
                 ["Apply"]      = apply,
                 ["ApplyStain"] = applyStain,
-                ["ApplyCrest"] = applyCrest,
+                ["ApplyCrest"] = applyCrest, 
+                // TODO use AddToJson from StainIds when switching to Utf8JsonWriter.
                 ["Stain"]      = stains.Stain1.Id,
                 ["Stain2"]     = stains.Stain2.Id,
             };

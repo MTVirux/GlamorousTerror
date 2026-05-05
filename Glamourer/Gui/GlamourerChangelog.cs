@@ -49,7 +49,7 @@ public sealed class GlamourerChangelog : IUiService
         Add1_5_1_0(Changelog);
         AddDummy(Changelog);
         Add1_6_0_0(Changelog);
-        AddGlamorousTerrorFeatures(Changelog);
+        Add1_6_1_0(Changelog);
     }
 
     private (int, ChangeLogDisplayType) ConfigData()
@@ -70,21 +70,49 @@ public sealed class GlamourerChangelog : IUiService
         }
     }
 
-    private static void AddGlamorousTerrorFeatures(Changelog log)
-        => log.NextVersion("Glamorous Terror Features"u8)
-            .RegisterHighlight("Immersive Dresser — floating three-panel glamour editor with optional game-UI hide, camera height slider, disable-first-person toggle, free-cam button (Cammy), design clipboard/save/undo actions, and panel lock. Open via right-click on your own character or /glamour dresser."u8)
-            .RegisterHighlight("Added a context menu entry when right-clicking any character in-game, allowing you to copy, apply, or preview designs between characters."u8)
-            .RegisterHighlight("Gear name language selection — override the display language for equipment item names."u8)
-            .RegisterHighlight("Cross-language equipment search — search for items in any language regardless of display settings."u8)
-            .RegisterHighlight("Icon Equipment Drawer — optional icon grid replacement for the equipment combo list, with favourites, cross-language text search, job and dye channel filters, sort modes, and grouping by model. Right-click an item in the picker to favourite it."u8)
-            .RegisterEntry("Preview-on-hover for equipment, customizations, and designs in the Actor tab content."u8)
-            .RegisterEntry("Wildcard automation targets — use * in character names for pattern matching."u8)
-            .RegisterEntry("Fun Modes converted from Cheat Codes — all modes are now directly available as checkboxes with no password restrictions."u8)
-            .RegisterEntry("Favourites for equipment items, stains, hairstyles, face paints, and bonus items — favourited entries are highlighted in the icon picker and filterable via the star toggle."u8)
-            .RegisterEntry("\"Show Only Owned Items in Combos\" filter with per-source toggles (Inventory, Glamour Dresser, Armoire, Saddlebags, Retainers, Quest/Achievement). Tracked per-character with automatic pruning as items leave your inventories."u8)
-            .RegisterEntry("Character rotation override inside the Immersive Dresser — drag yaw, pitch, and roll independently of the game's animation."u8)
-            .RegisterEntry("/gt command alias for /glamour."u8);
-            
+    private static void Add1_6_1_0(Changelog log)
+        => log.NextVersion("Version 1.6.1.0"u8)
+            .RegisterHighlight("Glamourer has been updated for game version 7.50 and Dalamud API 15."u8)
+            .RegisterEntry(
+                "The game entirely removed the specular advanced customization options for skin- and hair color, which were already removed from visible editing in Glamourer. This is probably in preparation for the changes in 8.0. This means it is very unlikely for them to come back."u8, 1)
+            .RegisterHighlight(
+                "Added an Automation Test Window that can check your automation sets against a job or gearset to see which design applies which changes."u8)
+            .RegisterEntry("The Unlocks tab has been renamed to the Item Log tab."u8)
+            .RegisterEntry("Ignored mods are now also applied visually in the overview mode in the item log tab."u8)
+            .RegisterHighlight("Added some new features to the design filesystem:"u8)
+            .RegisterEntry(
+                "You can now add separator lines to your design filesystem. You can edit these lines by right-clicking them to choose their color, whether they are sorted among folders or files, and how they are sorted."u8,
+                1)
+            .RegisterEntry(
+                "The context menu for folders in the design filesystem has been slightly edited. Using the 'Edit Folder' sub menu you can now specify individual colors and sort-modes for specific folders only."u8,
+                1)
+            .RegisterHighlight(
+                "Added a new framework for compatible weapons. Currently, this supports replacing black mage and white mage staves and one-handed weapons (+ shield) interchangably, but it might be expanded."u8)
+            .RegisterEntry(
+                "Be aware that this may still cause animation failures or other issues, but until I get reports of any critical issues, I deem this safe enough."u8,
+                1)
+            .RegisterHighlight(
+                "Added a pop-out lightweight equipment bar for less occupied screen space while editing your character (Thanks Ny!)."u8)
+            .RegisterHighlight("Added job and gearset conditions to design links, just like in automation sets (Thanks Ny!)."u8)
+            .RegisterHighlight("Added the option to reset and revert advanced dyes per gear slot in a design."u8)
+            .RegisterEntry(
+                "Reset behaves as before, resetting any previously existing advanced dyes on its respective slot, but still keeping those dyes free for application for other designs."u8,
+                1)
+            .RegisterEntry(
+                "Revert is a new option in the Advanced Dyes section of a design and removes all advanced dyes for its respective slot while also marking them as applied, so that later designs can not apply to them."u8,
+                1)
+            .RegisterEntry("Fixed an issue with syncing and replacement gear protection."u8)
+            .RegisterEntry("Fixed some display issues with disabled states."u8)
+            .RegisterEntry(
+                "Reworked the festival popup to use a notification instead. The query can be set to ask for every festival or never ask again, but will be set to ask again for the first time regardless of your current settings (1.6.0.3)."u8)
+            .RegisterEntry("Fixed display of NPCs in the automation selector and secondary identifier list (1.6.0.3)."u8)
+            .RegisterHighlight("Added per-slot application of items and dyes to the current player character in all tabs (1.6.0.2)."u8)
+            .RegisterEntry("Fixed an issue when applying advanced dyes on equivalent left and right rings (1.6.0.2)."u8)
+            .RegisterEntry("Fixed the saving of design colors and sort modes (1.6.0.2)."u8)
+            .RegisterEntry("Fixed the context menu rename selection (1.6.0.2)."u8)
+            .RegisterEntry("Fixed an exception when a tab selector became too small somehow (1.6.0.2)."u8)
+            .RegisterEntry("Fixed disabled header buttons and lock color (1.6.0.2)."u8)
+            .RegisterEntry("Fixed multiple issues with the NPC tab and combo (1.6.0.2)."u8);
 
     private static void Add1_6_0_0(Changelog log)
         => log.NextVersion("Version 1.6.0.0"u8)
@@ -111,14 +139,21 @@ public sealed class GlamourerChangelog : IUiService
                 1)
             .RegisterEntry("Made the 'Dye all Items' box more obviously not a checkbox."u8)
             .RegisterEntry("The detail tab for Automation Sets can now filter for specific designs."u8)
-            .RegisterHighlight("The detail panel in the unlocks tab can now be set to only display a single item for each model ID, optionally ignoring the variant too."u8)
-            .RegisterEntry("Additionally, there is a combo available that can be used to mousewheel-scroll through the currently displayed items on your own player character."u8)
+            .RegisterHighlight(
+                "The detail panel in the unlocks tab can now be set to only display a single item for each model ID, optionally ignoring the variant too."u8)
+            .RegisterEntry(
+                "Additionally, there is a combo available that can be used to mousewheel-scroll through the currently displayed items on your own player character."u8)
             .RegisterEntry("Fixed an issue with offhand dyes being applied from a design when the mainhand weapon allows no offhand."u8)
             .RegisterHighlight("Added secondary identifiers and priorities to Automation Sets."u8)
-            .RegisterEntry("Secondary identifiers of enabled sets apply in order of priority to respective actors, if no enabled set is assigned to them already."u8, 1)
-            .RegisterEntry("This can be used to, for example, group multiple versions of the same NPC in the same design, or multiple versions of your own character."u8, 1)
+            .RegisterEntry(
+                "Secondary identifiers of enabled sets apply in order of priority to respective actors, if no enabled set is assigned to them already."u8,
+                1)
+            .RegisterEntry(
+                "This can be used to, for example, group multiple versions of the same NPC in the same design, or multiple versions of your own character."u8,
+                1)
             .RegisterEntry("Fixed an issue where the Viera Ear state was not applied correctly on redraws."u8)
-            .RegisterEntry("Dalamuds new globial seasonal event setting will now be respected and Glamourer will not apply its seasonal events, or ask you whether to apply them, when they are globally discouraged."u8);
+            .RegisterEntry(
+                "Dalamuds new globial seasonal event setting will now be respected and Glamourer will not apply its seasonal events, or ask you whether to apply them, when they are globally discouraged."u8);
 
     private static void Add1_5_1_0(Changelog log)
         => log.NextVersion("Version 1.5.1.0"u8)

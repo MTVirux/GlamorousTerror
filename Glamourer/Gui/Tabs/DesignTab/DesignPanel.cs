@@ -20,6 +20,9 @@ namespace Glamourer.Gui.Tabs.DesignTab;
 
 public class DesignPanel : IPanel
 {
+    public ReadOnlySpan<byte> Id
+        => "DesignPanel"u8;
+
     private readonly FileDialogManager        _fileDialog = new();
     private readonly CustomizationDrawer      _customizationDrawer;
     private readonly DesignFileSystem         _fileSystem;
@@ -35,7 +38,6 @@ public class DesignPanel : IPanel
     private readonly DesignLinkDrawer         _designLinkDrawer;
     private readonly MaterialDrawer           _materials;
     private readonly DesignApplier            _designApplier;
-
 
     public DesignPanel(CustomizationDrawer customizationDrawer,
         DesignManager manager,
@@ -69,7 +71,6 @@ public class DesignPanel : IPanel
         _designApplier       = designApplier;
     }
 
-
     private Design Selection
         => (Design)_fileSystem.Selection.Selection!.Value;
 
@@ -79,72 +80,27 @@ public class DesignPanel : IPanel
         if (!h)
             return;
 
-        _equipmentDrawer.Prepare();
+        _equipmentDrawer.Prepare(false);
 
         var usedAllStain = _equipmentDrawer.DrawAllStain(out var newAllStain, Selection.WriteProtected());
         Im.Line.Same();
         EquipmentDrawer.DrawKeepItemFilter(_config);
-        EquipmentDrawer.DrawOwnedOnlyFilter(_config);
-        var iconMode = _config.UseIconEquipmentDrawer;
-        if (iconMode)
+        foreach (var slot in EquipSlotExtensions.EqdpSlots)
         {
-            // Row 1: MainHand, Head, Body, Hands, Legs, Feet
-            var mainhand = EquipDrawData.FromDesign(_manager, Selection, EquipSlot.MainHand);
-            var offhand  = EquipDrawData.FromDesign(_manager, Selection, EquipSlot.OffHand);
-            _equipmentDrawer.DrawSingleWeaponIcon(ref mainhand, ref offhand, true, true);
-            foreach (var slot in EquipSlotExtensions.EquipmentSlots)
-            {
-                Im.Line.Same();
-                var data = EquipDrawData.FromDesign(_manager, Selection, slot);
-                _equipmentDrawer.DrawEquip(data);
-                if (usedAllStain)
-                    _manager.ChangeStains(Selection, slot, newAllStain);
-            }
-
-            // Row 2: OffHand (if applicable), Ears, Neck, Wrists, RFinger, LFinger
-            Im.Line.New();
-            var hasOffhand = offhand.CurrentItem.Type is not FullEquipType.Unknown;
-            if (hasOffhand)
-                _equipmentDrawer.DrawSingleWeaponIcon(ref mainhand, ref offhand, true, false);
-            var firstAcc = true;
-            foreach (var slot in EquipSlotExtensions.AccessorySlots)
-            {
-                if (!firstAcc || hasOffhand)
-                    Im.Line.Same();
-                firstAcc = false;
-                var data = EquipDrawData.FromDesign(_manager, Selection, slot);
-                _equipmentDrawer.DrawEquip(data);
-                if (usedAllStain)
-                    _manager.ChangeStains(Selection, slot, newAllStain);
-            }
-
-            // Row 3: Eyewear
-            Im.Line.New();
-            foreach (var slot in BonusExtensions.AllFlags)
-            {
-                var data = BonusDrawData.FromDesign(_manager, Selection, slot);
-                _equipmentDrawer.DrawBonusItem(data);
-            }
+            var data = EquipDrawData.FromDesign(_manager, Selection, slot);
+            _equipmentDrawer.DrawEquip(data);
+            if (usedAllStain)
+                _manager.ChangeStains(Selection, slot, newAllStain);
         }
-        else
+
+        var mainhand = EquipDrawData.FromDesign(_manager, Selection, EquipSlot.MainHand);
+        var offhand  = EquipDrawData.FromDesign(_manager, Selection, EquipSlot.OffHand);
+        _equipmentDrawer.DrawWeapons(mainhand, offhand, true);
+
+        foreach (var slot in BonusExtensions.AllFlags)
         {
-            foreach (var slot in EquipSlotExtensions.EqdpSlots)
-            {
-                var data = EquipDrawData.FromDesign(_manager, Selection, slot);
-                _equipmentDrawer.DrawEquip(data);
-                if (usedAllStain)
-                    _manager.ChangeStains(Selection, slot, newAllStain);
-            }
-
-            var mainhand = EquipDrawData.FromDesign(_manager, Selection, EquipSlot.MainHand);
-            var offhand  = EquipDrawData.FromDesign(_manager, Selection, EquipSlot.OffHand);
-            _equipmentDrawer.DrawWeapons(mainhand, offhand, true);
-
-            foreach (var slot in BonusExtensions.AllFlags)
-            {
-                var data = BonusDrawData.FromDesign(_manager, Selection, slot);
-                _equipmentDrawer.DrawBonusItem(data);
-            }
+            var data = BonusDrawData.FromDesign(_manager, Selection, slot);
+            _equipmentDrawer.DrawBonusItem(data);
         }
 
         Im.Dummy(new Vector2(Im.Style.TextHeight / 2));
@@ -480,8 +436,6 @@ public class DesignPanel : IPanel
         }
     }
 
-    public ReadOnlySpan<byte> Id
-        => "DesignPanel"u8;
 
     public void Draw()
     {

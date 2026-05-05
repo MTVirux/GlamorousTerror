@@ -13,11 +13,10 @@ using Penumbra.GameData.DataContainers;
 using Penumbra.GameData.Enums;
 using Penumbra.GameData.Interop;
 using Penumbra.GameData.Structs;
-using Penumbra.String;
 
 namespace Glamourer.Automation;
 
-public sealed partial class AutoDesignApplier : IDisposable, IRequiredService
+public sealed class AutoDesignApplier : IDisposable, IRequiredService
 {
     private readonly Configuration      _config;
     private readonly AutoDesignManager  _manager;
@@ -88,27 +87,35 @@ public sealed partial class AutoDesignApplier : IDisposable, IRequiredService
             {
                 case EquipSlot.MainHand:
                 {
-                    if (_jobChangeState.TryGetValue(current.Type, arguments.Actor.Job, false, out var data))
+                    foreach (var type in current.Type.CompatibleTypes().Prepend(current.Type))
                     {
+                        if (!_jobChangeState.TryGetValue(type, arguments.Actor.Job, false, out var data))
+                            continue;
+
                         Glamourer.Log.Verbose(
                             $"Changing Mainhand from {state.ModelData.Weapon(EquipSlot.MainHand)} | {state.BaseData.Weapon(EquipSlot.MainHand)} to {data.Item1} for 0x{arguments.Actor.Address:X}.");
                         _state.ChangeItem(state, EquipSlot.MainHand, data.Item1, new ApplySettings(Source: data.Item2));
                         arguments.Weapon = state.ModelData.Weapon(EquipSlot.MainHand);
+                        break;
                     }
 
                     break;
                 }
                 case EquipSlot.OffHand when current.Type == state.BaseData.MainhandType.Offhand():
                 {
-                    if (_jobChangeState.TryGetValue(current.Type, arguments.Actor.Job, false, out var data))
+                    foreach (var type in current.Type.CompatibleTypes().Prepend(current.Type))
                     {
-                        Glamourer.Log.Verbose(
-                            $"Changing Offhand from {state.ModelData.Weapon(EquipSlot.OffHand)} | {state.BaseData.Weapon(EquipSlot.OffHand)} to {data.Item1} for 0x{arguments.Actor.Address:X}.");
-                        _state.ChangeItem(state, EquipSlot.OffHand, data.Item1, new ApplySettings(Source: data.Item2));
-                        arguments.Weapon = state.ModelData.Weapon(EquipSlot.OffHand);
+                        if (_jobChangeState.TryGetValue(type, arguments.Actor.Job, false, out var data))
+                        {
+                            Glamourer.Log.Verbose(
+                                $"Changing Offhand from {state.ModelData.Weapon(EquipSlot.OffHand)} | {state.BaseData.Weapon(EquipSlot.OffHand)} to {data.Item1} for 0x{arguments.Actor.Address:X}.");
+                            _state.ChangeItem(state, EquipSlot.OffHand, data.Item1, new ApplySettings(Source: data.Item2));
+                            arguments.Weapon = state.ModelData.Weapon(EquipSlot.OffHand);
+                        }
+
+                        _jobChangeState.Reset();
                     }
 
-                    _jobChangeState.Reset();
                     break;
                 }
             }
@@ -285,8 +292,9 @@ public sealed partial class AutoDesignApplier : IDisposable, IRequiredService
             return;
 
         var mergedDesign = _designMerger.Merge(
-            set.Designs.Where(d => d.IsActive(actor))
-                .SelectMany(d => d.Design.AllLinks(newApplication).Select(l => (l.Design, l.Flags & d.Type, d.Jobs.Flags))),
+            set.Designs.Where(d => d.Conditions.Match(actor))
+                .SelectMany(d => d.Design.AllLinks(newApplication, cond => cond.Match(actor))
+                    .Select(l => (l.Design, l.Flags & d.Type, d.Conditions.JobFlags))),
             state.ModelData.Customize, state.BaseData, true, _config.AlwaysApplyAssociatedMods);
 
         if (_objects.IsInGPose && actor.IsGPoseOrCutscene)
@@ -319,10 +327,7 @@ public sealed partial class AutoDesignApplier : IDisposable, IRequiredService
                     return true;
 
                 identifier = _actors.CreatePlayer(identifier.PlayerName, WorldId.AnyWorld);
-                if (_manager.EnabledSets.TryGetValue(identifier, out set))
-                    return true;
-
-                return TryGettingSetExactOrWildcard(identifier, out set);
+                return _manager.EnabledSets.TryGetValue(identifier, out set);
             case IdentifierType.Retainer:
             case IdentifierType.Npc:
                 return _manager.EnabledSets.TryGetValue(identifier, out set);

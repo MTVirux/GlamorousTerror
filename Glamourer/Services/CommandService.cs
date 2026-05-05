@@ -8,7 +8,6 @@ using Glamourer.Designs.Special;
 using Glamourer.GameData;
 using Glamourer.Gui;
 using Glamourer.Gui.Tabs.DesignTab;
-using Glamourer.Gui;
 using Glamourer.Interop.Penumbra;
 using Glamourer.State;
 using ImSharp;
@@ -22,11 +21,8 @@ namespace Glamourer.Services;
 
 public class CommandService : IDisposable, IApiService
 {
-    private const string MainCommandString    = "/glamourer";
-    private const string MainCommandAlias     = "/glam";
-    private const string MainCommandAlias2    = "/glamorous";
-    private const string MainCommandAlias3    = "/gt";
-    private const string ApplyCommandString   = "/glamour";
+    private const string MainCommandString  = "/glamourer";
+    private const string ApplyCommandString = "/glamour";
 
     private readonly ICommandManager    _commands;
     private readonly MainWindow         _mainWindow;
@@ -44,13 +40,12 @@ public class CommandService : IDisposable, IApiService
     private readonly DesignConverter    _converter;
     private readonly DesignResolver     _resolver;
     private readonly PenumbraService    _penumbra;
-    private readonly ImmersiveDresserManager _immersiveDresser;
 
     public CommandService(ICommandManager commands, MainWindow mainWindow, IChatGui chat, ActorManager actors, ActorObjectManager objects,
         AutoDesignApplier autoDesignApplier, StateManager stateManager, DesignManager designManager, DesignConverter converter,
         DesignFileSystem designFileSystem, AutoDesignManager autoDesignManager, Configuration config, ModSettingApplier modApplier,
         ItemManager items, RandomDesignGenerator randomDesign, CustomizeService customizeService, DesignFileSystemDrawer designDrawer,
-        QuickDesignCombo quickDesignCombo, DesignResolver resolver, PenumbraService penumbra, ImmersiveDresserManager immersiveDresser)
+        QuickDesignCombo quickDesignCombo, DesignResolver resolver, PenumbraService penumbra)
     {
         _commands          = commands;
         _mainWindow        = mainWindow;
@@ -68,12 +63,8 @@ public class CommandService : IDisposable, IApiService
         _customizeService  = customizeService;
         _resolver          = resolver;
         _penumbra          = penumbra;
-        _immersiveDresser  = immersiveDresser;
 
         _commands.AddHandler(MainCommandString, new CommandInfo(OnGlamourer) { HelpMessage = "Open or close the Glamourer window." });
-        _commands.AddHandler(MainCommandAlias, new CommandInfo(OnGlamourer) { HelpMessage = "Open or close the Glamourer window." });
-        _commands.AddHandler(MainCommandAlias2, new CommandInfo(OnGlamourer) { HelpMessage = "Open or close the Glamourer window." });
-        _commands.AddHandler(MainCommandAlias3, new CommandInfo(OnGlamourer) { HelpMessage = "Open or close the Glamourer window." });
         _commands.AddHandler(ApplyCommandString,
             new CommandInfo(OnGlamour) { HelpMessage = "Use Glamourer Functions. Use with 'help' or '?' for extended help." });
     }
@@ -81,9 +72,6 @@ public class CommandService : IDisposable, IApiService
     public void Dispose()
     {
         _commands.RemoveHandler(MainCommandString);
-        _commands.RemoveHandler(MainCommandAlias);
-        _commands.RemoveHandler(MainCommandAlias2);
-        _commands.RemoveHandler(MainCommandAlias3);
         _commands.RemoveHandler(ApplyCommandString);
     }
 
@@ -105,9 +93,6 @@ public class CommandService : IDisposable, IApiService
                 case "unlock":
                     _config.Ephemeral.LockMainWindow = !_config.Ephemeral.LockMainWindow;
                     _config.Ephemeral.Save();
-                    return;
-                case "dresser":
-                    _immersiveDresser.Open();
                     return;
                 case "automation":
                     var newValue = !_config.EnableAutoDesigns;

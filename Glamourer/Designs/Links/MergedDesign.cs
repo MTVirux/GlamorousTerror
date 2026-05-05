@@ -23,7 +23,7 @@ public readonly struct WeaponList
             _list.Add(type, list);
         }
 
-        var existingFlags  = list.Count == 0 ? 0 : list.Select(t => t.Item3).Aggregate((t, existing) => t | existing);
+        var existingFlags  = list.Count is 0 ? 0 : list.Select(t => t.Item3).Aggregate((t, existing) => t | existing);
         var remainingFlags = flags & ~existingFlags;
 
         if (remainingFlags == 0)
@@ -100,6 +100,6 @@ public sealed class MergedDesign
     public readonly SortedList<Mod, ModSettings> AssociatedMods = [];
     public          StateSources                 Sources        = new();
     public          bool                         ForcedRedraw;
-    public          bool                         ResetAdvancedDyes;
+    public          CombinedItemSlotFlag         ResetAdvancedDyes;
     public          bool                         ResetTemporarySettings;
 }

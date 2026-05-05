@@ -1,5 +1,4 @@
 ﻿using Dalamud.Interface.Textures.TextureWraps;
-using Glamourer.Services;
 using Glamourer.GameData;
 using Glamourer.Unlocks;
 using ImSharp;
@@ -13,11 +12,6 @@ public partial class CustomizationDrawer
 {
     private static ReadOnlySpan<byte> IconSelectorPopup
         => "Style Picker"u8;
-
-    private bool           _iconPopupOpen;
-    private CustomizeIndex _iconPopupIndex;
-    private CustomizeValue _iconHoveredValue;
-    private bool           _iconSelectionMade;
 
     private void DrawIconSelector(CustomizeIndex index)
     {
@@ -80,10 +74,6 @@ public partial class CustomizationDrawer
         if (!popup)
             return;
 
-        _iconPopupOpen    = true;
-        _iconPopupIndex   = _currentIndex;
-        _iconHoveredValue = default;
-
         using var style = ImStyleDouble.ItemSpacing.Push(Vector2.Zero)
             .Push(ImStyleSingle.FrameRounding, 0);
         for (var i = 0; i < _currentCount; ++i)
@@ -101,12 +91,8 @@ public partial class CustomizationDrawer
                 if (Im.Image.Button(wrap?.Id ?? icon.GetWrapOrEmpty().Id, _iconSize))
                 {
                     UpdateValue(custom.Value);
-                    _iconSelectionMade = true;
                     Im.Popup.CloseCurrent();
                 }
-
-                if (Im.Item.Hovered())
-                    _iconHoveredValue = custom.Value;
 
                 if (Im.Item.RightClicked())
                     if (isFavorite)
@@ -240,5 +226,4 @@ public partial class CustomizationDrawer
                 Im.Line.Same();
         }
     }
-
 }

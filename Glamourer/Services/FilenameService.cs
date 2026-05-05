@@ -6,17 +6,12 @@ namespace Glamourer.Services;
 
 public sealed class FilenameService(IDalamudPluginInterface pi) : BaseFilePathProvider(pi)
 {
-    public readonly string MigrationDesignFileSystem = Path.Combine(pi.ConfigDirectory.FullName, "sort_order.json");
-    public readonly string MigrationDesignFile       = Path.Combine(pi.ConfigDirectory.FullName, "Designs.json");
     public readonly string DesignDirectory           = Path.Combine(pi.ConfigDirectory.FullName, "designs");
     public readonly string AutomationFile            = Path.Combine(pi.ConfigDirectory.FullName, "automation.json");
     public readonly string IgnoredModsFile           = Path.Combine(pi.ConfigDirectory.FullName, "ignored_mods.json");
     public readonly string UnlockFileCustomize       = Path.Combine(pi.ConfigDirectory.FullName, "unlocks_customize.json");
     public readonly string UnlockFileItems           = Path.Combine(pi.ConfigDirectory.FullName, "unlocks_items.json");
     public readonly string FavoriteFile              = Path.Combine(pi.ConfigDirectory.FullName, "favorites.json");
-
-    public string UnlockFileItemsForCharacter(ulong contentId)
-        => Path.Combine(pi.ConfigDirectory.FullName, $"unlocks_items_{contentId:X16}.dat");
     public readonly string DesignColorFile           = Path.Combine(pi.ConfigDirectory.FullName, "design_colors.json");
     public readonly string EphemeralConfigFile       = Path.Combine(pi.ConfigDirectory.FullName, "ephemeral_config.json");
     public readonly string NpcAppearanceFile         = Path.Combine(pi.ConfigDirectory.FullName, "npc_appearance_data.json");
@@ -32,6 +27,9 @@ public sealed class FilenameService(IDalamudPluginInterface pi) : BaseFilePathPr
 
     public readonly string MigrationFileSystemEmptyFolders =
         Path.Combine(pi.ConfigDirectory.FullName, "design_filesystem", "empty_folders.json");
+
+    public readonly string MigrationDesignFileSystem = Path.Combine(pi.ConfigDirectory.FullName, "sort_order.json");
+    public readonly string MigrationDesignFile       = Path.Combine(pi.ConfigDirectory.FullName, "Designs.json");
 
     public IEnumerable<FileInfo> Designs()
     {

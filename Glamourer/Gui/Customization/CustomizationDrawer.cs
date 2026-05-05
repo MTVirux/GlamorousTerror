@@ -17,8 +17,7 @@ public sealed partial class CustomizationDrawer(
     CustomizeService service,
     Configuration config,
     FavoriteManager favorites,
-    HeightService heightService,
-    PreviewService previewService)
+    HeightService heightService)
     : IDisposable, IUiService
 {
     private readonly Vector4              _redTint      = new(0.6f, 0.3f, 0.3f, 1f);
@@ -115,11 +114,6 @@ public sealed partial class CustomizationDrawer(
     {
         using var spacing = ImStyleDouble.ItemSpacing.Push(_spacing);
 
-        // Reset popup tracking flags before drawing — each popup will set its flag to true if open.
-        _iconPopupOpen  = false;
-        _listPopupOpen  = false;
-        _colorPopupOpen = false;
-
         try
         {
             DrawRaceGenderSelector();
@@ -195,6 +189,4 @@ public sealed partial class CustomizationDrawer(
             ? textures.CreateFromRaw(RawImageSpecification.Rgba32(192, 192), rawImage, "Glamourer.LegacyTattoo")
             : null;
     }
-
-
 }

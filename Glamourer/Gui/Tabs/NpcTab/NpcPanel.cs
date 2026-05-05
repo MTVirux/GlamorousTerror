@@ -75,50 +75,18 @@ public sealed class NpcPanel(
         if (!h)
             return;
 
-        equipmentDrawer.Prepare();
+        equipmentDrawer.Prepare(false);
         var designData = selection.ToDesignData();
 
-        var iconMode = config.UseIconEquipmentDrawer;
-        if (iconMode)
+        foreach (var slot in EquipSlotExtensions.EqdpSlots)
         {
-            // Row 1: MainHand, Head, Body, Hands, Legs, Feet
-            var mainhandData = new EquipDrawData(EquipSlot.MainHand, in designData) { Locked = true };
-            var offhandData  = new EquipDrawData(EquipSlot.OffHand,  in designData) { Locked = true };
-            equipmentDrawer.DrawSingleWeaponIcon(ref mainhandData, ref offhandData, false, true);
-            foreach (var slot in EquipSlotExtensions.EquipmentSlots)
-            {
-                Im.Line.Same();
-                var data = new EquipDrawData(slot, in designData) { Locked = true };
-                equipmentDrawer.DrawEquip(data);
-            }
-
-            // Row 2: OffHand (if applicable), Ears, Neck, Wrists, RFinger, LFinger
-            Im.Line.New();
-            var hasOffhand = offhandData.CurrentItem.Type is not FullEquipType.Unknown;
-            if (hasOffhand)
-                equipmentDrawer.DrawSingleWeaponIcon(ref mainhandData, ref offhandData, false, false);
-            var firstAcc = true;
-            foreach (var slot in EquipSlotExtensions.AccessorySlots)
-            {
-                if (!firstAcc || hasOffhand)
-                    Im.Line.Same();
-                firstAcc = false;
-                var data = new EquipDrawData(slot, in designData) { Locked = true };
-                equipmentDrawer.DrawEquip(data);
-            }
+            var data = new EquipDrawData(slot, in designData) { Locked = true };
+            equipmentDrawer.DrawEquip(data);
         }
-        else
-        {
-            foreach (var slot in EquipSlotExtensions.EqdpSlots)
-            {
-                var data = new EquipDrawData(slot, in designData) { Locked = true };
-                equipmentDrawer.DrawEquip(data);
-            }
 
-            var mainhandData = new EquipDrawData(EquipSlot.MainHand, in designData) { Locked = true };
-            var offhandData  = new EquipDrawData(EquipSlot.OffHand,  in designData) { Locked = true };
-            equipmentDrawer.DrawWeapons(mainhandData, offhandData, false);
-        }
+        var mainhandData = new EquipDrawData(EquipSlot.MainHand, in designData) { Locked = true };
+        var offhandData  = new EquipDrawData(EquipSlot.OffHand,  in designData) { Locked = true };
+        equipmentDrawer.DrawWeapons(mainhandData, offhandData, false);
 
         Im.Dummy(new Vector2(Im.Style.TextHeight / 2));
         EquipmentDrawer.DrawMetaToggle(ToggleDrawData.FromValue(MetaIndex.VisorState, selection.Data.VisorToggled));

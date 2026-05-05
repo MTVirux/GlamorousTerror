@@ -1,4 +1,5 @@
-﻿using Dalamud.Interface.ImGuiNotification;
+﻿using Dalamud.Interface;
+using Dalamud.Interface.ImGuiNotification;
 using FFXIVClientStructs.FFXIV.Client.Game;
 using Glamourer.Automation;
 using Glamourer.Config;
@@ -33,6 +34,8 @@ public sealed class ActorPanel : IPanel
     private readonly CustomizeParameterDrawer _parameterDrawer;
     private readonly AdvancedDyePopup         _advancedDyes;
     private readonly DesignApplier            _designApplier;
+
+    public event Action? OpenEquipmentBar;
 
     public ActorPanel(StateManager stateManager,
         CustomizationDrawer customizationDrawer,
@@ -124,7 +127,7 @@ public sealed class ActorPanel : IPanel
         else
             DrawMonsterPanel();
         if (_selection.Data.Objects.Count > 0)
-            _advancedDyes.Draw(_selection.Data.Objects.Last(), _selection.State);
+            _advancedDyes.Draw(_selection.Data.Objects.Last(), _selection.State, false);
     }
 
     private void DrawHumanPanel()
@@ -154,89 +157,75 @@ public sealed class ActorPanel : IPanel
 
         EquipmentDrawer.DrawMetaToggle(ToggleDrawData.FromState(MetaIndex.Wetness, _stateManager, _selection.State));
         Im.Dummy(new Vector2(Im.Style.TextHeight / 2));
-        _customizationDrawer.ApplyHoverPreview(_stateManager, _selection.State!);
+    }
+
+    private Im.HeaderDisposable EquipmentHeaderButton()
+    {
+        var savedCursor = Im.Cursor.Position;
+        var headerWidth = Im.ContentRegion.Available.X - ImEx.Icon.CalculateLabeledButtonSize(LunaStyle.PopOutIcon, ""u8).X;
+        Im.Cursor.X += headerWidth;
+        using var color = ImGuiColor.Button.Push(ImGuiColor.Header)
+            .Push(ImGuiColor.ButtonHovered, ImGuiColor.HeaderHovered)
+            .Push(ImGuiColor.ButtonActive,  ImGuiColor.HeaderActive);
+        if (ImEx.Icon.LabeledButton(LunaStyle.PopOutIcon, "###switchToEquipBar"u8, "Switch to the Equipment Bar."u8, corners: Corners.Right))
+            OpenEquipmentBar?.Invoke();
+        Im.Cursor.Position = savedCursor;
+
+        var upperLeft  = Im.Cursor.ScreenPosition;
+        var lowerRight = upperLeft + new Vector2(headerWidth, Im.Style.FrameHeight);
+
+        // We have to shave off an epsilon of width, otherwise there is a pixel that is considered as hovering both parts of the widget.
+        var headerColor =
+            (Im.Mouse.IsHoveringRectangle(upperLeft, lowerRight - new Vector2(0.001f, 0.0f)), Im.Mouse.IsDown(MouseButton.Left)) switch
+            {
+                (true, true)  => ImGuiColor.ButtonActive,
+                (true, false) => ImGuiColor.ButtonHovered,
+                (false, _)    => ImGuiColor.Button,
+            };
+
+        Im.DrawList.Window.Shape.RectangleFilled(upperLeft, lowerRight, headerColor, Im.Style.FrameRounding,
+            ImDrawFlagsRectangle.RoundCornersLeft);
+
+        color.Push(ImGuiColor.Header, Rgba32.Transparent)
+            .Push(ImGuiColor.HeaderHovered, Rgba32.Transparent)
+            .Push(ImGuiColor.HeaderActive,  Rgba32.Transparent);
+
+        return DesignPanelFlag.Equipment.Header(_config);
     }
 
     private void DrawEquipmentHeader()
     {
-        using var h = DesignPanelFlag.Equipment.Header(_config);
+        using var h = EquipmentHeaderButton();
         if (!h)
             return;
 
-        _equipmentDrawer.Prepare();
+        _equipmentDrawer.Prepare(false);
 
         var usedAllStain = _equipmentDrawer.DrawAllStain(out var newAllStain, _selection.State!.IsLocked);
         Im.Line.Same();
         EquipmentDrawer.DrawKeepItemFilter(_config);
-        EquipmentDrawer.DrawOwnedOnlyFilter(_config);
-        var iconMode = _config.UseIconEquipmentDrawer;
-        if (iconMode)
+        foreach (var slot in EquipSlotExtensions.EqdpSlots)
         {
-            // Row 1: MainHand, Head, Body, Hands, Legs, Feet
-            var mainhand = EquipDrawData.FromState(_stateManager, _selection.State, EquipSlot.MainHand);
-            var offhand  = EquipDrawData.FromState(_stateManager, _selection.State, EquipSlot.OffHand);
-            _equipmentDrawer.DrawSingleWeaponIcon(ref mainhand, ref offhand, GameMain.IsInGPose(), true);
-            foreach (var slot in EquipSlotExtensions.EquipmentSlots)
-            {
-                Im.Line.Same();
-                var data = EquipDrawData.FromState(_stateManager, _selection.State!, slot);
-                _equipmentDrawer.DrawEquip(data);
-                if (usedAllStain)
-                    _stateManager.ChangeStains(_selection.State, slot, newAllStain, ApplySettings.Manual);
-            }
-
-            // Row 2: OffHand (if applicable), Ears, Neck, Wrists, RFinger, LFinger
-            Im.Line.New();
-            var hasOffhand = offhand.CurrentItem.Type is not FullEquipType.Unknown;
-            if (hasOffhand)
-                _equipmentDrawer.DrawSingleWeaponIcon(ref mainhand, ref offhand, GameMain.IsInGPose(), false);
-            var firstAcc = true;
-            foreach (var slot in EquipSlotExtensions.AccessorySlots)
-            {
-                if (!firstAcc || hasOffhand)
-                    Im.Line.Same();
-                firstAcc = false;
-                var data = EquipDrawData.FromState(_stateManager, _selection.State!, slot);
-                _equipmentDrawer.DrawEquip(data);
-                if (usedAllStain)
-                    _stateManager.ChangeStains(_selection.State, slot, newAllStain, ApplySettings.Manual);
-            }
-
-            // Row 3: Eyewear
-            Im.Line.New();
-            foreach (var slot in BonusExtensions.AllFlags)
-            {
-                var data = BonusDrawData.FromState(_stateManager, _selection.State!, slot);
-                _equipmentDrawer.DrawBonusItem(data);
-            }
+            var data = EquipDrawData.FromState(_stateManager, _selection.State!, slot);
+            _equipmentDrawer.DrawEquip(data);
+            if (usedAllStain)
+                _stateManager.ChangeStains(_selection.State, slot, newAllStain, ApplySettings.Manual);
         }
-        else
+
+        var mainhand = EquipDrawData.FromState(_stateManager, _selection.State, EquipSlot.MainHand);
+        var offhand  = EquipDrawData.FromState(_stateManager, _selection.State, EquipSlot.OffHand);
+        _equipmentDrawer.DrawWeapons(mainhand, offhand, GameMain.IsInGPose());
+
+        foreach (var slot in BonusExtensions.AllFlags)
         {
-            foreach (var slot in EquipSlotExtensions.EqdpSlots)
-            {
-                var data = EquipDrawData.FromState(_stateManager, _selection.State!, slot);
-                _equipmentDrawer.DrawEquip(data);
-                if (usedAllStain)
-                    _stateManager.ChangeStains(_selection.State, slot, newAllStain, ApplySettings.Manual);
-            }
-
-            var mainhand = EquipDrawData.FromState(_stateManager, _selection.State, EquipSlot.MainHand);
-            var offhand  = EquipDrawData.FromState(_stateManager, _selection.State, EquipSlot.OffHand);
-            _equipmentDrawer.DrawWeapons(mainhand, offhand, GameMain.IsInGPose());
-
-            foreach (var slot in BonusExtensions.AllFlags)
-            {
-                var data = BonusDrawData.FromState(_stateManager, _selection.State!, slot);
-                _equipmentDrawer.DrawBonusItem(data);
-            }
+            var data = BonusDrawData.FromState(_stateManager, _selection.State!, slot);
+            _equipmentDrawer.DrawBonusItem(data);
         }
 
         Im.Dummy(new Vector2(Im.Style.TextHeight / 2));
         DrawEquipmentMetaToggles();
         Im.Dummy(new Vector2(Im.Style.TextHeight / 2));
         _equipmentDrawer.DrawDragDropTooltip();
-        _equipmentDrawer.ApplyHoverPreview(_stateManager, _selection.State!);
-        _equipmentDrawer.ApplyAllStainHoverPreview(_stateManager, _selection.State!);
     }
 
     private void DrawParameterHeader()
@@ -364,7 +353,6 @@ public sealed class ActorPanel : IPanel
             if (Im.Cursor.X is not 0)
                 Im.Line.New();
         }
-
     }
 
 

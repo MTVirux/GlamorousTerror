@@ -19,9 +19,11 @@ public sealed class MainWindow : Window, IDisposable
     private readonly TabSelected     _tabSelected;
     private          bool            _ignorePenumbra;
 
+    public event Action? Open;
+
     public MainWindow(IDalamudPluginInterface pi, Configuration config, PenumbraService penumbra,
         MainTabBar mainTabBar, DesignQuickBar quickBar, TabSelected tabSelected)
-        : base("GlamourerMainWindow")
+        : base("###GlamourerMainWindow")
     {
         pi.UiBuilder.DisableGposeUiHide = true;
         SizeConstraints = new WindowSizeConstraints
@@ -52,6 +54,11 @@ public sealed class MainWindow : Window, IDisposable
     {
         IsOpen              = true;
         _mainTabBar.NextTab = arguments.Type;
+    }
+
+    public override void OnOpen()
+    {
+        Open?.Invoke();
     }
 
     public override void PreDraw()
@@ -105,13 +112,21 @@ public sealed class MainWindow : Window, IDisposable
     {
         var width = new Vector2(Im.Font.CalculateSize(SupportInfoButtonText).X + Im.Style.FramePadding.X * 2, 0);
         var xPos  = Im.Window.Width - width.X;
-
         Im.Cursor.Position = new Vector2(xPos, 0);
-        using (ImGuiColor.Button.Push(0xFF000080))
-        {
-            if (Im.Button("Show Changelogs"u8, new Vector2(width.X, 0)))
-                changelog.ForceOpen = true;
-        }
+        SupportButton.Discord(Glamourer.Messager, width.X);
+
+        Im.Cursor.Position = new Vector2(xPos, Im.Style.FrameHeightWithSpacing);
+        DrawSupportButton(glamourer);
+
+        Im.Cursor.Position = new Vector2(xPos, 2 * Im.Style.FrameHeightWithSpacing);
+        SupportButton.ReniGuide(Glamourer.Messager, width.X);
+
+        Im.Cursor.Position = new Vector2(xPos, 3 * Im.Style.FrameHeightWithSpacing);
+        if (Im.Button("Show Changelogs"u8, new Vector2(width.X, 0)))
+            changelog.ForceOpen = true;
+
+        Im.Cursor.Position = new Vector2(xPos, 4 * Im.Style.FrameHeightWithSpacing);
+        SupportButton.KoFiPatreon(Glamourer.Messager, width);
     }
 
     /// <summary>
@@ -128,20 +143,13 @@ public sealed class MainWindow : Window, IDisposable
     }
 
     private string GetLabel()
-    {
-#if DEBUG
-        const string suffix = " (Testing Version)";
-#else
-        const string suffix = "";
-#endif
-        return (Glamourer.Version.Length is 0, _config.Ephemeral.IncognitoMode) switch
+        => (Glamourer.Version.Length is 0, _config.Ephemeral.IncognitoMode) switch
         {
-            (true, true)   => $"Glamorous Terror (Incognito Mode){suffix}###GlamourerMainWindow",
-            (true, false)  => $"Glamorous Terror{suffix}###GlamourerMainWindow",
-            (false, false) => $"Glamorous Terror v{Glamourer.Version}{suffix}###GlamourerMainWindow",
-            (false, true)  => $"Glamorous Terror v{Glamourer.Version} (Incognito Mode){suffix}###GlamourerMainWindow",
+            (true, true)   => "Glamourer (Incognito Mode)###GlamourerMainWindow",
+            (true, false)  => "Glamourer###GlamourerMainWindow",
+            (false, false) => $"Glamourer v{Glamourer.Version}###GlamourerMainWindow",
+            (false, true)  => $"Glamourer v{Glamourer.Version} (Incognito Mode)###GlamourerMainWindow",
         };
-    }
 
     private void DrawProblemWindow(Utf8StringHandler<TextStringHandlerBuffer> text)
     {

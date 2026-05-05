@@ -36,6 +36,7 @@ public sealed partial class Configuration : IPluginConfiguration, ISavable, ISer
     public bool            UnlockedItemMode                 { get; set; } = false;
     public FestivalSetting FestivalMode                     { get; set; } = FestivalSetting.Undefined;
     public DateOnly        LastFestivalPopup                { get; set; } = DateOnly.MinValue;
+    public bool            EnableGameContextMenu            { get; set; } = true;
     public bool            HideWindowInCutscene             { get; set; } = false;
     public bool            ShowAutomationSetEditing         { get; set; } = true;
     public bool            ShowAllAutomatedApplicationRules { get; set; } = true;
@@ -98,8 +99,6 @@ public sealed partial class Configuration : IPluginConfiguration, ISavable, ISer
     public ISortMode SortMode { get; set; } = ISortMode.FoldersFirst;
 
     public List<(string Code, bool Enabled)> Codes { get; set; } = [];
-
-    public Services.CodeService.CodeFlag EnabledCheats { get; set; } = 0;
 
 #if DEBUG
     public bool DebugMode { get; set; } = true;

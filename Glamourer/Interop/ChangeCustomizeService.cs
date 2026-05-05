@@ -15,10 +15,10 @@ namespace Glamourer.Interop;
 /// </summary>
 public sealed unsafe class ChangeCustomizeService : EventBase<ChangeCustomizeService.Arguments, ChangeCustomizeService.Priority>
 {
-    private readonly PenumbraReloaded                               _penumbraReloaded;
-    private readonly IGameInteropProvider                           _interop;
+    private readonly PenumbraReloaded                                         _penumbraReloaded;
+    private readonly IGameInteropProvider                                     _interop;
     private readonly delegate* unmanaged<Human*, Human.DrawData*, bool, bool> _original;
-    private readonly Post                                           _postEvent;
+    private readonly Post                                                     _postEvent;
 
     public ref struct Arguments(Model model, ref CustomizeArray customize)
     {

@@ -6,7 +6,7 @@ using Penumbra.GameData.Structs;
 
 namespace Glamourer.Gui.Equipment;
 
-public abstract partial class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, IDisposable
+public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, IDisposable
 {
     private readonly Im.StyleDisposable _style = new();
     public abstract  StringU8           Label { get; }
@@ -19,13 +19,12 @@ public abstract partial class BaseItemCombo : FilterComboBase<BaseItemCombo.Cach
     protected          SecondaryId     CustomWeaponId;
     protected          Variant         CustomVariant;
 
-    protected BaseItemCombo(FavoriteManager favorites, ItemManager items, Configuration config, ItemNameService itemNameService, ItemUnlockManager itemUnlockManager)
-        : base(new ItemFilter(itemNameService, config, itemUnlockManager), ConfigData.Default with
+    protected BaseItemCombo(FavoriteManager favorites, ItemManager items, Configuration config)
+        : base(new ItemFilter(), ConfigData.Default with
         {
             ComputeWidth = true,
             ClearFilterOnSelection = !config.KeepItemComboFilter,
             ClearFilterOnCacheDisposal = false,
-            DirtyCacheOnClose = true,
         })
     {
         Favorites = favorites;
@@ -38,31 +37,39 @@ public abstract partial class BaseItemCombo : FilterComboBase<BaseItemCombo.Cach
     public void Dispose()
         => Config.KeepItemComboFilterChanged -= OnKeepItemComboFilterChanged;
 
-    public EquipItem? HoveredItem   { get; private set; }
-    public bool       IsPopupOpen   { get; private set; }
-    public bool       ItemSelected  { get; private set; }
-
-    public void ResetSelection()
-        => ItemSelected = false;
-
     public bool Draw(in EquipItem item, out EquipItem newItem, float width)
     {
-        IsPopupOpen = false;
-        HoveredItem = null;
-
         using var id = Im.Id.Push(Label);
         CurrentItem   = item;
         CustomVariant = 0;
-        if (Draw(StringU8.Empty, item.Name, StringU8.Empty, width, out var cache))
+        var ret = Draw(StringU8.Empty, item.Name, StringU8.Empty, width, out var cache);
+
+        if (CustomVariant.Id is not 0 && Identify(out newItem))
+            return true;
+
+        if (ret)
         {
-            newItem      = cache.Item;
-            ItemSelected = true;
+            newItem = cache.Item;
             return true;
         }
 
+        newItem = item;
+        return false;
+    }
+
+    public bool DrawBehavior(in EquipItem item, out EquipItem newItem, float width)
+    {
+        using var id = Im.Id.Push(Label);
+        CurrentItem   = item;
+        CustomVariant = 0;
+        var ret = DrawBehavior(StringU8.Empty, width, out var cache);
+
         if (CustomVariant.Id is not 0 && Identify(out newItem))
+            return true;
+
+        if (ret)
         {
-            ItemSelected = true;
+            newItem = cache.Item;
             return true;
         }
 
@@ -72,7 +79,6 @@ public abstract partial class BaseItemCombo : FilterComboBase<BaseItemCombo.Cach
 
     protected override void PreDrawList()
     {
-        IsPopupOpen = true;
         _style.PushY(ImStyleDouble.ItemSpacing, 0)
             .PushY(ImStyleDouble.SelectableTextAlign, 0.5f);
     }
@@ -84,22 +90,13 @@ public abstract partial class BaseItemCombo : FilterComboBase<BaseItemCombo.Cach
     {
         public readonly EquipItem  Item  = item;
         public readonly StringPair Name  = new(item.Name);
-        public readonly StringPair Model = new($"({item.PrimaryId.Id}-{item.Variant.Id})");
+        public readonly StringPair Model = new($"({item.ModelString})");
     }
 
-    protected sealed partial class ItemFilter(ItemNameService itemNameService, Configuration config, ItemUnlockManager itemUnlockManager) : PartwiseFilterBase<CacheItem>
+    protected sealed class ItemFilter : PartwiseFilterBase<CacheItem>
     {
-        // GT partial method declarations (implementations in GlamorousTerror/ partial files)
-        private partial bool GTPreFilterItem(in CacheItem item);
-        private partial bool GTFallbackNameMatch(in CacheItem item);
-
         public override bool WouldBeVisible(in CacheItem item, int globalIndex)
-        {
-            if (!GTPreFilterItem(in item))
-                return false;
-
-            return base.WouldBeVisible(in item, globalIndex) || WouldBeVisible(item.Model.Utf16) || GTFallbackNameMatch(in item);
-        }
+            => base.WouldBeVisible(in item, globalIndex) || WouldBeVisible(item.Model.Utf16);
 
         protected override string ToFilterString(in CacheItem item, int globalIndex)
             => item.Name.Utf16;
@@ -136,8 +133,6 @@ public abstract partial class BaseItemCombo : FilterComboBase<BaseItemCombo.Cach
         Im.Line.Same();
         Im.Cursor.Y -= Im.Style.FramePadding.Y;
         var ret = Im.Selectable(item.Name.Utf8, selected, SelectableFlags.None, new Vector2(0, Im.Style.FrameHeight));
-        if (Im.Item.Hovered())
-            HoveredItem = item.Item;
         Im.Line.Same();
         using var color = ImGuiColor.Text.Push(Rgba32.Gray);
         ImEx.TextRightAligned(item.Model.Utf8);

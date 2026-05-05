@@ -1,5 +1,4 @@
-﻿using Glamourer.Services;
-using System.Text.Unicode;
+﻿using System.Text.Unicode;
 using Glamourer.Config;
 using ImSharp;
 using Penumbra.GameData.Enums;
@@ -9,11 +8,6 @@ namespace Glamourer.Gui.Customization;
 
 public partial class CustomizationDrawer
 {
-    private bool           _listPopupOpen;
-    private CustomizeIndex _listPopupIndex;
-    private CustomizeValue _listHoveredValue;
-    private bool           _listSelectionMade;
-
     private void PercentageSelector(CustomizeIndex index)
     {
         using var _        = SetId(index);
@@ -174,23 +168,12 @@ public partial class CustomizationDrawer
         using (var combo = Im.Combo.Begin("##combo"u8, $"{_currentOption} #{current + 1}"))
         {
             if (combo)
-            {
-                _listPopupOpen  = true;
-                _listPopupIndex = _currentIndex;
-                _listHoveredValue = default;
 
                 for (var i = 0; i < _currentCount; ++i)
                 {
                     if (Im.Selectable($"{_currentOption} #{i + 1}##combo", i == current))
-                    {
                         UpdateValue((CustomizeValue)i);
-                        _listSelectionMade = true;
-                    }
-
-                    if (Im.Item.Hovered())
-                        _listHoveredValue = (CustomizeValue)i;
                 }
-            }
         }
 
         if (CaptureMouseWheel(ref current, 0, _currentCount))
@@ -219,23 +202,11 @@ public partial class CustomizationDrawer
         using (var combo = Im.Combo.Begin("##combo"u8, $"{_currentOption} #{current}"))
         {
             if (combo)
-            {
-                _listPopupOpen  = true;
-                _listPopupIndex = _currentIndex;
-                _listHoveredValue = default;
-
                 for (var i = 1; i <= _currentCount; ++i)
                 {
                     if (Im.Selectable($"{_currentOption} #{i}##combo", i == current))
-                    {
                         UpdateValue((CustomizeValue)i);
-                        _listSelectionMade = true;
-                    }
-
-                    if (Im.Item.Hovered())
-                        _listHoveredValue = (CustomizeValue)i;
                 }
-            }
         }
 
         if (CaptureMouseWheel(ref current, 1, _currentCount))
@@ -333,5 +304,4 @@ public partial class CustomizationDrawer
         _currentApply = !_currentApply;
         ChangeApply   = _currentApply ? ChangeApply | _currentFlag : ChangeApply & ~_currentFlag;
     }
-
 }

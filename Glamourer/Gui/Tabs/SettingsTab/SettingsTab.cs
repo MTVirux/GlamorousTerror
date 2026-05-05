@@ -16,7 +16,7 @@ using Luna;
 
 namespace Glamourer.Gui.Tabs.SettingsTab;
 
-public sealed partial class SettingsTab(
+public sealed class SettingsTab(
     IDalamudPluginInterface pi,
     Configuration config,
     DesignFileSystemDrawer drawer,
@@ -33,8 +33,7 @@ public sealed partial class SettingsTab(
     AutoRedrawChanged autoRedraw,
     PredefinedTagManager predefinedTags,
     PcpService pcpService,
-    IgnoredMods ignoredMods,
-    ItemNameService itemNameService)
+    IgnoredMods ignoredMods)
     : ITab<MainTabType>
 {
     private readonly VirtualKey[] _validKeys = keys.GetValidVirtualKeys().Prepend(VirtualKey.NO_KEY).ToArray();
@@ -62,12 +61,10 @@ public sealed partial class SettingsTab(
 
         using (Im.Child.Begin("SettingsChild"u8))
         {
-            DrawGlamorousTerrorSettings();
             DrawBehaviorSettings();
             DrawDesignDefaultSettings();
             DrawInterfaceSettings();
             DrawColorSettings();
-            DrawEquipmentLanguageSettings();
             DrawPredefinedTags();
             overrides.Draw();
             DrawIgnoredMods();
@@ -270,6 +267,9 @@ public sealed partial class SettingsTab(
             v => config.Ephemeral.LockMainWindow = v);
         Checkbox("Open Main Window at Game Start"u8, "Whether the main Glamourer window should be open or closed after launching the game."u8,
             config.OpenWindowAtStart,                v => config.OpenWindowAtStart = v);
+        EphemeralCheckbox("Lock Equipment Bar"u8, "Prevent the equipment bar from being moved and lock it in place."u8,
+            config.Ephemeral.LockEquipmentBar,
+            v => config.Ephemeral.LockEquipmentBar = v);
         Im.Dummy(Vector2.Zero);
         Im.Separator();
         Im.Dummy(Vector2.Zero);
