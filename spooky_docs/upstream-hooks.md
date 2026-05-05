@@ -229,6 +229,7 @@ Upstream rewrites this file each version to append a new `Add1_X_Y_Z(Changelog)`
 
 - In the constructor, append `AddGlamorousTerrorFeatures(Changelog);` as the **last** call, after the newest upstream `Add1_X_Y_Z(Changelog);`
 - Re-add the `AddGlamorousTerrorFeatures(Changelog log)` method (titled `"Glamorous Terror Features"u8`) — the canonical entry list lives in this file on `main` and should be copied forward verbatim, then extended with any new GT features added during the port
+- Change the `new Changelog(...)` window title to `"Glamourer Changelog (synced with upstream Glamourer X.Y.Z.W)"`, bumping `X.Y.Z.W` to the upstream version just overlaid
 
 ---
 
