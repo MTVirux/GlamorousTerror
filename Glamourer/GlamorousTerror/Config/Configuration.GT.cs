@@ -27,7 +27,6 @@ public sealed partial class Configuration
     public bool                  KeepIconPickerOpen         { get; set; } = false;
     public bool                  IconPickerPinned           { get; set; } = false;
     public bool                  RememberIconPickerScroll   { get; set; } = false;
-    public bool                  EnableGameContextMenu      { get; set; } = true;
     public bool                  EnableImmersiveDresser     { get; set; } = true;
     public bool                  AutoHideGameUi             { get; set; } = false;
     public bool                  LockImmersiveDresserPanels { get; set; } = false;

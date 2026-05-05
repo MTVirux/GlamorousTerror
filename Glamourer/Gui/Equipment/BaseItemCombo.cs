@@ -6,7 +6,7 @@ using Penumbra.GameData.Structs;
 
 namespace Glamourer.Gui.Equipment;
 
-public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, IDisposable
+public abstract partial class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, IDisposable
 {
     private readonly Im.StyleDisposable _style = new();
     public abstract  StringU8           Label { get; }
@@ -19,12 +19,20 @@ public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, 
     protected          SecondaryId     CustomWeaponId;
     protected          Variant         CustomVariant;
 
-    protected BaseItemCombo(FavoriteManager favorites, ItemManager items, Configuration config)
-        : base(new ItemFilter(), ConfigData.Default with
+    public EquipItem? HoveredItem  { get; private set; }
+    public bool       IsPopupOpen  { get; private set; }
+    public bool       ItemSelected { get; private set; }
+
+    public void ResetSelection()
+        => ItemSelected = false;
+
+    protected BaseItemCombo(FavoriteManager favorites, ItemManager items, Configuration config, ItemNameService itemNameService, ItemUnlockManager itemUnlockManager)
+        : base(new ItemFilter(itemNameService, config, itemUnlockManager), ConfigData.Default with
         {
             ComputeWidth = true,
             ClearFilterOnSelection = !config.KeepItemComboFilter,
             ClearFilterOnCacheDisposal = false,
+            DirtyCacheOnClose = true,
         })
     {
         Favorites = favorites;
@@ -39,17 +47,24 @@ public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, 
 
     public bool Draw(in EquipItem item, out EquipItem newItem, float width)
     {
+        IsPopupOpen = false;
+        HoveredItem = null;
+
         using var id = Im.Id.Push(Label);
         CurrentItem   = item;
         CustomVariant = 0;
         var ret = Draw(StringU8.Empty, item.Name, StringU8.Empty, width, out var cache);
 
         if (CustomVariant.Id is not 0 && Identify(out newItem))
+        {
+            ItemSelected = true;
             return true;
+        }
 
         if (ret)
         {
-            newItem = cache.Item;
+            newItem      = cache.Item;
+            ItemSelected = true;
             return true;
         }
 
@@ -79,6 +94,7 @@ public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, 
 
     protected override void PreDrawList()
     {
+        IsPopupOpen = true;
         _style.PushY(ImStyleDouble.ItemSpacing, 0)
             .PushY(ImStyleDouble.SelectableTextAlign, 0.5f);
     }
@@ -93,10 +109,18 @@ public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, 
         public readonly StringPair Model = new($"({item.ModelString})");
     }
 
-    protected sealed class ItemFilter : PartwiseFilterBase<CacheItem>
+    protected sealed partial class ItemFilter(ItemNameService itemNameService, Configuration config, ItemUnlockManager itemUnlockManager) : PartwiseFilterBase<CacheItem>
     {
+        private partial bool GTPreFilterItem(in CacheItem item);
+        private partial bool GTFallbackNameMatch(in CacheItem item);
+
         public override bool WouldBeVisible(in CacheItem item, int globalIndex)
-            => base.WouldBeVisible(in item, globalIndex) || WouldBeVisible(item.Model.Utf16);
+        {
+            if (!GTPreFilterItem(in item))
+                return false;
+
+            return base.WouldBeVisible(in item, globalIndex) || WouldBeVisible(item.Model.Utf16) || GTFallbackNameMatch(in item);
+        }
 
         protected override string ToFilterString(in CacheItem item, int globalIndex)
             => item.Name.Utf16;
@@ -133,6 +157,8 @@ public abstract class BaseItemCombo : FilterComboBase<BaseItemCombo.CacheItem>, 
         Im.Line.Same();
         Im.Cursor.Y -= Im.Style.FramePadding.Y;
         var ret = Im.Selectable(item.Name.Utf8, selected, SelectableFlags.None, new Vector2(0, Im.Style.FrameHeight));
+        if (Im.Item.Hovered())
+            HoveredItem = item.Item;
         Im.Line.Same();
         using var color = ImGuiColor.Text.Push(Rgba32.Gray);
         ImEx.TextRightAligned(item.Model.Utf8);

@@ -17,7 +17,8 @@ public sealed partial class CustomizationDrawer(
     CustomizeService service,
     Configuration config,
     FavoriteManager favorites,
-    HeightService heightService)
+    HeightService heightService,
+    PreviewService previewService)
     : IDisposable, IUiService
 {
     private readonly Vector4              _redTint      = new(0.6f, 0.3f, 0.3f, 1f);

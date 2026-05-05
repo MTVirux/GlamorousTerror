@@ -3,7 +3,9 @@ using Glamourer.Config;
 using Glamourer.Designs;
 using Glamourer.Events;
 using Glamourer.Gui.Materials;
+using Glamourer.Interop;
 using Glamourer.Services;
+using Glamourer.State;
 using Glamourer.Unlocks;
 using ImSharp;
 using Luna;
@@ -13,7 +15,7 @@ using Penumbra.GameData.Structs;
 
 namespace Glamourer.Gui.Equipment;
 
-public sealed class EquipmentDrawer : IUiService, IDisposable
+public sealed partial class EquipmentDrawer : IUiService, IDisposable
 {
     private const float DefaultWidth = 280;
 
@@ -30,35 +32,45 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
     private readonly ItemCopyService                        _itemCopy;
     private readonly DesignApplier                          _designApplier;
     private readonly DesignConverter                        _converter;
+    private readonly PreviewService                         _previewService;
+    private readonly ItemUnlockManager                      _itemUnlockManager;
+    private readonly FavoriteManager                        _favoriteManager;
+    private readonly JobService                             _jobService;
 
     private Stain?             _draggedStain;
     private EquipItemSlotCache _draggedItem;
     private EquipSlot          _dragTarget;
+    private int                _lastPrepareFrame = -1;
 
     public EquipmentDrawer(FavoriteManager favorites, IDataManager gameData, ItemManager items, TextureService textures,
         Configuration config, GPoseService gPose, AdvancedDyePopup advancedDyes, ItemCopyService itemCopy, DesignApplier designApplier,
-        DesignConverter converter)
+        DesignConverter converter, PreviewService previewService, ItemNameService itemNameService, ItemUnlockManager itemUnlockManager,
+        JobService jobService)
     {
-        _items          = items;
-        _textures       = textures;
-        _config         = config;
-        _gPose          = gPose;
-        _advancedDyes   = advancedDyes;
-        _itemCopy       = itemCopy;
-        _designApplier  = designApplier;
-        _converter      = converter;
-        _stainData      = items.Stains;
-        _stainCombo     = new GlamourerColorCombo(_stainData, favorites, config);
-        _equipCombo     = EquipSlotExtensions.EqdpSlots.Select(e => new EquipCombo(favorites, items, config, gameData, e)).ToArray();
-        _bonusItemCombo = BonusExtensions.AllFlags.Select(f => new BonusItemCombo(favorites, items, config, gameData, f)).ToArray();
-        _weaponCombo    = new Dictionary<FullEquipType, WeaponCombo>(FullEquipTypeExtensions.WeaponTypes.Count * 2);
+        _items             = items;
+        _textures          = textures;
+        _config            = config;
+        _gPose             = gPose;
+        _advancedDyes      = advancedDyes;
+        _itemCopy          = itemCopy;
+        _designApplier     = designApplier;
+        _converter         = converter;
+        _previewService    = previewService;
+        _itemUnlockManager = itemUnlockManager;
+        _favoriteManager   = favorites;
+        _jobService        = jobService;
+        _stainData         = items.Stains;
+        _stainCombo        = new GlamourerColorCombo(_stainData, favorites, config);
+        _equipCombo        = EquipSlotExtensions.EqdpSlots.Select(e => new EquipCombo(favorites, items, config, gameData, e, itemNameService, itemUnlockManager)).ToArray();
+        _bonusItemCombo    = BonusExtensions.AllFlags.Select(f => new BonusItemCombo(favorites, items, config, gameData, f, itemNameService, itemUnlockManager)).ToArray();
+        _weaponCombo       = new Dictionary<FullEquipType, WeaponCombo>(FullEquipTypeExtensions.WeaponTypes.Count * 2);
         foreach (var type in FullEquipType.Values)
         {
             if (type.ToSlot() is EquipSlot.MainHand or EquipSlot.OffHand)
-                _weaponCombo.TryAdd(type, new WeaponCombo(favorites, items, config, type));
+                _weaponCombo.TryAdd(type, new WeaponCombo(favorites, items, config, type, itemNameService, itemUnlockManager));
         }
 
-        _weaponCombo.Add(FullEquipType.Unknown, new WeaponCombo(favorites, items, config, FullEquipType.Unknown));
+        _weaponCombo.Add(FullEquipType.Unknown, new WeaponCombo(favorites, items, config, FullEquipType.Unknown, itemNameService, itemUnlockManager));
     }
 
     private delegate void DrawEquipDelegate(EquipmentDrawer parent, in EquipDrawData data);
@@ -95,7 +107,24 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
             (true, true) => (Im.Style.FrameHeight, CompactSmallDrawer.Equip, CompactSmallDrawer.Bonus, CompactSmallDrawer.Weapons,
                 CompactSmallDrawer.ItemCombo),
         };
+
+        var frame = Im.State.FrameCount;
+        if (_lastPrepareFrame != frame)
+        {
+            _lastPrepareFrame = frame;
+            _stainCombo.ResetFrameState();
+            GTResetPreviewState();
+            GTResetIconState();
+        }
     }
+
+    private partial void GTResetPreviewState();
+    private partial void GTResetIconState();
+    private partial void GTCaptureStainSlot(EquipSlot slot, int index);
+    private partial void GTCaptureAllStain();
+    private partial bool GTTryDrawEquipIcon(EquipDrawData data);
+    private partial bool GTTryDrawBonusItemIcon(BonusDrawData data);
+    private partial bool GTTryDrawWeaponsIcon(EquipDrawData mainhand, EquipDrawData offhand, bool allWeapons);
 
     public void DrawEquip(EquipDrawData equipDrawData)
     {
@@ -104,6 +133,9 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
 
         using var id    = Im.Id.Push((int)equipDrawData.Slot);
         using var style = ImStyleDouble.ItemSpacing.PushX(Im.Style.ItemInnerSpacing.X);
+
+        if (GTTryDrawEquipIcon(equipDrawData))
+            return;
 
         _drawEquip(this, equipDrawData);
     }
@@ -115,6 +147,9 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
 
         using var id    = Im.Id.Push(100 + (int)bonusDrawData.Slot);
         using var style = ImStyleDouble.ItemSpacing.PushX(Im.Style.ItemInnerSpacing.X);
+
+        if (GTTryDrawBonusItemIcon(bonusDrawData))
+            return;
 
         _drawBonus(this, bonusDrawData);
     }
@@ -132,6 +167,9 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
 
         using var id    = Im.Id.Push("Weapons"u8);
         using var style = ImStyleDouble.ItemSpacing.PushX(Im.Style.ItemInnerSpacing.X);
+
+        if (GTTryDrawWeaponsIcon(mainhand, offhand, allWeapons))
+            return;
 
         _drawWeapons(this, mainhand, offhand, allWeapons);
     }
@@ -157,8 +195,14 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
 
     public bool DrawAllStain(out StainIds ret, bool locked)
     {
-        using var disabled = Im.Disabled(locked);
-        var       change   = _stainCombo.Draw("Dye All Slots"u8, Stain.None, out var newAllStain, Im.Style.FrameHeight);
+        using var disabled     = Im.Disabled(locked);
+        var       wasPopupOpen = _stainCombo.IsPopupOpen;
+        var       change       = _stainCombo.Draw("Dye All Slots"u8, Stain.None, out var newAllStain, Im.Style.FrameHeight);
+
+        // GT: Flag that the open stain popup belongs to the "Dye All Slots" combo so
+        // ApplyAllStainHoverPreview routes into the all-slots branch (captured once on false→true transition).
+        if (!wasPopupOpen && _stainCombo.IsPopupOpen)
+            GTCaptureAllStain();
 
         Im.DrawList.Window.Text(AwesomeIcon.Font, AwesomeIcon.Font.Size, Im.Item.UpperLeftCorner + Im.Style.FramePadding,
             ImGuiColor.Text.Get(), LunaStyle.DyeIcon.Span);
@@ -188,8 +232,13 @@ public sealed class EquipmentDrawer : IUiService, IDisposable
         foreach (var (index, stainId) in data.CurrentStains.Index())
         {
             id.Push(index);
-            var found  = _stainData.TryGetValue(stainId, out var stain);
-            var change = _stainCombo.Draw("##stain"u8, stain, out var newStain, _stainWidth);
+            var found        = _stainData.TryGetValue(stainId, out var stain);
+            var wasPopupOpen = _stainCombo.IsPopupOpen;
+            var change       = _stainCombo.Draw("##stain"u8, stain, out var newStain, _stainWidth);
+
+            // GT: Capture which slot+index this popup belongs to on false→true transition.
+            if (!wasPopupOpen && _stainCombo.IsPopupOpen)
+                GTCaptureStainSlot(data.Slot, index);
 
             _itemCopy.HandleCopyPaste(data, index);
             if (!change)

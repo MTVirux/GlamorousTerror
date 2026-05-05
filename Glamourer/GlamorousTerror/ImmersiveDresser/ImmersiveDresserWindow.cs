@@ -298,7 +298,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
             }
             else
             {
-                equipmentDrawer.Prepare();
+                equipmentDrawer.Prepare(false);
 
                 var mainhand = EquipDrawData.FromState(stateManager, state, EquipSlot.MainHand);
                 var offhand  = EquipDrawData.FromState(stateManager, state, EquipSlot.OffHand);
@@ -375,7 +375,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
             }
             else
             {
-                equipmentDrawer.Prepare();
+                equipmentDrawer.Prepare(false);
 
                 var mainhand = EquipDrawData.FromState(stateManager, state, EquipSlot.MainHand);
                 var offhand  = EquipDrawData.FromState(stateManager, state, EquipSlot.OffHand);
@@ -536,7 +536,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
                 Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));
 
                 // Dye All
-                equipmentDrawer.Prepare();
+                equipmentDrawer.Prepare(false);
                 if (equipmentDrawer.DrawAllStain(out var newAllStain, state.IsLocked))
                 {
                     foreach (var slot in EquipSlotExtensions.EqdpSlots)

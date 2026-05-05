@@ -16,7 +16,7 @@ using Penumbra.GameData.Structs;
 
 namespace Glamourer.Automation;
 
-public sealed class AutoDesignApplier : IDisposable, IRequiredService
+public sealed partial class AutoDesignApplier : IDisposable, IRequiredService
 {
     private readonly Configuration      _config;
     private readonly AutoDesignManager  _manager;
@@ -327,7 +327,10 @@ public sealed class AutoDesignApplier : IDisposable, IRequiredService
                     return true;
 
                 identifier = _actors.CreatePlayer(identifier.PlayerName, WorldId.AnyWorld);
-                return _manager.EnabledSets.TryGetValue(identifier, out set);
+                if (_manager.EnabledSets.TryGetValue(identifier, out set))
+                    return true;
+
+                return TryGettingSetExactOrWildcard(identifier, out set);
             case IdentifierType.Retainer:
             case IdentifierType.Npc:
                 return _manager.EnabledSets.TryGetValue(identifier, out set);

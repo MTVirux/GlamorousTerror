@@ -13,7 +13,7 @@ public sealed class GlamourerWindowSystem : IDisposable, IUiService
     private readonly MainWindow   _ui;
 
     public GlamourerWindowSystem(IUiBuilder uiBuilder, MainWindow ui, Configuration config, UnlocksTab unlocksTab, GlamourerChangelog changelog,
-        DesignQuickBar quick, EquipmentBarWindow equipment, AutomationTestWindow automationTest)
+        DesignQuickBar quick, EquipmentBarWindow equipment, AutomationTestWindow automationTest, ImmersiveDresserManager immersiveDresser)
     {
         _uiBuilder    = uiBuilder;
         _ui           = ui;
@@ -24,6 +24,9 @@ public sealed class GlamourerWindowSystem : IDisposable, IUiService
         _windowSystem.AddWindow(quick);
         _windowSystem.AddWindow(equipment);
         _windowSystem.AddWindow(automationTest);
+        _windowSystem.AddWindow(immersiveDresser.Left);
+        _windowSystem.AddWindow(immersiveDresser.Right);
+        _windowSystem.AddWindow(immersiveDresser.Options);
         _uiBuilder.OpenMainUi            += _ui.Toggle;
         _uiBuilder.OpenConfigUi          += _ui.OpenSettings;
         _uiBuilder.DisableCutsceneUiHide =  !config.HideWindowInCutscene;

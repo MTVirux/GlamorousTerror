@@ -16,7 +16,7 @@ using Luna;
 
 namespace Glamourer.Gui.Tabs.SettingsTab;
 
-public sealed class SettingsTab(
+public sealed partial class SettingsTab(
     IDalamudPluginInterface pi,
     Configuration config,
     DesignFileSystemDrawer drawer,
@@ -33,7 +33,8 @@ public sealed class SettingsTab(
     AutoRedrawChanged autoRedraw,
     PredefinedTagManager predefinedTags,
     PcpService pcpService,
-    IgnoredMods ignoredMods)
+    IgnoredMods ignoredMods,
+    ItemNameService itemNameService)
     : ITab<MainTabType>
 {
     private readonly VirtualKey[] _validKeys = keys.GetValidVirtualKeys().Prepend(VirtualKey.NO_KEY).ToArray();
@@ -61,10 +62,12 @@ public sealed class SettingsTab(
 
         using (Im.Child.Begin("SettingsChild"u8))
         {
+            DrawGlamorousTerrorSettings();
             DrawBehaviorSettings();
             DrawDesignDefaultSettings();
             DrawInterfaceSettings();
             DrawColorSettings();
+            DrawEquipmentLanguageSettings();
             DrawPredefinedTags();
             overrides.Draw();
             DrawIgnoredMods();
