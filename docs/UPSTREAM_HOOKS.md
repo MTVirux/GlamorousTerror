@@ -181,6 +181,54 @@ Use `ConfigurationDirectory` (from `BaseFilePathProvider`), not `pi.ConfigDirect
 
 Each subclass primary ctor must take `ItemNameService itemNameService, ItemUnlockManager itemUnlockManager` and forward them to `BaseItemCombo(...)`.
 
+### 19. `Glamourer/Gui/MainWindow.cs`
+
+Replace the body of `DrawSupportButtons` so only the "Show Changelogs" button is drawn (upstream draws a stack of Discord / Copy Support Info / ReniGuide / Show Changelogs / Ko-Fi-Patreon). The button is tinted with `ImGuiColor.Button.Push(0xFF000080)`:
+
+```csharp
+public static void DrawSupportButtons(Glamourer glamourer, Changelog changelog)
+{
+    var width = new Vector2(Im.Font.CalculateSize(SupportInfoButtonText).X + Im.Style.FramePadding.X * 2, 0);
+    var xPos  = Im.Window.Width - width.X;
+
+    Im.Cursor.Position = new Vector2(xPos, 0);
+    using (ImGuiColor.Button.Push(0xFF000080))
+    {
+        if (Im.Button("Show Changelogs"u8, new Vector2(width.X, 0)))
+            changelog.ForceOpen = true;
+    }
+}
+```
+
+`SupportInfoButtonText` and the private `DrawSupportButton` helper stay in the file (the former is still referenced for width sizing; the latter is dead code retained to minimise the diff against upstream).
+
+Also update `GetLabel()` to render the window title as `Glamorous Terror` instead of upstream's `Glamourer`, with a ` (Testing Version)` suffix under `#if DEBUG`:
+
+```csharp
+private string GetLabel()
+{
+#if DEBUG
+    const string suffix = " (Testing Version)";
+#else
+    const string suffix = "";
+#endif
+    return (Glamourer.Version.Length is 0, _config.Ephemeral.IncognitoMode) switch
+    {
+        (true, true)   => $"Glamorous Terror (Incognito Mode){suffix}###GlamourerMainWindow",
+        (true, false)  => $"Glamorous Terror{suffix}###GlamourerMainWindow",
+        (false, false) => $"Glamorous Terror v{Glamourer.Version}{suffix}###GlamourerMainWindow",
+        (false, true)  => $"Glamorous Terror v{Glamourer.Version} (Incognito Mode){suffix}###GlamourerMainWindow",
+    };
+}
+```
+
+### 20. `Glamourer/Gui/GlamourerChangelog.cs`
+
+Upstream rewrites this file each version to append a new `Add1_X_Y_Z(Changelog)` entry. After overlaying, re-add the GT changelog block:
+
+- In the constructor, append `AddGlamorousTerrorFeatures(Changelog);` as the **last** call, after the newest upstream `Add1_X_Y_Z(Changelog);`
+- Re-add the `AddGlamorousTerrorFeatures(Changelog log)` method (titled `"Glamorous Terror Features"u8`) — the canonical entry list lives in this file on `main` and should be copied forward verbatim, then extended with any new GT features added during the port
+
 ---
 
 ## Configuration Field Conflicts (1.6.0.5 → 1.6.1.4)
@@ -196,5 +244,6 @@ Upstream 1.6.1.4 introduced its own `EnableGameContextMenu` config field on `Con
 3. Update submodules: rebase MTVirux Penumbra forks onto the latest upstream Ottermandias commits, push to a new branch on the MTVirux fork (`wildcard-on-vX.Y.Z.W`), and bump `.gitmodules` `branch = ` to that
 4. `git checkout <new-tag> -- <list-of-Glamourer/-paths>` and `git rm` upstream copies of files we keep in GT folders (`Unlocks/*`, `Interop/ContextMenuService.cs`)
 5. Re-apply hooks above. Verify partial method signatures match GT-folder declarations.
-6. Build: `.\scripts\build\debug.ps1` until 0 errors / 0 warnings
-7. Smoke-test the Critical Invariants checklist from `CLAUDE.md` in-game
+6. Restore the `AddGlamorousTerrorFeatures` block in `GlamourerChangelog.cs` (see #20) — upstream overwrites it on every version bump
+7. Build: `.\scripts\build\debug.ps1` until 0 errors / 0 warnings
+8. Smoke-test the Critical Invariants checklist from `CLAUDE.md` in-game
