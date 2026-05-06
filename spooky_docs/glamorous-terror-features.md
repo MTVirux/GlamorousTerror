@@ -226,7 +226,7 @@ In `DrawStain()`, slot/index are captured on the **false→true transition** of 
 
 **CRITICAL: Popup flag clobbering pattern** — Multiple icon selectors (Face, Hairstyle, etc.) and multiple color pickers are drawn in a loop. Each popup draw method was originally setting `_iconPopupOpen = false` when *its* popup wasn't open. If Face's popup was open, Face's draw set `true`, then Hairstyle's draw immediately set `false`. Solution:
 
-- **Reset all three flags once** at the start of `DrawInternal()`: `_iconPopupOpen = false; _listPopupOpen = false; _colorPopupOpen = false;`
+- **Reset all three flags once per frame** in `Init()` via the partial method `GTResetPopupFlags()` (declared in upstream `CustomizationDrawer.cs`, body in `CustomizationDrawer.Preview.cs`). `Init` runs at the top of every `Draw(...)`, so this fires every frame even when no popup body actually executes — which is the whole point: when a popup *closes*, its body never runs again, so the flag would otherwise latch `true` forever and keep a stale `SingleCustomization` preview alive (re-applying the captured value over external mutations like "Revert to Game State")
 - **Popup draw methods only set `true`**, never `false` — when `Im.Popup.Begin()` returns false, the method just `return`s without touching the flag
 
 Each popup type tracks 4 fields: `_xxxPopupOpen` (bool), `_xxxPopupIndex` (CustomizeIndex), `_xxxHoveredValue` (CustomizeValue), `_xxxSelectionMade` (bool).
@@ -910,7 +910,7 @@ Replaces the name-based equipment combo list with a compact **icon grid**. Click
 - **Master toggle**: `UseIconEquipmentDrawer` in Settings → Glamorous Terror section ("Icon Equipment Drawer")
 - Renders armor slots, weapons, and bonus items as square icon buttons in the Actor panel, Design panel, and Immersive Dresser equipment panels
 - **Click an icon** → opens icon picker popup anchored next to the button, edge-clamped to the viewport
-- **Right-click an icon (outside popup)** → revert/clear that slot (standard upstream behavior)
+- **Right-click an icon (outside popup)** → revert/clear that slot (standard upstream behavior). For weapons this is implemented separately inside `DrawWeaponSlotIcon` (mainhand/offhand take their own paths through `ResetOrClear`, since the weapon icon does not flow through `DrawEquipIcon`). When a mainhand right-click changes weapon type, the offhand is auto-replaced with `_items.GetDefaultOffhand(...)` to keep the pair compatible — preserve this branch when overlaying.
 - **Right-click an item (inside popup)** → toggles favorite for that item (see [Favorites](#9-favorites)); favorited items are highlighted with a yellow frame (ABGR `0xFF00CFFF`)
 - **Filter bar** at the top of the popup:
   - Text search (case-insensitive substring, auto-focused on open)
@@ -964,6 +964,8 @@ Replaces the name-based equipment combo list with a compact **icon grid**. Click
 **Job filter** — Uses `JobService.AllJobGroups` to map `item.JobRestrictions.Id` → `JobGroup.Flags`, and checks against `_iconPickerJobFilter` (`JobFlag` bitmask) or the "Unrestricted" mode (only items equippable by every available job).
 
 **Weapon picker special case** — When `comboType is FullEquipType.Unknown` (the "all weapons" mode), the popup iterates every `FullEquipType` whose `ToSlot()` is `MainHand`, with model-dedup applied across the flattened list.
+
+**Layout-customization parameters (used by Immersive Dresser)** — `DrawEquipIcon`, `DrawBonusItemIcon`, `DrawSingleWeaponIcon`, and the private `DrawWeaponSlotIcon` accept two optional parameters: `bool stainsBeside = false` and `bool simplified = false`. `DrawIconStainIndicators` likewise accepts `bool vertical = false`. Defaults preserve the original behavior for the Actor / Design panel callers; the Immersive Dresser passes both as `true` to (a) render the stain indicators in a column to the right of the icon (`stainsBeside`) and (b) stack them vertically while suppressing the advanced-dye button column (`simplified` / `vertical`). When overlaying upstream changes to these signatures, retain the optional parameters and the `if (!stainsBeside) DrawIconStainIndicators(data); else { ...beside group... }` branches.
 
 ### Configuration
 
@@ -1081,6 +1083,9 @@ Right-clicking the **local player character** in-game adds an **"Immersive Dress
   - **Accessories / Parameters** (right of center) — switches between off-hand + accessory slots and the customize-parameter drawer
   - **Options** (below center) — mode toggle, design actions (clipboard/save/undo), game-UI/panel-lock/free-cam icon buttons, Dye All Slots, meta toggles, camera settings, character rotation
 - Two **modes** toggled from the Options panel: `Equipment` (default) and `Appearance`
+- **Single-window layout** (`SingleWindowDresser`) — when enabled, the Left panel renders both equipment and accessories (iterating `EquipSlotExtensions.EqdpSlots` plus the offhand) and the Right panel hides itself in Equipment mode. Useful for collapsing the dresser to one floating window
+- **Simplified layout** (`SimplifiedDresserLayout`) — stacks dye channels vertically beside each icon and hides the advanced-dye buttons. Implemented by passing `simplified: true` (and `stainsBeside: true`) into `DrawEquipIcon` / `DrawBonusItemIcon` / `DrawSingleWeaponIcon`
+- **Override window background** (`OverrideDresserBgColor` + `ImmersiveDresserBgColor`) — replaces the Left/Right window background with a user-picked `Rgba32`. To keep checkboxes/inputs readable when the background is translucent, the panels also force `FrameBackground{,Hovered,Active}` to `| 0xFF000000` (alpha-`0xFF`) every frame
 - Full **preview-on-hover** support — uses the same `EquipmentDrawer` combos as the Actor panel (see [Preview-on-Hover](#2-preview-on-hover)); the Options panel also drives the Dye-All-Slots preview via `ApplyAllStainHoverPreview`
 - **Panel lock** — icon button in the Options panel sets `WindowFlags.NoMove` on all three panels
 - **Game UI toggle** — icon button hides/shows the native FFXIV HUD while keeping ImGui windows visible (controlled by `AutoHideGameUi`; only toggles UI visibility, never forces it off at open unless `AutoHideGameUi` is persisted as `true`)
@@ -1103,7 +1108,7 @@ Right-clicking the **local player character** in-game adds an **"Immersive Dress
 | `Glamourer/Services/CommandService.cs` | Registers `/glamour`/`/gt` alias; `dresser` sub-command → `Open()` |
 | `Glamourer/Gui/GlamourerWindowSystem.cs` | Registers `Left`, `Right`, `Options` windows with Dalamud's window system |
 | `Glamourer/Gui/Equipment/EquipmentDrawer.cs` | `DrawEquipIcon` / `DrawBonusItemIcon` / `DrawSingleWeaponIcon` / `DrawAllStain` / `DrawMetaToggle` — all `internal`/`public` so the dresser panels can drive them |
-| `Glamourer/GlamorousTerror/Config/Configuration.GT.cs` | `EnableImmersiveDresser`, `AutoHideGameUi`, `LockImmersiveDresserPanels`, `ImmersiveDresserCameraY`, `AllowCameraClipping`, `DisableFirstPerson` |
+| `Glamourer/GlamorousTerror/Config/Configuration.GT.cs` | `EnableImmersiveDresser`, `SingleWindowDresser`, `SimplifiedDresserLayout`, `OverrideDresserBgColor`, `ImmersiveDresserBgColor`, `AutoHideGameUi`, `LockImmersiveDresserPanels`, `ImmersiveDresserCameraY`, `AllowCameraClipping`, `DisableFirstPerson` |
 | `Glamourer/GlamorousTerror/Config/SettingsTab.GT.cs` | Master toggle in the Glamorous Terror section |
 
 **ContextMenuService** adds a `MenuItem` with `PrefixChar = 'G'` and `Name = "Immersive Dresser"`. In `OnMenuOpened`, the item is only added when `config.EnableImmersiveDresser` is true AND the target game object is the local player (`(nint)gameObject.Address == (nint)_objects.Player`). The click handler calls `_immersiveDresser.Open()`.
@@ -1153,18 +1158,19 @@ All three panels share:
 
 - **`PanelFlags`**: `NoTitleBar | NoDocking | AlwaysAutoResize | NoCollapse` — auto-sized to content
 - In **Appearance mode** the left panel clears `NoTitleBar | NoCollapse` so the customization drawer has a title bar (easier to resize/move). The **Options** panel always clears those flags (so the user can always collapse it)
-- **`DrawConditions()`**: Returns `objects.Player.Valid` — panels only render when the player object exists (the Right panel additionally requires `_currentMode is Equipment || _showParameters`)
+- **`DrawConditions()`**: Returns `objects.Player.Valid` — panels only render when the player object exists. The Right panel additionally returns `false` in Equipment mode when `SingleWindowDresser` is on (everything is in the Left panel) and only renders in Appearance mode when `_showParameters` is set
 - **`PreDraw()`**: Positions the window via `Im.Window.SetNextPosition(center ± offset, Condition.FirstUseEver, pivot)` — ImGui remembers user repositioning via its ini file. When `LockImmersiveDresserPanels` is set, `WindowFlags.NoMove` is OR'd in each frame
+- **Style stack (Left/Right only)** — Each panel holds an `Im.ColorStyleDisposable _style` field that is pushed in `PreDraw()` and disposed in `PostDraw()`. In Equipment mode it stacks `WindowPadding = (GlobalScale * 4, GlobalScale * 4)` and `WindowBorderThickness = 0`. When `OverrideDresserBgColor` is on, `ImGuiColor.WindowBackground` is pushed from `ImmersiveDresserBgColor`. Unconditionally, `FrameBackground{,Hovered,Active}` are pushed with their existing color OR'd with `0xFF000000` to keep frame widgets opaque even when the window background is translucent. The Options panel does not currently use this stack
 - **`OnClose()`**: Delegates to `manager.Close()` — safe against re-entrancy due to the `_isOpen` guard
 
 **EquipmentPanel** (left of center, pivot `1, 0.5`):
 
-- **Equipment mode**: `equipmentDrawer.Prepare()`, draws Main Hand weapon icon (`DrawSingleWeaponIcon`), iterates `EquipSlotExtensions.EquipmentSlots` → `DrawEquipIcon`, iterates `BonusExtensions.AllFlags` → `DrawBonusItemIcon`, then `ApplyHoverPreview`
+- **Equipment mode**: `equipmentDrawer.Prepare()`, draws Main Hand weapon icon (`DrawSingleWeaponIcon`, `stainsBeside: true`), iterates `EquipSlotExtensions.EquipmentSlots` (or `EqdpSlots` when `SingleWindowDresser` is on, which extends through the accessory range) → `DrawEquipIcon`, optionally draws the offhand at the end (single-window-mode-only, when offhand `Type` is not `Unknown`), iterates `BonusExtensions.AllFlags` → `DrawBonusItemIcon`, then `ApplyHoverPreview`. All three icon-draw calls forward `stainsBeside: true` and `simplified: SimplifiedDresserLayout`
 - **Appearance mode**: draws `CustomizationDrawer` (with full-customize change dispatch), then `customizationDrawer.ApplyHoverPreview(stateManager, state)`
 
 **AccessoryPanel** (right of center, pivot `0, 0.5`):
 
-- **Equipment mode**: draws off-hand only when `offhand.CurrentItem.Type is not FullEquipType.Unknown` (classes like DRG/MNK show no gap), iterates `EquipSlotExtensions.AccessorySlots` → `DrawEquipIcon`, then `ApplyHoverPreview`
+- **Equipment mode** (only renders when `SingleWindowDresser` is off): draws off-hand only when `offhand.CurrentItem.Type is not FullEquipType.Unknown` (classes like DRG/MNK show no gap), iterates `EquipSlotExtensions.AccessorySlots` → `DrawEquipIcon`, then `ApplyHoverPreview`. Same `stainsBeside: true` / `simplified: SimplifiedDresserLayout` forwarding as the Left panel
 - **Appearance mode**: draws `CustomizeParameterDrawer` (gated by `_showParameters`)
 
 **OptionsPanel** (below center, pivot `0.5, 0`):
@@ -1173,14 +1179,16 @@ All three panels share:
 2. **Reset to Game State** — `stateManager.ResetState(state, StateSource.Manual, isFinal: true)`
 3. **Design actions row** (`DrawDesignActions`) — clipboard-in / clipboard-out / save / undo icon buttons, with modifier-driven apply rules (`UiHelpers.ConvertKeysToBool()`)
 4. **Right-aligned icon buttons** — game-UI eye, panel lock, free-cam video; positioning computed from `Im.ContentRegion.Available.X` so they sit flush right on the same line as the design actions row
-5. **Dye All Slots + meta toggles** (Equipment mode only):
+5. **Target label** — `Im.Text($"Target: {id.ToName()}")` displays the current dresser target name above the Equipment-mode block
+6. **Dye All Slots + meta toggles** (Equipment mode only):
    - `equipmentDrawer.DrawAllStain()` combo; on selection, writes `StainIds.All(newAllStain)` to every `EqdpSlot` via `stateManager.ChangeStains`
    - Always followed by `equipmentDrawer.ApplyAllStainHoverPreview(stateManager, state)` (the preview dispatcher specific to this panel)
    - Four inline meta-toggle groups: `HatState + Head Crest`, `VisorState + Body Crest`, `WeaponState + OffHand Crest`, `EarState` alone
-6. **Camera tree header** (hidden when free-cam is active) — `ImmersiveDresserCameraY` slider + Reset, `AllowCameraClipping` checkbox, `DisableFirstPerson` checkbox (the latter forces a third-person snap when toggled on while already in first person)
-7. **Character Rotation tree header** — `manager._rotationDrawer.Draw(objects.Player)` (see [Character Rotation](#10-character-rotation))
-8. **Show Color Customization** (Appearance mode only) — toggles `_showParameters` to reveal the Right panel's parameter drawer
-9. **Save as Design popup** — `InputPopup.OpenName(...)` prompts for a name and calls `DesignManager.CreateClone(_newDesign, name, true)`
+7. **Dresser Settings tree header** (Equipment mode only) — `Single Window Layout`, `Simplified Layout`, and `Override Window Background` checkboxes. The override row inlines an `Im.Color.Editor` swatch (`AlphaBar | AlphaPreviewHalf | NoInputs`) bound to `ImmersiveDresserBgColor`, gated on `OverrideDresserBgColor`
+8. **Camera tree header** (hidden when free-cam is active) — `ImmersiveDresserCameraY` slider + Reset, `AllowCameraClipping` checkbox, `DisableFirstPerson` checkbox (the latter forces a third-person snap when toggled on while already in first person)
+9. **Character Rotation tree header** — `manager._rotationDrawer.Draw(objects.Player)` (see [Character Rotation](#10-character-rotation))
+10. **Show Color Customization** (Appearance mode only) — toggles `_showParameters` to reveal the Right panel's parameter drawer
+11. **Save as Design popup** — `InputPopup.OpenName(...)` prompts for a name and calls `DesignManager.CreateClone(_newDesign, name, true)`
 
 ### Camera Hooks
 
@@ -1209,6 +1217,10 @@ Both hooks are enabled in `Open()` and disabled in `Close()`. They are installed
 | Property | Type | Default | Purpose |
 |----------|------|---------|---------|
 | `EnableImmersiveDresser` | `bool` | `true` | Gates the context menu entry (command is always available when the service is loaded) |
+| `SingleWindowDresser` | `bool` | `false` | Collapse equipment + accessories into the Left panel; hide the Right panel in Equipment mode |
+| `SimplifiedDresserLayout` | `bool` | `false` | Stack dye channels vertically beside each icon and hide the advanced-dye buttons |
+| `OverrideDresserBgColor` | `bool` | `false` | Replace the Left/Right window backgrounds with `ImmersiveDresserBgColor` |
+| `ImmersiveDresserBgColor` | `Rgba32` | `default` | Custom background color used when `OverrideDresserBgColor` is on |
 | `AutoHideGameUi` | `bool` | `false` | Hide the FFXIV HUD automatically when the dresser opens |
 | `LockImmersiveDresserPanels` | `bool` | `false` | Pins all three panels in place (`WindowFlags.NoMove`) |
 | `ImmersiveDresserCameraY` | `float` | `0f` | Camera Y-offset while open; auto-reset to 0 on `Open()` |
@@ -1241,6 +1253,10 @@ All GlamorousTerror-specific properties live in `Glamourer/GlamorousTerror/Confi
 |----------|------|---------|---------|
 | `EnableGameContextMenu` | `bool` | `true` | Context Menu |
 | `EnableImmersiveDresser` | `bool` | `true` | Immersive Dresser |
+| `SingleWindowDresser` | `bool` | `false` | Immersive Dresser (layout) |
+| `SimplifiedDresserLayout` | `bool` | `false` | Immersive Dresser (layout) |
+| `OverrideDresserBgColor` | `bool` | `false` | Immersive Dresser (styling) |
+| `ImmersiveDresserBgColor` | `Rgba32` | `default` | Immersive Dresser (styling) |
 | `AutoHideGameUi` | `bool` | `false` | Immersive Dresser |
 | `LockImmersiveDresserPanels` | `bool` | `false` | Immersive Dresser |
 | `ImmersiveDresserCameraY` | `float` | `0f` | Immersive Dresser (camera) |

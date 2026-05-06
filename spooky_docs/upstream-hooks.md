@@ -120,6 +120,12 @@ private partial bool GTFallbackNameMatch(in CacheItem item);
 - **Constructor**: Add `PreviewService previewService` parameter
 - Call `ApplyHoverPreview()` in draw method
 - `ApplyHoverPreview()` is implemented in `CustomizationDrawer.Preview.cs`
+- **`Init(...)`**: Call `GTResetPopupFlags();` as the first statement (before `UpdateSizes()`). `Init` runs at the top of every `Draw(...)` so this happens once per frame.
+- Add the partial-method declaration directly after `Init` (or anywhere inside the partial class):
+  ```csharp
+  private partial void GTResetPopupFlags();
+  ```
+  The body lives in `CustomizationDrawer.Preview.cs` and clears `_iconPopupOpen`, `_listPopupOpen`, and `_colorPopupOpen`. **Why this matters:** popup bodies don't run when their popup is closed, so the flags would never be cleared from inside the popup itself. Without a once-per-frame reset they latch `true`, `ApplyHoverPreview` keeps a `SingleCustomization` preview alive forever, and the fall-through restore re-applies the captured `OriginalCustomizeValue` over external mutations like "Revert to Game State".
 
 ### 8. `Glamourer/Gui/Customization/CustomizationDrawer.Icon.cs`
 
