@@ -1,5 +1,6 @@
 using Dalamud.Game.ClientState.Keys;
 using Dalamud.Game.Command;
+using Dalamud.Game.Config;
 using Dalamud.Hooking;
 using Dalamud.Interface;
 using Dalamud.Plugin.Services;
@@ -37,6 +38,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
     private readonly IKeyState          _keyState;
     private readonly IFramework         _framework;
     private readonly ICommandManager   _commandManager;
+    private readonly IGameConfig       _gameConfig;
     private readonly Configuration     _config;
     private readonly PreviewService    _previewService;
     private readonly RotationDrawer    _rotationDrawer;
@@ -52,10 +54,11 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
 
     internal readonly ActorObjectManager _objects;
 
-    private bool _wasUiVisible = true;
-    private bool _savedDisableUserUiHide;
-    private bool _isOpen;
-    private bool _didHideUi;
+    private bool  _wasUiVisible = true;
+    private bool  _savedDisableUserUiHide;
+    private bool? _savedAutoChangePointOfView;
+    private bool  _isOpen;
+    private bool  _didHideUi;
     internal bool _cammyFreeCamActive;
     internal float _lastValidCameraY;
 
@@ -69,7 +72,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
     public unsafe ImmersiveDresserManager(EquipmentDrawer equipmentDrawer, CustomizationDrawer customizationDrawer,
         CustomizeParameterDrawer parameterDrawer, PreviewService previewService, StateManager stateManager,
         ActorObjectManager objects, Configuration config, IUiBuilder uiBuilder, IKeyState keyState, IFramework framework,
-        ICommandManager commandManager, IGameInteropProvider interop, RotationDrawer rotationDrawer,
+        ICommandManager commandManager, IGameConfig gameConfig, IGameInteropProvider interop, RotationDrawer rotationDrawer,
         DesignConverter designConverter, DesignManager designManager, EditorHistory editorHistory,
         AdvancedDyePopup advancedDyes)
     {
@@ -77,6 +80,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         _keyState       = keyState;
         _framework      = framework;
         _commandManager = commandManager;
+        _gameConfig     = gameConfig;
         _config         = config;
         _previewService = previewService;
         _rotationDrawer = rotationDrawer;
@@ -118,6 +122,8 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         _framework.Update           += OnFrameworkUpdate;
         EnsureCameraHook();
         _cameraUpdateHook?.Enable();
+        if (_config.DisableFirstPerson)
+            ApplyFirstPersonOverride();
         if (_config.AutoHideGameUi)
         {
             HideGameUi();
@@ -157,6 +163,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
             _didHideUi = false;
         }
 
+        RestoreFirstPersonOverride();
         _uiBuilder.DisableUserUiHide = _savedDisableUserUiHide;
     }
 
@@ -206,18 +213,6 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
             _keyState[VirtualKey.ESCAPE] = false;
             Close();
             return;
-        }
-
-        if (_config.DisableFirstPerson)
-        {
-            var cam = CameraManager.Instance()->GetActiveCamera();
-            if (cam != null && cam->ZoomMode == CameraZoomMode.FirstPerson)
-            {
-                cam->ZoomMode       = CameraZoomMode.ThirdPerson;
-                cam->ControlMode    = CameraControlMode.ThirdPersonFixed;
-                cam->Distance       = cam->MinDistance > 0 ? cam->MinDistance : 1.5f;
-                cam->InterpDistance = cam->Distance;
-            }
         }
     }
 
@@ -298,6 +293,47 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         var module = RaptureAtkModule.Instance();
         if (module != null && !module->IsUiVisible)
             module->IsUiVisible = _wasUiVisible;
+    }
+
+    /// <summary>
+    /// Snapshot the player's "Switch to 1st person view when fully zoomed in" game-config value
+    /// (UiControl: AutoChangePointOfView) and override it to 0 (auto-switch off) for the duration
+    /// of the dresser session. Also performs a one-shot snap to third-person if the camera was
+    /// already in first-person — AutoChangePointOfView only governs future zoom-driven transitions.
+    /// Must be called on the framework thread (Open/Close and the Options checkbox already run there).
+    /// </summary>
+    internal unsafe void ApplyFirstPersonOverride()
+    {
+        if (_savedAutoChangePointOfView is not null)
+            return;
+
+        if (!_gameConfig.TryGet(UiControlOption.AutoChangePointOfView, out bool current))
+            return;
+
+        _savedAutoChangePointOfView = current;
+        _gameConfig.Set(UiControlOption.AutoChangePointOfView, false);
+
+        var cam = CameraManager.Instance()->GetActiveCamera();
+        if (cam != null && cam->ZoomMode == CameraZoomMode.FirstPerson)
+        {
+            cam->ZoomMode      = CameraZoomMode.ThirdPerson;
+            cam->ControlMode   = CameraControlMode.ThirdPersonFixed;
+            cam->Distance      = cam->MinDistance > 0 ? cam->MinDistance : 1.5f;
+            cam->InterpDistance = cam->Distance;
+        }
+    }
+
+    /// <summary>
+    /// Restore the player's original AutoChangePointOfView value. No-op if no override is in
+    /// flight. Must be called on the framework thread.
+    /// </summary>
+    internal void RestoreFirstPersonOverride()
+    {
+        if (_savedAutoChangePointOfView is not { } original)
+            return;
+
+        _gameConfig.Set(UiControlOption.AutoChangePointOfView, original);
+        _savedAutoChangePointOfView = null;
     }
 
     private static WindowFlags PanelFlags
@@ -783,24 +819,16 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
                     config.DisableFirstPerson ^= true;
                     config.Save();
 
-                    // If toggled on while already in first person, force back to third person.
-                    unsafe
+                    if (manager._isOpen)
                     {
                         if (config.DisableFirstPerson)
-                        {
-                            var cam = CameraManager.Instance()->GetActiveCamera();
-                            if (cam != null && cam->ZoomMode == CameraZoomMode.FirstPerson)
-                            {
-                                cam->ZoomMode      = CameraZoomMode.ThirdPerson;
-                                cam->ControlMode   = CameraControlMode.ThirdPersonFixed;
-                                cam->Distance      = cam->MinDistance > 0 ? cam->MinDistance : 1.5f;
-                                cam->InterpDistance = cam->Distance;
-                            }
-                        }
+                            manager.ApplyFirstPersonOverride();
+                        else
+                            manager.RestoreFirstPersonOverride();
                     }
                 }
 
-                Im.Tooltip.OnHover("Prevents the camera from entering first-person mode when zooming in."u8);
+                Im.Tooltip.OnHover("Disables auto-switch to first-person on full zoom-in (game config: 'Switch to 1st person view when fully zoomed in'). Restores original on dresser close."u8);
 
                 Im.Line.New();
             }
