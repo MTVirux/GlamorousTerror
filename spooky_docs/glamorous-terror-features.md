@@ -1091,7 +1091,7 @@ Right-clicking the **local player character** in-game adds an **"Immersive Dress
 - **Game UI toggle** — icon button hides/shows the native FFXIV HUD while keeping ImGui windows visible (controlled by `AutoHideGameUi`; only toggles UI visibility, never forces it off at open unless `AutoHideGameUi` is persisted as `true`)
 - **Free cam** — icon button runs `/cammy freecam` via Dalamud's `ICommandManager` when the [Cammy plugin](https://github.com/Ottermandias/Cammy) is installed; the button stays disabled otherwise and highlights green when free cam is active (detected by `cam->MaxDistance <= 0.1f`)
 - **Camera height slider** — `ImmersiveDresserCameraY` (range `-2`…`2`) offsets the scene camera's Y while the dresser is open. The camera-update detour clamps to ground via a `BGCollisionModule` raycast (unless `AllowCameraClipping` is enabled) and writes the clamped value back so the slider reflects reality
-- **Disable first person** — `DisableFirstPerson` hooks `CanChangePerspective` to force 0, and snaps out of first-person on toggle-on if already there
+- **Disable first person** — `DisableFirstPerson` overrides FFXIV's "Switch to 1st person view when fully zoomed in" game-config option (`UiControlOption.AutoChangePointOfView`) to `false` for the dresser session via `IGameConfig`, snapshotting the player's original value on open and restoring on close. On activation it also one-shots the camera back to third-person if it was already in first-person (the game-config option only governs *future* zoom-driven transitions)
 - **Character rotation** — tree header in the Options panel exposes the [Character Rotation](#10-character-rotation) drawer
 - **Design actions row** (Options panel, Equipment mode) — icon buttons for clipboard-in / clipboard-out / save-as-design / undo using `DesignConverter` + `EditorHistory`. Modifiers (CTRL/Shift) toggle gear-only vs. customization-only, matching upstream's standard apply-rules pattern
 - **ESC** closes the dresser (detected globally regardless of window focus via `IKeyState`, input consumed to prevent the game system menu)
@@ -1127,31 +1127,34 @@ Right-clicking the **local player character** in-game adds an **"Immersive Dress
 | `_showParameters` | Whether the Right panel shows `CustomizeParameterDrawer` in Appearance mode |
 | `_isOpen` | Re-entrancy guard for `Open()` / `Close()` |
 | `_didHideUi`, `_wasUiVisible`, `_savedDisableUserUiHide` | Save/restore state for the game-UI hide toggle |
+| `_savedAutoChangePointOfView` | Snapshot of the player's original "Switch to 1st person view when fully zoomed in" game-config value; `null` when no override is in flight |
 | `_cammyFreeCamActive`, `_lastValidCameraY` | Free-cam and camera-height detour state |
-| `_cameraUpdateHook`, `_canChangePerspectiveHook` | Dalamud `Hook<>`s attached via vtable offsets 3 and 22 on the active `CameraBase` |
+| `_cameraUpdateHook` | Dalamud `Hook<>` attached via vtable offset 3 on the active `CameraBase` (camera-update detour for the camera-height slider) |
 
-**Constructor** — Receives `EquipmentDrawer`, `CustomizationDrawer`, `CustomizeParameterDrawer`, `PreviewService`, `StateManager`, `ActorObjectManager`, `Configuration`, `IUiBuilder`, `IKeyState`, `IFramework`, `ICommandManager`, `IGameInteropProvider`, `RotationDrawer`, `DesignConverter`, `DesignManager`, `EditorHistory`, `AdvancedDyePopup` via DI. Creates the three panel instances and installs the camera-update / `CanChangePerspective` hooks from the active camera's vtable. The `AdvancedDyePopup` reference is exposed as `_advancedDyes` so the equipment/accessory panels can render the popup window themselves (see Panel Details).
+**Constructor** — Receives `EquipmentDrawer`, `CustomizationDrawer`, `CustomizeParameterDrawer`, `PreviewService`, `StateManager`, `ActorObjectManager`, `Configuration`, `IUiBuilder`, `IKeyState`, `IFramework`, `ICommandManager`, `IGameConfig`, `IGameInteropProvider`, `RotationDrawer`, `DesignConverter`, `DesignManager`, `EditorHistory`, `AdvancedDyePopup` via DI. Creates the three panel instances. The camera-update hook is installed lazily via `EnsureCameraHook()` on the first `Open()` (the lobby camera has a different vtable from the world camera). The `AdvancedDyePopup` reference is exposed as `_advancedDyes` so the equipment/accessory panels can render the popup window themselves (see Panel Details).
 
 **`Open()`** — Guarded by `_isOpen`:
 
 1. Resets `ImmersiveDresserCameraY` to `0f`
 2. Saves the current `IUiBuilder.DisableUserUiHide` value, sets it to `true`
 3. Subscribes to `IFramework.Update` for ESC polling
-4. Enables both camera hooks
-5. If `AutoHideGameUi` is `true`, hides the game UI and records `_didHideUi = true`
-6. Opens all three panel windows
+4. Lazily installs (`EnsureCameraHook()`) and enables the camera-update hook
+5. If `DisableFirstPerson` is `true`, calls `ApplyFirstPersonOverride()` — snapshots `UiControlOption.AutoChangePointOfView`, writes `false`, and one-shots the camera to third-person if it was already in first-person
+6. If `AutoHideGameUi` is `true`, hides the game UI and records `_didHideUi = true`
+7. Opens all three panel windows
 
 **`Close()`** — Guarded by `_isOpen`:
 
 1. Unsubscribes from `IFramework.Update`
 2. Calls `_rotationDrawer.Reset()` so any active rotation override is cleared
 3. If free-cam was active, toggles it back off by sending `/cammy freecam` again
-4. Disables both camera hooks
+4. Disables the camera-update hook
 5. Closes all three windows
 6. Restores game-UI visibility (only if it was hidden by the dresser)
-7. Restores the saved `DisableUserUiHide` value
+7. Calls `RestoreFirstPersonOverride()` — writes the snapshotted `AutoChangePointOfView` value back (no-op if no override was active)
+8. Restores the saved `DisableUserUiHide` value
 
-**`Dispose()`** — Calls `Close()` if still open, then disposes both camera hooks.
+**`Dispose()`** — Calls `Close()` if still open, then disposes the camera-update hook.
 
 ### Panel Details
 
@@ -1188,19 +1191,27 @@ All three panels share:
    - Always followed by `equipmentDrawer.ApplyAllStainHoverPreview(stateManager, state)` (the preview dispatcher specific to this panel)
    - Four inline meta-toggle groups: `HatState + Head Crest`, `VisorState + Body Crest`, `WeaponState + OffHand Crest`, `EarState` alone
 7. **Dresser Settings tree header** (Equipment mode only) — `Single Window Layout`, `Simplified Layout`, and `Override Window Background` checkboxes. The override row inlines an `Im.Color.Editor` swatch (`AlphaBar | AlphaPreviewHalf | NoInputs`) bound to `ImmersiveDresserBgColor`, gated on `OverrideDresserBgColor`
-8. **Camera tree header** (hidden when free-cam is active) — `ImmersiveDresserCameraY` slider + Reset, `AllowCameraClipping` checkbox, `DisableFirstPerson` checkbox (the latter forces a third-person snap when toggled on while already in first person)
+8. **Camera tree header** (hidden when free-cam is active) — `ImmersiveDresserCameraY` slider + Reset, `AllowCameraClipping` checkbox, `DisableFirstPerson` checkbox. Toggling the checkbox while the dresser is open calls `ApplyFirstPersonOverride()` / `RestoreFirstPersonOverride()` live; toggling while closed only persists the bool and waits for the next `Open()`
 9. **Character Rotation tree header** — `manager._rotationDrawer.Draw(objects.Player)` (see [Character Rotation](#10-character-rotation))
 10. **Show Color Customization** (Appearance mode only) — toggles `_showParameters` to reveal the Right panel's parameter drawer
 11. **Save as Design popup** — `InputPopup.OpenName(...)` prompts for a name and calls `DesignManager.CreateClone(_newDesign, name, true)`
 
 ### Camera Hooks
 
-Two vtable hooks on the active `CameraBase`:
+One vtable hook on the active `CameraBase`:
 
 - **`CameraUpdateDetour` (vtable[3])**: Runs after the original camera update. If `ImmersiveDresserCameraY != 0`, it computes a candidate Y, optionally clamps against ground (via `BGCollisionModule.RaycastMaterialFilter` with a `minHeightAboveGround = 0.5f`), writes the clamped offset to both `SceneCamera.Position.Y` and `SceneCamera.LookAtVector.Y`, and — if the clamp changed the offset — writes the clamped value back into `ImmersiveDresserCameraY` so the slider and reality stay in sync.
-- **`CanChangePerspectiveDetour` (vtable[22])**: Returns `0` when `DisableFirstPerson` is set, otherwise defers to the original.
 
-Both hooks are enabled in `Open()` and disabled in `Close()`. They are installed lazily in the constructor from the active camera's vtable — if no active camera exists at startup, both hook fields stay null.
+The hook is enabled in `Open()` and disabled in `Close()`. It is installed lazily via `EnsureCameraHook()` on the first `Open()` because the lobby camera has a different vtable from the world camera — hooking at construction time would silently miss the world camera once the player zones in. The hook field is nullable and silently no-ops if no active camera exists at the time of installation.
+
+### First-Person Lockout
+
+`DisableFirstPerson` is implemented as a snapshot/override/restore of FFXIV's "Switch to 1st person view when fully zoomed in" game-config option (`UiControlOption.AutoChangePointOfView`, exposed by Dalamud as a `bool`):
+
+- **`ApplyFirstPersonOverride()`**: If no override is in flight, reads the player's current `AutoChangePointOfView` via `_gameConfig.TryGet`, stores it in `_savedAutoChangePointOfView`, then writes `false` (auto-switch off). Also one-shots `cam->ZoomMode = ThirdPerson` (with `ControlMode`, `Distance`, `InterpDistance` writes mirroring the prior force-flip) if the camera was already in first-person — `AutoChangePointOfView` only governs *future* zoom-driven transitions, so the player would otherwise stay stuck in first-person until something else moved the camera.
+- **`RestoreFirstPersonOverride()`**: No-op if `_savedAutoChangePointOfView` is null. Otherwise writes the snapshotted value back via `_gameConfig.Set` and clears the snapshot.
+
+Called from `Open()` (gated on `DisableFirstPerson`), `Close()` (always — restore is no-op if no override), and the Options-panel checkbox handler (gated on `manager._isOpen`). Both methods must run on the framework thread; all callers already do.
 
 ### Game UI Hiding
 
@@ -1228,7 +1239,7 @@ Both hooks are enabled in `Open()` and disabled in `Close()`. They are installed
 | `LockImmersiveDresserPanels` | `bool` | `false` | Pins all three panels in place (`WindowFlags.NoMove`) |
 | `ImmersiveDresserCameraY` | `float` | `0f` | Camera Y-offset while open; auto-reset to 0 on `Open()` |
 | `AllowCameraClipping` | `bool` | `false` | Skip ground-ray clamping on the camera Y offset |
-| `DisableFirstPerson` | `bool` | `false` | Force the `CanChangePerspective` detour to deny first-person |
+| `DisableFirstPerson` | `bool` | `false` | While the dresser is open, override the in-game "Switch to 1st person view when fully zoomed in" game-config option to `false` (and snap out of first-person if active); restore the player's value on close |
 
 ### Known Pitfalls
 
@@ -1238,15 +1249,19 @@ Both hooks are enabled in `Open()` and disabled in `Close()`. They are installed
 
 3. **ESC requires `IKeyState` via `IFramework.Update`**: The ImGui keyboard API only detects keys when an ImGui window has focus. With `NoTitleBar` panels and no guaranteed focus, `IKeyState` (Dalamud's game keyboard state) must be used instead, polled on the framework update thread. After detecting ESC, the key must be consumed (`_keyState[VirtualKey.ESCAPE] = false`) to prevent the game from also processing it and opening the system menu.
 
-4. **Camera hook vtable offsets**: The detours attach to vtable indices 3 (camera update) and 22 (`CanChangePerspective`). If FFXIVClientStructs changes its layout or the game patches the camera class, these offsets must be re-verified. The hooks are nullable and silently no-op if the active camera was null at construction.
+4. **Camera hook vtable offset**: The camera-update detour attaches to vtable index 3 on `CameraBase`. If FFXIVClientStructs changes its layout or the game patches the camera class, this offset must be re-verified. The hook is nullable and silently no-ops if no active camera exists at install time.
 
-5. **Camera-offset writeback**: When the ground raycast clamps `candidateY`, the clamped offset is written back into `ImmersiveDresserCameraY` so the slider reflects the actual applied offset. Without this writeback the slider would show a larger value than the camera is using.
+5. **`AutoChangePointOfView` is a one-way override, not a hard prohibition**: Setting it to `false` only blocks the *zoom-driven auto-switch* into first-person. The player can still enter first-person via `/firstperson`, `/freecam`-style commands, or anything else that writes `cam->ZoomMode` directly. The one-shot snap in `ApplyFirstPersonOverride()` ejects an active first-person camera *at apply time* — but if the player force-enters first-person mid-session, nothing here pulls them back out. This is by design (we replaced the per-frame force-flip with the native config option to stop fighting the player's other tools); if a future surface needs hard prohibition, it has to add its own per-frame check or a different hook.
 
-6. **Free-cam detection is heuristic**: Free-cam is inferred from `cam->MaxDistance <= 0.1f` plus the `/cammy` command being registered. There is no IPC handshake with Cammy — if Cammy changes how it marks the camera, this detection must be revisited.
+6. **Snapshot must be symmetric**: `_savedAutoChangePointOfView` is a `bool?` — `null` means "not currently overriding." Both `ApplyFirstPersonOverride()` (early-returns if non-null) and `RestoreFirstPersonOverride()` (early-returns if null) gate on this, so double-apply / double-restore are safe. Without this, an `Open()` → mid-session checkbox-toggle-off → `Close()` sequence would try to restore a null snapshot, or a re-entrant apply would clobber the originally captured value.
 
-7. **`ApplyAllStainHoverPreview` must be called by whatever panel draws `DrawAllStain`**: The Options panel draws it, so the Options panel calls it. If a new surface adds a Dye-All-Slots combo and forgets the dispatcher, the preview will stick on the character after the popup closes.
+7. **Camera-offset writeback**: When the ground raycast clamps `candidateY`, the clamped offset is written back into `ImmersiveDresserCameraY` so the slider reflects the actual applied offset. Without this writeback the slider would show a larger value than the camera is using.
 
-8. **Advanced dye popup needs an explicit `Draw()` call**: `EquipmentDrawer.DrawEquipIcon` only renders the palette **button** (which sets `_drawIndex` on `AdvancedDyePopup`). The popup window itself is rendered by `AdvancedDyePopup.Draw(...)` — `EquipmentPanel.Draw()` and `AccessoryPanel.Draw()` both call it after the equipment loop, gated by `_advancedDyesDrawnFrame == Im.State.FrameCount` so split-window mode does not double-`Begin` the popup window in the same frame. `forceFloating: true` is passed so the popup ignores `KeepAdvancedDyesAttached` (otherwise it would pin to the calling panel and visually overlap the other panel in split mode).
+8. **Free-cam detection is heuristic**: Free-cam is inferred from `cam->MaxDistance <= 0.1f` plus the `/cammy` command being registered. There is no IPC handshake with Cammy — if Cammy changes how it marks the camera, this detection must be revisited.
+
+9. **`ApplyAllStainHoverPreview` must be called by whatever panel draws `DrawAllStain`**: The Options panel draws it, so the Options panel calls it. If a new surface adds a Dye-All-Slots combo and forgets the dispatcher, the preview will stick on the character after the popup closes.
+
+10. **Advanced dye popup needs an explicit `Draw()` call**: `EquipmentDrawer.DrawEquipIcon` only renders the palette **button** (which sets `_drawIndex` on `AdvancedDyePopup`). The popup window itself is rendered by `AdvancedDyePopup.Draw(...)` — `EquipmentPanel.Draw()` and `AccessoryPanel.Draw()` both call it after the equipment loop, gated by `_advancedDyesDrawnFrame == Im.State.FrameCount` so split-window mode does not double-`Begin` the popup window in the same frame. `forceFloating: true` is passed so the popup ignores `KeepAdvancedDyesAttached` (otherwise it would pin to the calling panel and visually overlap the other panel in split mode).
 
 ---
 
