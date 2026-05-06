@@ -269,6 +269,8 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         ActorObjectManager objects)
         : Window("Equipment###ImmersiveDresserLeft", PanelFlags)
     {
+        private readonly Im.ColorStyleDisposable _style = new();
+
         public override bool DrawConditions()
             => objects.Player.Valid;
 
@@ -289,7 +291,23 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
                 Flags |= WindowFlags.NoMove;
             RespectCloseHotkey  = true;
             DisableWindowSounds = true;
+
+            if (manager._currentMode is DresserMode.Equipment)
+                _style.Push(ImStyleDouble.WindowPadding, new Vector2(Im.Style.GlobalScale * 4))
+                    .Push(ImStyleSingle.WindowBorderThickness, 0);
+
+            if (manager._config.OverrideDresserBgColor)
+                _style.Push(ImGuiColor.WindowBackground, manager._config.ImmersiveDresserBgColor.Color);
+
+            // Force frame backgrounds opaque so checkboxes/inputs remain readable when the
+            // window background is translucent.
+            _style.Push(ImGuiColor.FrameBackground,        ImGuiColor.FrameBackground.Get().Color        | 0xFF000000)
+                  .Push(ImGuiColor.FrameBackgroundHovered, ImGuiColor.FrameBackgroundHovered.Get().Color | 0xFF000000)
+                  .Push(ImGuiColor.FrameBackgroundActive,  ImGuiColor.FrameBackgroundActive.Get().Color  | 0xFF000000);
         }
+
+        public override void PostDraw()
+            => _style.Dispose();
 
         public override void Draw()
         {
@@ -315,22 +333,34 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
 
                 var mainhand = EquipDrawData.FromState(stateManager, state, EquipSlot.MainHand);
                 var offhand  = EquipDrawData.FromState(stateManager, state, EquipSlot.OffHand);
+                var hasOffhand = offhand.CurrentItem.Type is not FullEquipType.Unknown;
 
-                equipmentDrawer.DrawSingleWeaponIcon(ref mainhand, ref offhand, false, true);
-                foreach (var slot in EquipSlotExtensions.EquipmentSlots)
+                var simplified = manager._config.SimplifiedDresserLayout;
+
+                equipmentDrawer.DrawSingleWeaponIcon(ref mainhand, ref offhand, false, true,
+                    stainsBeside: true, simplified: simplified);
+
+                var slots = manager._config.SingleWindowDresser
+                    ? EquipSlotExtensions.EqdpSlots
+                    : EquipSlotExtensions.EquipmentSlots;
+                foreach (var slot in slots)
                 {
                     var data = EquipDrawData.FromState(stateManager, state, slot);
                     using var slotId    = Im.Id.Push((int)slot);
                     using var slotStyle = ImStyleDouble.ItemSpacing.PushX(Im.Style.ItemInnerSpacing.X);
-                    equipmentDrawer.DrawEquipIcon(data);
+                    equipmentDrawer.DrawEquipIcon(data, stainsBeside: true, simplified: simplified);
                 }
+
+                if (manager._config.SingleWindowDresser && hasOffhand)
+                    equipmentDrawer.DrawSingleWeaponIcon(ref mainhand, ref offhand, false, false,
+                        stainsBeside: true, simplified: simplified);
 
                 foreach (var slot in BonusExtensions.AllFlags)
                 {
                     var data = BonusDrawData.FromState(stateManager, state, slot);
                     using var slotId    = Im.Id.Push(100 + (int)slot);
                     using var slotStyle = ImStyleDouble.ItemSpacing.PushX(Im.Style.ItemInnerSpacing.X);
-                    equipmentDrawer.DrawBonusItemIcon(data);
+                    equipmentDrawer.DrawBonusItemIcon(data, stainsBeside: true, simplified: simplified);
                 }
 
                 equipmentDrawer.ApplyHoverPreview(stateManager, state);
@@ -353,8 +383,13 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         ActorObjectManager objects)
         : Window("Accessories###ImmersiveDresserRight", PanelFlags)
     {
+        private readonly Im.ColorStyleDisposable _style = new();
+
         public override bool DrawConditions()
-            => objects.Player.Valid && (manager._currentMode is DresserMode.Equipment || manager._showParameters);
+            => objects.Player.Valid
+             && (manager._currentMode is DresserMode.Appearance
+                 ? manager._showParameters
+                 : !manager._config.SingleWindowDresser);
 
         public override void PreDraw()
         {
@@ -371,7 +406,23 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
                 Flags |= WindowFlags.NoMove;
             RespectCloseHotkey  = true;
             DisableWindowSounds = true;
+
+            if (manager._currentMode is DresserMode.Equipment)
+                _style.Push(ImStyleDouble.WindowPadding, new Vector2(Im.Style.GlobalScale * 4))
+                    .Push(ImStyleSingle.WindowBorderThickness, 0);
+
+            if (manager._config.OverrideDresserBgColor)
+                _style.Push(ImGuiColor.WindowBackground, manager._config.ImmersiveDresserBgColor.Color);
+
+            // Force frame backgrounds opaque so checkboxes/inputs remain readable when the
+            // window background is translucent.
+            _style.Push(ImGuiColor.FrameBackground,        ImGuiColor.FrameBackground.Get().Color        | 0xFF000000)
+                  .Push(ImGuiColor.FrameBackgroundHovered, ImGuiColor.FrameBackgroundHovered.Get().Color | 0xFF000000)
+                  .Push(ImGuiColor.FrameBackgroundActive,  ImGuiColor.FrameBackgroundActive.Get().Color  | 0xFF000000);
         }
+
+        public override void PostDraw()
+            => _style.Dispose();
 
         public override void Draw()
         {
@@ -394,15 +445,18 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
                 var offhand  = EquipDrawData.FromState(stateManager, state, EquipSlot.OffHand);
 
                 var hasOffhand = offhand.CurrentItem.Type is not FullEquipType.Unknown;
+                var simplified = manager._config.SimplifiedDresserLayout;
+
                 if (hasOffhand)
-                    equipmentDrawer.DrawSingleWeaponIcon(ref mainhand, ref offhand, false, false);
+                    equipmentDrawer.DrawSingleWeaponIcon(ref mainhand, ref offhand, false, false,
+                        stainsBeside: true, simplified: simplified);
 
                 foreach (var slot in EquipSlotExtensions.AccessorySlots)
                 {
                     var data = EquipDrawData.FromState(stateManager, state, slot);
                     using var slotId    = Im.Id.Push((int)slot);
                     using var slotStyle = ImStyleDouble.ItemSpacing.PushX(Im.Style.ItemInnerSpacing.X);
-                    equipmentDrawer.DrawEquipIcon(data);
+                    equipmentDrawer.DrawEquipIcon(data, stainsBeside: true, simplified: simplified);
                 }
 
                 equipmentDrawer.ApplyHoverPreview(stateManager, state);
@@ -544,6 +598,8 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
                 commandManager.ProcessCommand("/cammy freecam");
             }
 
+            Im.Text($"Target: {id.ToName()}");
+
             if (manager._currentMode is DresserMode.Equipment)
             {
                 Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));
@@ -590,6 +646,51 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
             }
 
             Im.Dummy(new Vector2(0, Im.Style.ItemSpacing.Y));
+
+            // Dresser settings (equipment mode only)
+            if (manager._currentMode is DresserMode.Equipment && Im.Tree.Header("Dresser Settings"u8))
+            {
+                if (Im.Checkbox("Single Window Layout"u8, config.SingleWindowDresser))
+                {
+                    config.SingleWindowDresser ^= true;
+                    config.Save();
+                }
+                Im.Tooltip.OnHover(
+                    "When enabled, equipment and accessories are shown together in a single window instead of split into two side-by-side panels."u8);
+
+                if (Im.Checkbox("Simplified Layout"u8, config.SimplifiedDresserLayout))
+                {
+                    config.SimplifiedDresserLayout ^= true;
+                    config.Save();
+                }
+                Im.Tooltip.OnHover(
+                    "Hide the advanced dye buttons and stack the dye channels vertically beside the item icon."u8);
+
+                if (Im.Checkbox("##overrideBg"u8, config.OverrideDresserBgColor))
+                {
+                    config.OverrideDresserBgColor ^= true;
+                    config.Save();
+                }
+
+                if (config.OverrideDresserBgColor)
+                {
+                    Im.Line.Same();
+                    var bgColor = config.ImmersiveDresserBgColor;
+                    if (Im.Color.Editor("##dresserBgColor"u8, ref bgColor,
+                            ColorEditorFlags.AlphaBar | ColorEditorFlags.AlphaPreviewHalf | ColorEditorFlags.NoInputs))
+                    {
+                        config.ImmersiveDresserBgColor = bgColor;
+                        config.Save();
+                    }
+                }
+
+                Im.Line.Same();
+                Im.Text("Override Window Background"u8);
+                Im.Tooltip.OnHover(
+                    "Replace the equipment and accessory window backgrounds with a custom color."u8);
+
+                Im.Line.New();
+            }
 
             // Camera settings (hidden while free cam is active since all controls are irrelevant)
             if (!manager._cammyFreeCamActive && Im.Tree.Header("Camera"u8))

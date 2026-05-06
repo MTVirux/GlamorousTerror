@@ -1,3 +1,5 @@
+using ImSharp;
+
 namespace Glamourer.Config;
 
 /// <summary>
@@ -27,8 +29,12 @@ public sealed partial class Configuration
     public bool                  KeepIconPickerOpen         { get; set; } = false;
     public bool                  IconPickerPinned           { get; set; } = false;
     public bool                  RememberIconPickerScroll   { get; set; } = false;
-    public bool                  EnableImmersiveDresser     { get; set; } = true;
-    public bool                  AutoHideGameUi             { get; set; } = false;
+    public bool                  EnableImmersiveDresser      { get; set; } = true;
+    public bool                  SingleWindowDresser         { get; set; } = false;
+    public bool                  SimplifiedDresserLayout     { get; set; } = false;
+    public bool                  OverrideDresserBgColor      { get; set; } = false;
+    public Rgba32                ImmersiveDresserBgColor     { get; set; } = default;
+    public bool                  AutoHideGameUi              { get; set; } = false;
     public bool                  LockImmersiveDresserPanels { get; set; } = false;
     public float                 ImmersiveDresserCameraY    { get; set; } = 0f;
     public bool                  AllowCameraClipping        { get; set; } = false;

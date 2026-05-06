@@ -465,7 +465,7 @@ public sealed partial class EquipmentDrawer
             Im.Popup.CloseCurrent();
     }
 
-    internal void DrawEquipIcon(in EquipDrawData data)
+    internal void DrawEquipIcon(in EquipDrawData data, bool stainsBeside = false, bool simplified = false)
     {
         var combo = _equipCombo[data.Slot.ToIndex()];
 
@@ -492,7 +492,20 @@ public sealed partial class EquipmentDrawer
                 data.SetItem(item);
 
             DrawGearDragDrop(data);
-            DrawIconStainIndicators(data);
+            if (!stainsBeside)
+                DrawIconStainIndicators(data);
+        }
+
+        if (stainsBeside)
+        {
+            Im.Line.Same();
+            using (Im.Group())
+            {
+                DrawIconStainIndicators(data, vertical: simplified);
+                if (!simplified && !data.DisplayApplication && data.IsState)
+                    _advancedDyes.DrawButton(data.Slot,
+                        data.HasAdvancedDyes ? _advancedMaterialColor : ColorParameter.Default, false);
+            }
         }
 
         if (data.DisplayApplication)
@@ -614,7 +627,7 @@ public sealed partial class EquipmentDrawer
         }
     }
 
-    internal void DrawBonusItemIcon(in BonusDrawData data)
+    internal void DrawBonusItemIcon(in BonusDrawData data, bool stainsBeside = false, bool simplified = false)
     {
         var combo = _bonusItemCombo[data.Slot.ToIndex()];
 
@@ -637,6 +650,17 @@ public sealed partial class EquipmentDrawer
             if (ResetOrClear(data.Locked, rightClicked, data.AllowRevert, true, data.CurrentItem, data.GameItem,
                     EquipItem.BonusItemNothing(data.Slot), out var item))
                 data.SetItem(item);
+        }
+
+        if (!simplified && stainsBeside && !data.DisplayApplication && data.IsState)
+        {
+            Im.Line.Same();
+            using (Im.Group())
+            {
+                Im.FrameDummy();
+                _advancedDyes.DrawButton(data.Slot,
+                    data.HasAdvancedDyes ? _advancedMaterialColor : ColorParameter.Default, false);
+            }
         }
 
         if (data.DisplayApplication)
@@ -768,7 +792,8 @@ public sealed partial class EquipmentDrawer
     }
 
     /// <summary> Draw a single weapon slot icon without the DrawWeapons wrapper, for custom panel layouts. </summary>
-    public void DrawSingleWeaponIcon(ref EquipDrawData mainhand, ref EquipDrawData offhand, bool allWeapons, bool isMainhand)
+    public void DrawSingleWeaponIcon(ref EquipDrawData mainhand, ref EquipDrawData offhand, bool allWeapons, bool isMainhand,
+        bool stainsBeside = false, bool simplified = false)
     {
         if (_config.HideApplyCheckmarks)
         {
@@ -778,10 +803,11 @@ public sealed partial class EquipmentDrawer
 
         using var id    = Im.Id.Push(isMainhand ? "WeaponMH"u8 : "WeaponOH"u8);
         using var style = ImStyleDouble.ItemSpacing.PushX(Im.Style.ItemInnerSpacing.X);
-        DrawWeaponSlotIcon(ref mainhand, ref offhand, allWeapons, isMainhand);
+        DrawWeaponSlotIcon(ref mainhand, ref offhand, allWeapons, isMainhand, stainsBeside, simplified);
     }
 
-    private void DrawWeaponSlotIcon(ref EquipDrawData mainhand, ref EquipDrawData offhand, bool allWeapons, bool isMainhand)
+    private void DrawWeaponSlotIcon(ref EquipDrawData mainhand, ref EquipDrawData offhand, bool allWeapons, bool isMainhand,
+        bool stainsBeside = false, bool simplified = false)
     {
         ref var data = ref isMainhand ? ref mainhand : ref offhand;
         var comboType = isMainhand
@@ -811,7 +837,20 @@ public sealed partial class EquipmentDrawer
                 OpenOrToggleIconPicker(slot, default, true, false, Im.Item.UpperLeftCorner.Y);
 
             DrawGearDragDrop(data);
-            DrawIconStainIndicators(data);
+            if (!stainsBeside)
+                DrawIconStainIndicators(data);
+        }
+
+        if (stainsBeside)
+        {
+            Im.Line.Same();
+            using (Im.Group())
+            {
+                DrawIconStainIndicators(data, vertical: simplified);
+                if (!simplified && !data.DisplayApplication && data.IsState)
+                    _advancedDyes.DrawButton(slot,
+                        data.HasAdvancedDyes ? _advancedMaterialColor : ColorParameter.Default, false);
+            }
         }
 
         if (data.DisplayApplication)
@@ -975,7 +1014,7 @@ public sealed partial class EquipmentDrawer
         }
     }
 
-    private void DrawIconStainIndicators(in EquipDrawData data)
+    private void DrawIconStainIndicators(in EquipDrawData data, bool vertical = false)
     {
         using var id       = Im.Id.Push((uint)data.Slot);
         using var disabled = Im.Disabled(data.Locked);
@@ -995,7 +1034,7 @@ public sealed partial class EquipmentDrawer
             if (!change)
                 DrawStainDragDrop(data, index, stain, found);
 
-            if (index < data.CurrentStains.Count - 1)
+            if (!vertical && index < data.CurrentStains.Count - 1)
                 Im.Line.SameInner();
 
             if (change)
