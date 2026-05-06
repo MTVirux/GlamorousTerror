@@ -77,7 +77,22 @@ public sealed unsafe class AdvancedDyePopup(
             }
         }
 
-        Im.Tooltip.OnHover("Open advanced dyes for this slot."u8);
+        var hasDyes = _state is not null && _state.Materials.CheckExistenceSlot(index);
+        if (Im.Item.Hovered())
+        {
+            using var tt = Im.Tooltip.Begin();
+            Im.Text("Open advanced dyes for this slot."u8);
+            if (hasDyes)
+                Im.Text("Right-click to revert this slot's advanced dyes to game state."u8);
+        }
+
+        if (hasDyes && Im.Item.RightClicked())
+        {
+            var state = _state!;
+            for (byte mat = 0; mat < MaterialService.MaterialsPerModel; ++mat)
+            for (byte row = 0; row < ColorTable.NumRows; ++row)
+                stateManager.ResetMaterialValue(state, index with { MaterialIndex = mat, RowIndex = row }, ApplySettings.Game);
+        }
     }
 
     private (string Path, string GamePath) ResourceName(MaterialValueIndex index)
