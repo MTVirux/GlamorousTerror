@@ -19,6 +19,7 @@ using Glamourer.State;
 
 using ImSharp;
 using Luna;
+using Penumbra.GameData.Actors;
 using Penumbra.GameData.Enums;
 using Penumbra.GameData.Interop;
 
@@ -47,6 +48,9 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
     internal DresserMode _currentMode = DresserMode.Equipment;
     internal bool _showParameters;
     internal int  _advancedDyesDrawnFrame = -1;
+    internal ActorIdentifier _targetIdentifier = ActorIdentifier.Invalid;
+
+    internal readonly ActorObjectManager _objects;
 
     private bool _wasUiVisible = true;
     private bool _savedDisableUserUiHide;
@@ -78,8 +82,9 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         _rotationDrawer = rotationDrawer;
         _interop        = interop;
         _advancedDyes   = advancedDyes;
-        Left            = new EquipmentPanel(this, equipmentDrawer, customizationDrawer, stateManager, objects);
-        Right           = new AccessoryPanel(this, equipmentDrawer, parameterDrawer, stateManager, objects);
+        _objects        = objects;
+        Left            = new EquipmentPanel(this, equipmentDrawer, customizationDrawer, stateManager);
+        Right           = new AccessoryPanel(this, equipmentDrawer, parameterDrawer, stateManager);
         Options         = new OptionsPanel(this, equipmentDrawer, stateManager, objects, config, commandManager, designConverter, designManager, editorHistory);
     }
 
@@ -99,8 +104,10 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         _cameraUpdateHook = _interop.HookFromAddress<CameraUpdateDelegate>(vtable[3], CameraUpdateDetour);
     }
 
-    public void Open()
+    public void Open(ActorIdentifier identifier = default)
     {
+        _targetIdentifier = identifier.IsValid ? identifier.CreatePermanent() : ActorIdentifier.Invalid;
+
         if (_isOpen)
             return;
 
@@ -131,6 +138,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
             return;
 
         _isOpen        = false;
+        _targetIdentifier = ActorIdentifier.Invalid;
         _framework.Update -= OnFrameworkUpdate;
         _rotationDrawer.Reset();
         if (_cammyFreeCamActive)
@@ -157,6 +165,35 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         if (_isOpen)
             Close();
         _cameraUpdateHook?.Dispose();
+    }
+
+    /// <summary>
+    /// Resolves the actor currently being edited. Falls back to the local player when no explicit
+    /// target is set, when the explicit target is no longer present in the object table, or when the
+    /// resolved data has no valid objects.
+    /// </summary>
+    internal (ActorIdentifier Identifier, ActorData Data) ResolveTarget()
+    {
+        if (_targetIdentifier.IsValid && _objects.TryGetValue(_targetIdentifier, out var data) && data.Valid)
+            return (_targetIdentifier, data);
+
+        return _objects.PlayerData;
+    }
+
+    /// <summary>
+    /// Switches the dresser to edit a different actor. Pass <see cref="ActorIdentifier.Invalid"/>
+    /// (or <c>default</c>) to fall back to the local player. Any in-flight preview is restored
+    /// before the swap so the previous actor's state is not left dirty.
+    /// </summary>
+    internal void SetTarget(ActorIdentifier identifier)
+    {
+        var resolved = identifier.IsValid ? identifier.CreatePermanent() : ActorIdentifier.Invalid;
+        if (_targetIdentifier.Equals(resolved))
+            return;
+
+        _previewService.EndPreview();
+        _rotationDrawer.Reset();
+        _targetIdentifier = resolved;
     }
 
     private unsafe void OnFrameworkUpdate(IFramework _)
@@ -271,14 +308,13 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         ImmersiveDresserManager manager,
         EquipmentDrawer equipmentDrawer,
         CustomizationDrawer customizationDrawer,
-        StateManager stateManager,
-        ActorObjectManager objects)
+        StateManager stateManager)
         : Window("Equipment###ImmersiveDresserLeft", PanelFlags)
     {
         private readonly Im.ColorStyleDisposable _style = new();
 
         public override bool DrawConditions()
-            => objects.Player.Valid;
+            => manager.ResolveTarget().Data.Valid;
 
         public override void PreDraw()
         {
@@ -317,7 +353,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
 
         public override void Draw()
         {
-            var (id, playerData) = objects.PlayerData;
+            var (id, playerData) = manager.ResolveTarget();
             if (!playerData.Valid)
                 return;
 
@@ -391,14 +427,13 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         ImmersiveDresserManager manager,
         EquipmentDrawer equipmentDrawer,
         CustomizeParameterDrawer parameterDrawer,
-        StateManager stateManager,
-        ActorObjectManager objects)
+        StateManager stateManager)
         : Window("Accessories###ImmersiveDresserRight", PanelFlags)
     {
         private readonly Im.ColorStyleDisposable _style = new();
 
         public override bool DrawConditions()
-            => objects.Player.Valid
+            => manager.ResolveTarget().Data.Valid
              && (manager._currentMode is DresserMode.Appearance
                  ? manager._showParameters
                  : !manager._config.SingleWindowDresser);
@@ -438,7 +473,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
 
         public override void Draw()
         {
-            var (id, playerData) = objects.PlayerData;
+            var (id, playerData) = manager.ResolveTarget();
             if (!playerData.Valid)
                 return;
 
@@ -512,7 +547,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         private DesignBase? _newDesign;
 
         public override bool DrawConditions()
-            => objects.Player.Valid;
+            => manager.ResolveTarget().Data.Valid;
 
         public override void PreDraw()
         {
@@ -529,7 +564,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
 
         public override void Draw()
         {
-            var (id, playerData) = objects.PlayerData;
+            var (id, playerData) = manager.ResolveTarget();
             if (!playerData.Valid)
                 return;
 
@@ -616,7 +651,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
                 commandManager.ProcessCommand("/cammy freecam");
             }
 
-            Im.Text($"Target: {id.ToName()}");
+            DrawTargetPicker(id);
 
             if (manager._currentMode is DresserMode.Equipment)
             {
@@ -773,7 +808,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
             // Character rotation
             if (Im.Tree.Header("Character Rotation"u8))
             {
-                manager._rotationDrawer.Draw(objects.Player);
+                manager._rotationDrawer.Draw(playerData.Objects[0]);
                 Im.Line.New();
             }
 
@@ -864,6 +899,56 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
                     disabled: state.IsLocked || !editorHistory.CanUndo(state),
                     size: new Vector2(iconSize, iconSize)))
                 editorHistory.Undo(state);
+        }
+
+        private void DrawTargetPicker(ActorIdentifier currentId)
+        {
+            var hasOverride = manager._targetIdentifier.IsValid;
+            var preview     = hasOverride ? currentId.ToName() : $"{currentId.ToName()} (Self)";
+
+            Im.Item.SetNextWidthScaled(220);
+            using (var combo = Im.Combo.Begin("##dresserTarget"u8, preview))
+            {
+                if (combo)
+                {
+                    var playerId = objects.PlayerData.Identifier;
+                    if (Im.Selectable("Player (Self)"u8, !hasOverride))
+                        manager.SetTarget(default);
+
+                    foreach (var pair in objects.Where(p => p.Value.Objects.Any(a => a.Model)))
+                    {
+                        if (pair.Key.Equals(playerId))
+                            continue;
+
+                        var selected = hasOverride && pair.Key.Equals(manager._targetIdentifier);
+                        if (Im.Selectable(pair.Value.Label, selected))
+                            manager.SetTarget(pair.Key);
+                    }
+                }
+            }
+
+            var (targetId, targetData) = objects.TargetData;
+            var canUseTarget = targetData.Valid
+             && targetData.Objects.Any(a => a.Model)
+             && !targetId.Equals(manager._targetIdentifier)
+             && !(hasOverride is false && targetId.Equals(objects.PlayerData.Identifier));
+
+            if (canUseTarget)
+            {
+                Im.Line.Same();
+                if (ImEx.Icon.Button(FontAwesomeIcon.HandPointer.Icon(),
+                        "Switch the dresser to your current in-game target."u8,
+                        size: new Vector2(Im.Style.FrameHeight, Im.Style.FrameHeight)))
+                    manager.SetTarget(targetId);
+                Im.Tooltip.OnHover($"Switch dresser target to: {targetId.ToName()}");
+            }
+
+            if (hasOverride)
+            {
+                Im.Line.Same();
+                if (Im.Button("Return to Self"u8))
+                    manager.SetTarget(default);
+            }
         }
 
         public override void OnClose()
