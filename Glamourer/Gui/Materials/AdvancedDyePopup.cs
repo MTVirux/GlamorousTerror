@@ -210,7 +210,7 @@ public sealed unsafe class AdvancedDyePopup(
     }
 
     private void DrawWindow(ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<Texture>> textures,
-        ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<MaterialResourceHandle>> materials, bool centered)
+        ReadOnlySpan<FFXIVClientStructs.Interop.Pointer<MaterialResourceHandle>> materials, bool centered, bool forceFloating)
     {
         var flags = WindowFlags.NoFocusOnAppearing
           | WindowFlags.NoCollapse
@@ -228,7 +228,7 @@ public sealed unsafe class AdvancedDyePopup(
 
         // Set position to the right of the main window when attached
         // The downwards offset is implicit through child position.
-        if (config.KeepAdvancedDyesAttached)
+        if (!forceFloating && config.KeepAdvancedDyesAttached)
         {
             var position = Im.Window.Position;
             position.X += Im.Window.Size.X + Im.Style.WindowPadding.X;
@@ -251,7 +251,7 @@ public sealed unsafe class AdvancedDyePopup(
             DrawContent(textures, materials);
     }
 
-    public void Draw(Actor actor, ActorState state, bool centered)
+    public void Draw(Actor actor, ActorState state, bool centered, bool forceFloating = false)
     {
         _actor = actor;
         _state = state;
@@ -259,7 +259,7 @@ public sealed unsafe class AdvancedDyePopup(
             return;
 
         if (_drawIndex!.Value.TryGetTextures(actor, out var textures, out var materials))
-            DrawWindow(textures, materials, centered);
+            DrawWindow(textures, materials, centered, forceFloating);
     }
 
     private void DrawTable(MaterialValueIndex materialIndex, ColorTable.Table table)

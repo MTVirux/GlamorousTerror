@@ -13,6 +13,7 @@ using Glamourer.Designs;
 using Glamourer.Designs.History;
 using Glamourer.Gui.Customization;
 using Glamourer.Gui.Equipment;
+using Glamourer.Gui.Materials;
 using Glamourer.Services;
 using Glamourer.State;
 
@@ -45,6 +46,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
 
     internal DresserMode _currentMode = DresserMode.Equipment;
     internal bool _showParameters;
+    internal int  _advancedDyesDrawnFrame = -1;
 
     private bool _wasUiVisible = true;
     private bool _savedDisableUserUiHide;
@@ -58,11 +60,14 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
     private readonly IGameInteropProvider _interop;
     private Hook<CameraUpdateDelegate>?   _cameraUpdateHook;
 
+    internal readonly AdvancedDyePopup _advancedDyes;
+
     public unsafe ImmersiveDresserManager(EquipmentDrawer equipmentDrawer, CustomizationDrawer customizationDrawer,
         CustomizeParameterDrawer parameterDrawer, PreviewService previewService, StateManager stateManager,
         ActorObjectManager objects, Configuration config, IUiBuilder uiBuilder, IKeyState keyState, IFramework framework,
         ICommandManager commandManager, IGameInteropProvider interop, RotationDrawer rotationDrawer,
-        DesignConverter designConverter, DesignManager designManager, EditorHistory editorHistory)
+        DesignConverter designConverter, DesignManager designManager, EditorHistory editorHistory,
+        AdvancedDyePopup advancedDyes)
     {
         _uiBuilder      = uiBuilder;
         _keyState       = keyState;
@@ -72,6 +77,7 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
         _previewService = previewService;
         _rotationDrawer = rotationDrawer;
         _interop        = interop;
+        _advancedDyes   = advancedDyes;
         Left            = new EquipmentPanel(this, equipmentDrawer, customizationDrawer, stateManager, objects);
         Right           = new AccessoryPanel(this, equipmentDrawer, parameterDrawer, stateManager, objects);
         Options         = new OptionsPanel(this, equipmentDrawer, stateManager, objects, config, commandManager, designConverter, designManager, editorHistory);
@@ -365,6 +371,12 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
 
                 equipmentDrawer.ApplyHoverPreview(stateManager, state);
             }
+
+            if (manager._advancedDyesDrawnFrame != Im.State.FrameCount)
+            {
+                manager._advancedDyesDrawnFrame = Im.State.FrameCount;
+                manager._advancedDyes.Draw(playerData.Objects[0], state, false, forceFloating: true);
+            }
         }
 
         public override void OnClose()
@@ -460,6 +472,12 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
                 }
 
                 equipmentDrawer.ApplyHoverPreview(stateManager, state);
+            }
+
+            if (manager._advancedDyesDrawnFrame != Im.State.FrameCount)
+            {
+                manager._advancedDyesDrawnFrame = Im.State.FrameCount;
+                manager._advancedDyes.Draw(playerData.Objects[0], state, false, forceFloating: true);
             }
         }
 
