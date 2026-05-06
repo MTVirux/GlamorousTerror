@@ -822,7 +822,8 @@ public sealed partial class EquipmentDrawer
         using (Im.Group())
         {
             data.CurrentItem.DrawIcon(_textures, _iconSize, slot);
-            var clicked = Im.Item.Clicked();
+            var clicked      = Im.Item.Clicked();
+            var rightClicked = Im.Item.RightClicked();
 
             if (Im.Item.Hovered())
             {
@@ -835,6 +836,40 @@ public sealed partial class EquipmentDrawer
 
             if (clicked && !data.Locked)
                 OpenOrToggleIconPicker(slot, default, true, false, Im.Item.UpperLeftCorner.Y);
+
+            EquipItem? changedItem = null;
+            if (isMainhand)
+            {
+                if (ResetOrClear(data.Locked, rightClicked, data.AllowRevert, false, data.CurrentItem, data.GameItem,
+                        default, out var c))
+                    changedItem = c;
+            }
+            else
+            {
+                var defaultOffhand = _items.GetDefaultOffhand(mainhand.CurrentItem);
+                if (ResetOrClear(data.Locked, rightClicked, data.AllowRevert, true, data.CurrentItem, data.GameItem,
+                        defaultOffhand, out var c))
+                    changedItem = c;
+            }
+
+            if (changedItem is not null)
+            {
+                if (isMainhand)
+                {
+                    mainhand.SetItem(changedItem.Value);
+                    if (!changedItem.Value.Type.ValidOffhand().IsCompatible(mainhand.CurrentItem.Type.ValidOffhand()))
+                    {
+                        offhand.CurrentItem = _items.GetDefaultOffhand(changedItem.Value);
+                        offhand.SetItem(offhand.CurrentItem);
+                    }
+
+                    mainhand.CurrentItem = changedItem.Value;
+                }
+                else
+                {
+                    offhand.SetItem(changedItem.Value);
+                }
+            }
 
             DrawGearDragDrop(data);
             if (!stainsBeside)
