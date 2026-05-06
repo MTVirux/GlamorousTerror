@@ -1108,6 +1108,7 @@ Right-clicking the **local player character** in-game adds an **"Immersive Dress
 | `Glamourer/Services/CommandService.cs` | Registers `/glamour`/`/gt` alias; `dresser` sub-command → `Open()` |
 | `Glamourer/Gui/GlamourerWindowSystem.cs` | Registers `Left`, `Right`, `Options` windows with Dalamud's window system |
 | `Glamourer/Gui/Equipment/EquipmentDrawer.cs` | `DrawEquipIcon` / `DrawBonusItemIcon` / `DrawSingleWeaponIcon` / `DrawAllStain` / `DrawMetaToggle` — all `internal`/`public` so the dresser panels can drive them |
+| `Glamourer/Gui/Materials/AdvancedDyePopup.cs` | `Draw(...)` accepts a `forceFloating` flag (defaults `false`) so the dresser panels can render the popup as a free-floating window regardless of `KeepAdvancedDyesAttached` |
 | `Glamourer/GlamorousTerror/Config/Configuration.GT.cs` | `EnableImmersiveDresser`, `SingleWindowDresser`, `SimplifiedDresserLayout`, `OverrideDresserBgColor`, `ImmersiveDresserBgColor`, `AutoHideGameUi`, `LockImmersiveDresserPanels`, `ImmersiveDresserCameraY`, `AllowCameraClipping`, `DisableFirstPerson` |
 | `Glamourer/GlamorousTerror/Config/SettingsTab.GT.cs` | Master toggle in the Glamorous Terror section |
 
@@ -1129,7 +1130,7 @@ Right-clicking the **local player character** in-game adds an **"Immersive Dress
 | `_cammyFreeCamActive`, `_lastValidCameraY` | Free-cam and camera-height detour state |
 | `_cameraUpdateHook`, `_canChangePerspectiveHook` | Dalamud `Hook<>`s attached via vtable offsets 3 and 22 on the active `CameraBase` |
 
-**Constructor** — Receives `EquipmentDrawer`, `CustomizationDrawer`, `CustomizeParameterDrawer`, `PreviewService`, `StateManager`, `ActorObjectManager`, `Configuration`, `IUiBuilder`, `IKeyState`, `IFramework`, `ICommandManager`, `IGameInteropProvider`, `RotationDrawer`, `DesignConverter`, `DesignManager`, `EditorHistory` via DI. Creates the three panel instances and installs the camera-update / `CanChangePerspective` hooks from the active camera's vtable.
+**Constructor** — Receives `EquipmentDrawer`, `CustomizationDrawer`, `CustomizeParameterDrawer`, `PreviewService`, `StateManager`, `ActorObjectManager`, `Configuration`, `IUiBuilder`, `IKeyState`, `IFramework`, `ICommandManager`, `IGameInteropProvider`, `RotationDrawer`, `DesignConverter`, `DesignManager`, `EditorHistory`, `AdvancedDyePopup` via DI. Creates the three panel instances and installs the camera-update / `CanChangePerspective` hooks from the active camera's vtable. The `AdvancedDyePopup` reference is exposed as `_advancedDyes` so the equipment/accessory panels can render the popup window themselves (see Panel Details).
 
 **`Open()`** — Guarded by `_isOpen`:
 
@@ -1167,11 +1168,13 @@ All three panels share:
 
 - **Equipment mode**: `equipmentDrawer.Prepare()`, draws Main Hand weapon icon (`DrawSingleWeaponIcon`, `stainsBeside: true`), iterates `EquipSlotExtensions.EquipmentSlots` (or `EqdpSlots` when `SingleWindowDresser` is on, which extends through the accessory range) → `DrawEquipIcon`, optionally draws the offhand at the end (single-window-mode-only, when offhand `Type` is not `Unknown`), iterates `BonusExtensions.AllFlags` → `DrawBonusItemIcon`, then `ApplyHoverPreview`. All three icon-draw calls forward `stainsBeside: true` and `simplified: SimplifiedDresserLayout`
 - **Appearance mode**: draws `CustomizationDrawer` (with full-customize change dispatch), then `customizationDrawer.ApplyHoverPreview(stateManager, state)`
+- **Advanced dye popup** — after the mode-specific block, calls `manager._advancedDyes.Draw(playerData.Objects[0], state, centered: false, forceFloating: true)` if `manager._advancedDyesDrawnFrame != Im.State.FrameCount`, then stamps the frame counter. `forceFloating: true` overrides `KeepAdvancedDyesAttached` so the popup opens as a free-floating ImGui window the user can drag, instead of pinning to the right of the panel
 
 **AccessoryPanel** (right of center, pivot `0, 0.5`):
 
 - **Equipment mode** (only renders when `SingleWindowDresser` is off): draws off-hand only when `offhand.CurrentItem.Type is not FullEquipType.Unknown` (classes like DRG/MNK show no gap), iterates `EquipSlotExtensions.AccessorySlots` → `DrawEquipIcon`, then `ApplyHoverPreview`. Same `stainsBeside: true` / `simplified: SimplifiedDresserLayout` forwarding as the Left panel
 - **Appearance mode**: draws `CustomizeParameterDrawer` (gated by `_showParameters`)
+- **Advanced dye popup** — same call/guard pair as the EquipmentPanel. Both panels invoke `Draw(...)` so accessory clicks are responsive in split-window mode; the `_advancedDyesDrawnFrame` guard ensures `Im.Window.Begin("###Glamourer Advanced Dyes")` only runs once per frame
 
 **OptionsPanel** (below center, pivot `0.5, 0`):
 
@@ -1242,6 +1245,8 @@ Both hooks are enabled in `Open()` and disabled in `Close()`. They are installed
 6. **Free-cam detection is heuristic**: Free-cam is inferred from `cam->MaxDistance <= 0.1f` plus the `/cammy` command being registered. There is no IPC handshake with Cammy — if Cammy changes how it marks the camera, this detection must be revisited.
 
 7. **`ApplyAllStainHoverPreview` must be called by whatever panel draws `DrawAllStain`**: The Options panel draws it, so the Options panel calls it. If a new surface adds a Dye-All-Slots combo and forgets the dispatcher, the preview will stick on the character after the popup closes.
+
+8. **Advanced dye popup needs an explicit `Draw()` call**: `EquipmentDrawer.DrawEquipIcon` only renders the palette **button** (which sets `_drawIndex` on `AdvancedDyePopup`). The popup window itself is rendered by `AdvancedDyePopup.Draw(...)` — `EquipmentPanel.Draw()` and `AccessoryPanel.Draw()` both call it after the equipment loop, gated by `_advancedDyesDrawnFrame == Im.State.FrameCount` so split-window mode does not double-`Begin` the popup window in the same frame. `forceFloating: true` is passed so the popup ignores `KeepAdvancedDyesAttached` (otherwise it would pin to the calling panel and visually overlap the other panel in split mode).
 
 ---
 

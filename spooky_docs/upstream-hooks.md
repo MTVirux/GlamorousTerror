@@ -240,7 +240,43 @@ _equipmentDrawer.ApplyHoverPreview(_stateManager, _selection.State!);
 
 This wires preview-on-hover into the floating equipment bar (which uses compact-mode combos). `ApplyAllStainHoverPreview` is **not** needed here because the bar does not draw `DrawAllStain`. `_selection.State` is non-null here because `DrawConditions()` already gates on it.
 
-### 21. `Glamourer/Gui/GlamourerChangelog.cs`
+### 21. `Glamourer/Gui/Materials/AdvancedDyePopup.cs`
+
+**`forceFloating` parameter** — `Draw(Actor, ActorState, bool centered)` gains a trailing `bool forceFloating = false` parameter, threaded through to `DrawWindow(...)`. In `DrawWindow`, the attachment branch becomes:
+
+```csharp
+if (!forceFloating && config.KeepAdvancedDyesAttached)
+{
+    ...
+}
+```
+
+Default behavior is unchanged for upstream callers (`ActorPanel`, `EquipmentBarWindow`). The Immersive Dresser's `EquipmentPanel`/`AccessoryPanel` pass `forceFloating: true` so the popup opens as a free-floating window the user can drag, instead of pinning to the right of the calling panel and overlapping the sibling panel in split-window mode.
+
+**Right-click slot reset** — In the private `DrawButton(MaterialValueIndex, ColorParameter, bool)` overload, after the icon button, the upstream `Im.Tooltip.OnHover("Open advanced dyes for this slot.")` line is replaced with a conditional tooltip and a right-click handler that wipes every advanced-dye row across every material in the slot:
+
+```csharp
+var hasDyes = _state is not null && _state.Materials.CheckExistenceSlot(index);
+if (Im.Item.Hovered())
+{
+    using var tt = Im.Tooltip.Begin();
+    Im.Text("Open advanced dyes for this slot."u8);
+    if (hasDyes)
+        Im.Text("Right-click to revert this slot's advanced dyes to game state."u8);
+}
+
+if (hasDyes && Im.Item.RightClicked())
+{
+    var state = _state!;
+    for (byte mat = 0; mat < MaterialService.MaterialsPerModel; ++mat)
+    for (byte row = 0; row < ColorTable.NumRows; ++row)
+        stateManager.ResetMaterialValue(state, index with { MaterialIndex = mat, RowIndex = row }, ApplySettings.Game);
+}
+```
+
+`_state` is set by `Draw(actor, state, ...)` which always runs after the buttons, so on the very first frame (before any `Draw` has run) `_state` is null — the `is not null` guard prevents the right-click reset before there's a known actor. After the first frame, `_state` is the most recently rendered actor, which matches the panel the button lives in. The reset uses `ApplySettings.Game`, mirroring the existing per-row "Reset this row to game state" / per-material `DrawTabBar` right-click handlers.
+
+### 22. `Glamourer/Gui/GlamourerChangelog.cs`
 
 Upstream rewrites this file each version to append a new `Add1_X_Y_Z(Changelog)` entry. After overlaying, re-add the GT changelog block:
 
@@ -263,6 +299,6 @@ Upstream 1.6.1.4 introduced its own `EnableGameContextMenu` config field on `Con
 3. Update submodules: rebase MTVirux Penumbra forks onto the latest upstream Ottermandias commits, push to a new branch on the MTVirux fork (`wildcard-on-vX.Y.Z.W`), and bump `.gitmodules` `branch = ` to that
 4. `git checkout <new-tag> -- <list-of-Glamourer/-paths>` and `git rm` upstream copies of files we keep in GT folders (`Unlocks/*`, `Interop/ContextMenuService.cs`)
 5. Re-apply hooks above. Verify partial method signatures match GT-folder declarations.
-6. Restore the `AddGlamorousTerrorFeatures` block in `GlamourerChangelog.cs` (see #21) — upstream overwrites it on every version bump
+6. Restore the `AddGlamorousTerrorFeatures` block in `GlamourerChangelog.cs` (see #22) — upstream overwrites it on every version bump
 7. Build: `.\scripts\build\debug.ps1` until 0 errors / 0 warnings
 8. Smoke-test the Critical Invariants checklist from `CLAUDE.md` in-game
