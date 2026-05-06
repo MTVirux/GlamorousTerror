@@ -69,6 +69,7 @@ public sealed partial class CustomizationDrawer(
 
     private void Init(CustomizeArray current, bool locked, bool lockedRedraw)
     {
+        GTResetPopupFlags();
         UpdateSizes();
         _terminate    = null;
         Changed       = 0;
@@ -76,6 +77,8 @@ public sealed partial class CustomizationDrawer(
         _locked       = locked;
         _lockedRedraw = lockedRedraw;
     }
+
+    private partial void GTResetPopupFlags();
 
     // Set state for drawing of current customization.
     private CustomizeIndex _currentIndex;

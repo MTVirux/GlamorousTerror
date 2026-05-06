@@ -4,6 +4,18 @@ namespace Glamourer.Gui.Customization;
 
 public sealed partial class CustomizationDrawer
 {
+    // Popup flag latching — see CLAUDE.md preview-on-hover invariant #1.
+    // Im.Popup.Begin returns false once a popup closes, so the popup body never runs to set the
+    // flag back to false. Without this reset, _xxxPopupOpen latches true and ApplyHoverPreview
+    // keeps a SingleCustomization preview alive — its fall-through then re-applies the captured
+    // OriginalCustomizeValue over external mutations like "Revert to Game".
+    private partial void GTResetPopupFlags()
+    {
+        _iconPopupOpen  = false;
+        _listPopupOpen  = false;
+        _colorPopupOpen = false;
+    }
+
     public void ApplyHoverPreview(State.StateManager stateManager, State.ActorState state)
     {
         if (_iconPopupOpen)
