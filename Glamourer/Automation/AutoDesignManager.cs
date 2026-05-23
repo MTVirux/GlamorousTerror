@@ -3,6 +3,7 @@ using Dalamud.Interface.ImGuiNotification;
 using Glamourer.Designs;
 using Glamourer.Designs.Special;
 using Glamourer.Events;
+using Glamourer.GlamorousTerror.WildcardAutomation;
 using Glamourer.Services;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -522,7 +523,7 @@ public sealed class AutoDesignManager : ISavable, IReadOnlyList<AutoDesignSet>, 
                 continue;
             }
 
-            var id = _actors.FromJson(obj["Identifier"] as JObject).WithoutIndex();
+            var id = GTActorIdentifierJson.FromJson(_actors, obj["Identifier"] as JObject).WithoutIndex();
             if (!IdentifierValid(id, out var group))
             {
                 Glamourer.Messager.NotificationMessage("Skipped loading Automation Set: Invalid Identifier.", NotificationType.Warning);
@@ -556,7 +557,7 @@ public sealed class AutoDesignManager : ISavable, IReadOnlyList<AutoDesignSet>, 
             if (obj["SecondaryIdentifiers"] is JArray identifierArray)
                 foreach (var idJObj in identifierArray)
                 {
-                    var identifier = _actors.FromJson(idJObj as JObject).WithoutIndex();
+                    var identifier = GTActorIdentifierJson.FromJson(_actors, idJObj as JObject).WithoutIndex();
                     if (!IdentifierValid(identifier, out var g))
                     {
                         Glamourer.Messager.NotificationMessage($"Invalid Secondary Identifier in Automation Set {name}, skipped.",
