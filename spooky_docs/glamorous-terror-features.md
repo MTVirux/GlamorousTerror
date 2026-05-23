@@ -57,19 +57,23 @@ Right-clicking any player character in-game adds a **"Glamorous Terror"** entry 
 
 | File | Role |
 |------|------|
-| `Glamourer/GlamorousTerror/ContextMenu/ContextMenuService.cs` | Hooks Dalamud's `IContextMenu`, adds "Glamorous Terror" (and "Immersive Dresser") to character right-click menus |
+| `Glamourer/GlamorousTerror/ContextMenu/ContextMenuService.cs` | Hooks Dalamud's `IContextMenu`. Adds a player-character entry ("Glamorous Terror"), a "Try On" entry on inventory/ItemSearch/ChatLog/RecipeNote/InclusionShop addons, and an "Immersive Dresser" entry on the local player only |
 | `Glamourer/GlamorousTerror/ContextMenu/CharacterPopupMenu.cs` | ~1000-line custom ImGui popup with all menu logic |
 | `Glamourer/GlamorousTerror/PreviewOnHover/PreviewService.cs` | Preview engine shared with equipment/customization drawers |
 
-**ContextMenuService** implements `IRequiredService`. On `OnMenuOpened`, it filters for character-type context menus, creates a `MenuItem` with `PrefixChar = 'G'`, and fires `_popupMenu.Open(actor, name)` on click.
+**ContextMenuService** implements `IRequiredService`. The `MenuItem` instances (`_inventoryItem`, `_characterItem`, `_immersiveDresserItem`) are built **once in the constructor**, not per-event. `OnMenuOpened` filters by addon and adds the appropriate pre-built item:
+
+- Character-type menus → `_characterItem` (`PrefixChar = 'G'`, name "Glamorous Terror"); the click handler fires `_popupMenu.Open(actor, name)`
+- Local-player character menus AND `EnableImmersiveDresser` is true → additionally append `_immersiveDresserItem`
+- Inventory / ItemSearch / ChatLog / RecipeNote / InclusionShop → `_inventoryItem` ("Try On"), which opens the on-self preview path
 
 **CharacterPopupMenu** registers on `_uiBuilder.Draw += OnDraw` and renders an ImGui popup (`Im.Popup.Begin("GlamorousTerrorPopup")`). Key draw methods:
 
-- `DrawEquipmentSubmenu()` — iterates 14 equipment slots (Head → Facewear) and calls `PreviewService.StartEquipment()` on hover
-- `DrawAppearanceSubmenu()` — iterates 19 appearance groups and calls `PreviewService.StartAppearance()` on hover
-- `DrawDesignSubmenu()` — recursively walks `DesignFileSystem` tree and calls `PreviewService.StartDesign()` on hover
-- `ApplyPreviewPermanently()` — clears preview state, then runs the action with `IsFinal = true`
-- `CheckAndEndPreview()` — restores original state when nothing is hovered
+- `DrawEquipmentSubmenu()` — iterates the 14-entry `EquipmentSlots` array (the first entry is "All" / `EquipSlot.Unknown`; the remaining 13 are Head → Facewear) and calls `PreviewService.StartEquipmentPreview(_lastActor, slot, isBonusItem, toSelf)` on hover. Weapon entries (main/off hand) are filtered out via `AreJobsCompatible()` when source and target jobs differ — gear that the target couldn't realistically equip is hidden to avoid offering nonsensical transfers.
+- `DrawAppearanceSubmenu()` — iterates 19 appearance groups and calls `PreviewService.StartAppearancePreview(_lastActor, flag, toSelf)` on hover
+- `DrawDesignSubmenu()` — recursively walks `DesignFileSystem` tree and calls `_previewService.ApplyDesignPreview(design)` on hover
+- `ApplyPreviewPermanently(Action)` — clears the preview state without restoring (so the value stays written into game memory) then runs the action. The action itself is responsible for applying with `ApplySettings.Manual with { IsFinal = true }` — `ApplyPreviewPermanently` does NOT set `IsFinal` itself
+- `CheckAndEndPreview()` — restores original state when nothing is hovered. Submenu open paths additionally call `_previewService.EndPreview()` when entering a submenu whose preview *type* differs from the currently active preview — without this "submenu cross-revert", hovering an Equipment submenu after just leaving an Appearance submenu would leak the appearance preview onto the actor
 
 ### Data Flow
 
@@ -95,9 +99,9 @@ Right-click character
 
 | Property | Type | Default | Location |
 |----------|------|---------|----------|
-| `EnableGameContextMenu` | `bool` | `true` | `Configuration.GT.cs` |
+| `EnableGameContextMenu` | `bool` | `true` | Upstream `Configuration.cs:39` (NOT `Configuration.GT.cs` — this is one of the known config-placement quirks; see [upstream-hooks.md → Configuration Field Conflicts](upstream-hooks.md#configuration-field-conflicts-carried-since-1614-still-present-as-of-1616)) |
 
-Controlled in the Settings tab (Glamorous Terror section) via `ContextMenuService.Enable()` / `Disable()`.
+Controlled in the Settings tab (Glamorous Terror section) via `ContextMenuService.Enable()` / `Disable()`. Because the field lives on the upstream `Configuration`, upstream's own settings tab also surfaces a checkbox for it — two checkboxes bind to the same flag until one is consolidated.
 
 ---
 
@@ -218,7 +222,8 @@ In `DrawStain()`, slot/index are captured on the **false→true transition** of 
 
 | File | Key Addition |
 |------|-------------|
-| `Glamourer/Gui/Customization/CustomizationDrawer.cs` | `PreviewService` constructor param, popup flag reset in `DrawInternal()` |
+| `Glamourer/Gui/Customization/CustomizationDrawer.cs` | `PreviewService` constructor param, popup flag reset via `GTResetPopupFlags()` partial-method call in `Init()` (run at the top of every `Draw(...)`) |
+| `Glamourer/GlamorousTerror/PreviewOnHover/DesignPreviewService.cs` | Parallel preview service used by the design tab's `DesignFileSystemSelector` for hover preview. Duplicates a chunk of `PreviewService.ApplyDesignPreview` — flagged as a future cleanup target (consolidate into `PreviewService`) |
 | `Glamourer/GlamorousTerror/PreviewOnHover/CustomizationDrawer.Preview.cs` | Public `ApplyHoverPreview()` dispatcher, `_iconPopupOpen/_listPopupOpen/_colorPopupOpen` state, `ApplyIconHoverPreview()`/`ApplyListHoverPreview()`/`ApplyColorHoverPreview()` sub-methods |
 | `Glamourer/Gui/Customization/CustomizationDrawer.Icon.cs` | Hover tracking in `DrawIconPickerPopup()` — sets `_iconPopupOpen`, `_iconHoveredValue`, `_iconSelectionMade` |
 | `Glamourer/Gui/Customization/CustomizationDrawer.Simple.cs` | Hover tracking in `ListCombo0()`/`ListCombo1()` — sets `_listPopupOpen`, `_listHoveredValue`, `_listSelectionMade` |
@@ -340,8 +345,8 @@ Stain combo opened for Head slot, stain index 0
 ### Data Flow (Customization Example)
 
 ```
-CustomizationDrawer.DrawInternal() starts
-  → _iconPopupOpen = false; _listPopupOpen = false; _colorPopupOpen = false
+CustomizationDrawer.Init() runs at top of Draw(...)
+  → GTResetPopupFlags() → _iconPopupOpen = false; _listPopupOpen = false; _colorPopupOpen = false
 
 Icon popup opened (e.g. hairstyle)
   → DrawIconPickerPopup() → popup renders → _iconPopupOpen = true, _iconPopupIndex = currentIndex
@@ -382,40 +387,56 @@ These bugs were discovered and fixed during integration. Document them to preven
 
 9. **External mutation while preview active (`LastAppliedItem`/`LastAppliedStain`)**: `RestoreSingleValuePreview` for `SingleItem` and `SingleStain` is gated on whether the current state still matches the value the preview last wrote. `PreviewSingleItem`/`PreviewSingleBonusItem`/`PreviewSingleStain` record their write into `State.LastAppliedItem` / `State.LastAppliedStain`; the restore branches early-return when the field is null or the live state has diverged. This prevents the fall-through `EndSingleValuePreview` from clobbering side actions that fired the same frame the popup closed — most notably right-click clear (`ResetOrClear` → `SetItem(NothingItem)`), which would otherwise be reverted to the originally-captured item. The fields are reset in `PreviewState.End()`. `SingleCustomization` and `AllSlotsStain` are not affected by this gating because they don't share the right-click clear pathway.
 
+10. **`CustomizationDrawer.ApplyHoverPreview` must use `if/else if/else`**: Sequential `if`s would each invoke `EndCustomizationPopupFrame` for the inactive branches, killing the active preview every frame. The dispatcher in `Glamourer/GlamorousTerror/PreviewOnHover/CustomizationDrawer.Preview.cs` must remain `if (_iconPopupOpen) / else if (_listPopupOpen) / else if (_colorPopupOpen) / else EndCustomizationPopupFrame()`. (This is implied by the implementation section's "Only one EndCustomizationPopupFrame call" rule, but it is also CLAUDE.md Critical Invariant #6 — listed here so upstream-merge readers see all critical invariants in the same place.)
+
+11. **Panel call order matters in `ActorPanel.DrawHumanPanel`**: The header methods run in the order `DrawCustomizationsHeader()` then `DrawEquipmentHeader()` (`ActorPanel.cs:135-136`). This means `CustomizationDrawer.ApplyHoverPreview` runs FIRST per frame, then `EquipmentDrawer.ApplyHoverPreview` observes the state the customization dispatcher just set. Inverting the order would break the type-guarded fall-throughs that protect customization previews from being ended by the equipment drawer (and vice versa).
+
 ---
 
 ## 3. Wildcard Automation Targets
 
-Extends the automation system to allow **wildcard patterns** (`*`) in character names for auto-design sets.
+Extends the automation system to allow **wildcard patterns** (`*`) and **single-character wildcards** (`?`) in character names for auto-design sets.
 
 ### User-Facing Functionality
 
 - Pattern matching in character names: `Tank*@Excalibur`, `*Healer`, `Raid Alt*`
-- `*` matches zero or more characters
-- Case-insensitive matching on raw UTF-8 bytes
-- Supports Player, Owned, and Retainer identifier types
-- World matching: exact world or `AnyWorld`
-- Falls back to exact match first for performance
+- `*` matches zero or more characters; `?` matches exactly one character
+- Case-insensitive matching on raw UTF-8 bytes — but case folding only applies to **ASCII A–Z** (the `AsciiToLower` helper). Non-ASCII bytes (accented letters, em-dashes, CJK) match byte-for-byte without case folding
+- **Runtime wildcard matching is Player-only.** Wildcard identifiers can be *authored* in the automation editor for Player, Owned, and Retainer types (see `WildcardIdentifier.OwnedOrFallback` / `RetainerOrFallback`), and they will be serialized to disk correctly, but the dispatch in `GetPlayerSet` only calls `TryGettingSetExactOrWildcard` for `IdentifierType.Player`. Owned-type and Retainer-type sets fall back to exact lookup only. This will surprise users who configure `Tank*Mount` (Owned) wildcards
+- World matching: exact world or `AnyWorld` (where `AnyWorld` matches everything)
+- Exact match is tried first (with the original world, then a second pass against `WorldId.AnyWorld`); wildcard iteration only runs on miss
+- No user-facing toggle — wildcard support is always on. Whether a given set uses wildcards is determined by `*` / `?` characters in the configured `PlayerName`
 
 ### Implementation
 
 | File | Role |
 |------|------|
 | `Glamourer/GlamorousTerror/WildcardAutomation/AutoDesignApplier.Wildcard.cs` | Partial-class extension of upstream `AutoDesignApplier`; wildcard name matching against enabled sets |
-| `Glamourer/GlamorousTerror/WildcardAutomation/WildcardIdentifier.cs` | Constructs `ActorIdentifier`s for `*`-bearing names via upstream's public `ActorManager.CreateIndividualUnchecked` API (bypasses SE name validation); falls back to the validated factory for non-wildcard names |
-| `Glamourer/GlamorousTerror/WildcardAutomation/GTActorIdentifierJson.cs` | Wraps `ActorManager.FromJson` so config loads with `*` in `PlayerName` route through `WildcardIdentifier` instead of the validated parse |
+| `Glamourer/GlamorousTerror/WildcardAutomation/WildcardIdentifier.cs` | Constructs `ActorIdentifier`s for `*`-bearing names via upstream's public `ActorManager.CreateIndividualUnchecked` API (bypasses SE name validation); falls back to the validated factory for non-wildcard names. Exposes `PlayerOrFallback`, `RetainerOrFallback`, `OwnedOrFallback`, and two `IsWildcard` overloads (`ByteString` / `string?`) for callers that want to check before authoring |
+| `Glamourer/GlamorousTerror/WildcardAutomation/GTActorIdentifierJson.cs` | Wraps `ActorManager.FromJson` so config loads with `*` in `PlayerName` route through `WildcardIdentifier` instead of the validated parse. Falls back to `actors.FromJson(data)` for non-wildcard names and for unknown identifier types |
 
-The feature **no longer requires a `Penumbra.GameData` fork**: wildcard identifiers are constructed entirely through upstream's public `CreateIndividualUnchecked` entry point, so the submodule tracks vanilla Ottermandias `upstream/main`. JSON load is intercepted in `AutoDesignManager.LoadV1` (see [upstream-hooks.md #11a](upstream-hooks.md)), and the automation editor is intercepted in `IdentifierDrawer.UpdateIdentifiers` (#11b), which means wildcard names can now be typed directly into the UI rather than only being authored by hand-editing the config file.
+The feature **no longer requires a `Penumbra.GameData` fork**: wildcard identifiers are constructed entirely through upstream's public `CreateIndividualUnchecked` entry point, so the submodule tracks vanilla Ottermandias `upstream/main`. JSON load is intercepted in `AutoDesignManager.LoadV1` (see [upstream-hooks.md #11a](upstream-hooks.md)), and the automation editor is intercepted in `IdentifierDrawer.UpdateIdentifiers` (#11b), which means wildcard names can now be typed directly into the UI rather than only being authored by hand-editing the config file. The loaded identifier is also passed through `WithoutIndex()` before being stored (`AutoDesignManager.cs:526, 560`), stripping any stale object index so equality checks against runtime-generated identifiers remain stable.
 
-**`TryGettingSetExactOrWildcard(ActorIdentifier)`** — Entry point replacing the original `GetPlayerSet`:
+**Combined dispatch via upstream `GetPlayerSet` + GT fallback** (`AutoDesignApplier.cs:315-346`):
 
-1. Attempts exact match via `EnabledSets.TryGetValue(identifier)` — fast path
-2. On miss, iterates all `EnabledSets` looking for identifiers whose `PlayerName` contains `*`
-3. For each wildcard candidate:
-   - Checks type compatibility (Player, Owned, Retainer)
-   - Checks world match (exact or `AnyWorld`)
-   - Calls `MatchesWildcard(identifier.PlayerName, key.PlayerName)`
-4. Returns first match or `null`
+The full Player-type lookup runs three steps before giving up:
+
+1. `_manager.EnabledSets.TryGetValue(identifier)` — exact match with the original `WorldId`. Fast path; most sets resolve here.
+2. **AnyWorld retry**: build a second identifier with `actors.CreatePlayer(name, WorldId.AnyWorld)` and try `TryGetValue` again. This is how a single set authored against `Tank Alt@AnyWorld` matches the same name on any data center.
+3. `TryGettingSetExactOrWildcard(identifier, out set)` — the GT fallback (only called for `IdentifierType.Player`). Iterates `EnabledSets` looking for keys with wildcard names.
+
+For Owned / Retainer / NPC identifier types, only step 1 runs (no AnyWorld retry, no wildcard fallback). Wildcards authored for those types will appear in the UI but never match at runtime through this code path.
+
+**`TryGettingSetExactOrWildcard(ActorIdentifier identifier, out AutoDesignSet? set) → bool`** — GT entry point (`AutoDesignApplier.Wildcard.cs:10`):
+
+For each `(key, set)` pair in `EnabledSets`:
+
+1. **Type compatibility**: `if (key.Type != identifier.Type && key.Type is not IdentifierType.Player && identifier.Type is not IdentifierType.Player) continue;` — accepts the pair when either both types are identical OR one side is `Player`. Owned and Retainer wildcards therefore *only* match identifiers of the same type, or against a Player identifier (which is what reaches this method at runtime).
+2. **World compatibility**: `if (key.HomeWorld != WorldId.AnyWorld && key.HomeWorld != identifier.HomeWorld) continue;` — skips the pair unless the set's world is `AnyWorld` or matches exactly.
+3. **Wildcard name match**: `MatchesWildcard(identifier.PlayerName, key.PlayerName)` (skipping non-wildcard names via `WildcardIdentifier.IsWildcard`).
+4. First successful match: assign `set` and return `true`.
+
+If no key matches, `set = null` and returns `false`.
 
 **`MatchesWildcard(ByteString name, ByteString pattern)`** — Unsafe entry point:
 
@@ -425,8 +446,9 @@ The feature **no longer requires a `Penumbra.GameData` fork**: wildcard identifi
 
 - Maintains `nameIdx`, `patternIdx`, `starIdx` (last `*` position), `matchIdx` (backtrack point)
 - On `*`: records position, advances pattern
+- On `?`: matches any single byte at `nameIdx`, advances both indices (line 58)
 - On mismatch: backtracks to last `*` position, advances `matchIdx`
-- Case-insensitive via `AsciiToLower(byte)` which converts A-Z to a-z inline
+- Case-insensitive via `AsciiToLower(byte)` which converts A-Z to a-z inline — non-ASCII bytes pass through unchanged
 
 **`AsciiToLower(byte)`** — Single-expression helper: `b >= (byte)'A' && b <= (byte)'Z' ? (byte)(b + 32) : b`
 
@@ -434,120 +456,169 @@ The feature **no longer requires a `Penumbra.GameData` fork**: wildcard identifi
 
 ```
 Character loads → AutoDesignApplier.GetPlayerSet(identifier)
-  → EnabledSets.TryGetValue(identifier) → exact match? → return set
-  → No exact match → iterate all EnabledSets
-    → For each key containing '*':
-      → Type compatible? (Player/Owned/Retainer)
-      → World matches? (exact or AnyWorld)
-      → MatchesWildcard(identifier.PlayerName, key.PlayerName)
-        → MatchesWildcardInternal (byte-level, case-insensitive, backtracking)
-        → Match → return set
-  → No match → return null → no automation applied
+  ├── if identifier.Type is Player:
+  │     1. EnabledSets.TryGetValue(identifier) → exact match with current world? → return
+  │     2. Build identifier' = actors.CreatePlayer(name, WorldId.AnyWorld)
+  │        EnabledSets.TryGetValue(identifier') → exact match with AnyWorld? → return
+  │     3. TryGettingSetExactOrWildcard(identifier, out set):
+  │        For each (key, set) in EnabledSets:
+  │          → type compat (same OR one is Player)?
+  │          → world compat (key is AnyWorld OR equal)?
+  │          → MatchesWildcard(identifier.PlayerName, key.PlayerName) →
+  │              MatchesWildcardInternal (byte-level, '*'/'?', case-insensitive ASCII, backtracking)
+  │          → first match wins, return set
+  │     4. No match → return null → no automation applied
+  └── else (Owned / Retainer / Npc):
+        EnabledSets.TryGetValue(identifier) only — no AnyWorld retry, no wildcard fallback
 ```
 
 ---
 
 ## 4. Fun Modes
 
-23 cosmetic transformation modes that modify visible players' appearances in real-time. Replaces upstream Glamourer's SHA-256 passphrase system with direct checkbox toggles.
+Cosmetic transformation modes that modify visible players' appearances in real-time. **This subsystem is entirely upstream Glamourer code**, untouched by the GT fork — included here only because it interacts with the GT context menu (WhoAmI/WhoIsThat actions) and is a frequent question during upstream syncs. Future GT additions should land here if they extend the system.
 
-### Difference from Upstream
+### How the SHA-256 Passphrase System Works (Upstream)
 
-| Aspect | Upstream Glamourer | GlamorousTerror |
-|--------|-------------------|-----------------|
-| Storage | `List<(string Code, bool Enabled)> Codes` — plaintext passphrase list | `CodeFlag EnabledCheats` — direct bitmask |
-| Unlocking | User types secret passphrase → SHA-256 hash compared to hardcoded digests | All modes visible as labeled checkboxes |
-| UI | Text input + hints system (capital count, punctuation, riddle) | Checkbox list with names and descriptions |
-| Extra modes | — | `AllMale` (0x002000), `AllFemale` (0x004000) |
-| Mutual exclusivity | `GenderCodes` not defined (only `SixtyThree`) | `GenderCodes = AllMale \| AllFemale \| SixtyThree` |
+Modes are unlocked by typing a **secret passphrase** into a text input in the Settings tab. The plaintext is **never compared directly** — `CodeService.CheckCode(name)` runs SHA-256 on the input and compares the 32-byte digest against the hardcoded `ReadOnlySpan<byte>` returned by `GetSha(CodeFlag)`. Each `CodeFlag` has its own digest; collisions are not allowed.
 
-### Available Modes
+Successfully matching a passphrase returns an `(Action<bool>?, CodeFlag)` tuple — invoking the action with `true` adds the flag to `_enabled` (clearing mutually-exclusive flags) and persists the plaintext into `Configuration.Codes` so the user doesn't have to re-type it next session. The plaintext is intentionally stored in cleartext: the SHA-256 layer is a one-way gate at *first-entry* time only, after which the system trusts the user's local config.
 
-| Flag | Name | Category | Effect |
-|------|------|----------|--------|
-| `Clown` | Random Dyes | Dye | Randomizes dyes on every armor piece |
-| `Emperor` | Random Clothing | Gear | Randomizes equipment per slot |
-| `Individual` | Random Customizations | — | Randomizes all customize values (except Face) |
-| `Dwarf` | Player Dwarf Mode | Size | Player = min height, others = max height |
-| `Giant` | Player Giant Mode | Size | Player = max height, others = min height |
-| `OopsHyur` – `OopsViera` | All [Race] | Race | Changes all players to specified race |
-| `AllMale` | All Male | Gender | Changes all players to male **[GT-only]** |
-| `AllFemale` | All Female | Gender | Changes all players to female **[GT-only]** |
-| `SixtyThree` | Invert Genders | Gender | Flips male ↔ female for all players |
-| `Shirts` | Show All Items Unlocked | — | Removes unavailable tint on locked items in Unlocks tab |
-| `World` | Job-Appropriate Gear | Gear+Dye | Sets NPCs to job-appropriate gear and weapons |
-| `Elephants` | Everyone Elephants | Gear+Dye | Elephant costume (item 6133) with random pink stains |
-| `Crown` | Clown Mentors | — | Mentors get clown outfit (item 6117) |
-| `Dolphins` | Everyone Namazu | Gear+Dye | Namazu head (item 5040) + random costume bodies |
-| `Face` | Debug Mode (Face) | Full | Replace with random NPC appearance |
-| `Manderville` | Debug Mode (Manderville) | Full | Replace with Hildi/Manderville NPC appearance |
-| `Smiles` | Debug Mode (Smiles) | Full | Replace with Smile variants |
+`Configuration.Codes` is a `List<(string Code, bool Enabled)>` — each entry is the previously-validated plaintext + a per-entry on/off toggle the user can flip without re-typing. On startup, every entry is fed through `CheckCode` again to rebuild `_enabled` from scratch (so deleting the digest constant for a flag effectively disables it everywhere — no migration needed).
 
-Debug modes (Face, Manderville, Smiles) are hidden from the UI.
+### CodeFlag enum (`CodeService.cs:14-40`)
 
-### Mutual Exclusivity
+```csharp
+[Flags] public enum CodeFlag : uint
+{
+    Clown        = 0x000001,  // Random Dyes
+    Emperor      = 0x000002,  // Random Clothing
+    Individual   = 0x000004,  // Random Customizations
+    Dwarf        = 0x000008,  // Player Dwarf
+    Giant        = 0x000010,  // Player Giant
+    OopsHyur     = 0x000020,
+    OopsElezen   = 0x000040,
+    OopsLalafell = 0x000080,
+    OopsMiqote   = 0x000100,
+    OopsRoegadyn = 0x000200,
+    OopsAuRa     = 0x000400,
+    OopsHrothgar = 0x000800,
+    OopsViera    = 0x001000,
 
-Only one mode per category can be active:
+    // 0x002000 is currently UNUSED (commented "//Artisan = 0x002000")
+    // — reserved by leaving the bit unallocated. Future additions should pick this slot.
 
-- **Dye**: Clown, World, Elephants, Dolphins
-- **Gear**: Emperor, World, Elephants, Dolphins
-- **Race**: One of eight race codes
-- **Gender**: AllMale, AllFemale, SixtyThree
-- **Size**: Dwarf, Giant
-- **Full**: Face, Manderville, Smiles (mutually exclusive with nearly everything)
+    SixtyThree   = 0x004000,  // Invert genders
+    Shirts       = 0x008000,
+    World        = 0x010000,
+    Elephants    = 0x020000,
+    Crown        = 0x040000,
+    Dolphins     = 0x080000,
+    Face         = 0x100000,  // Debug — hidden from hint UI
+    Manderville  = 0x200000,  // Debug — hidden
+    Smiles       = 0x400000,  // Debug — hidden
+}
+```
 
-### Implementation
+There is **no `AllMale` or `AllFemale` flag** — the only gender code is `SixtyThree` (the male↔female swap). The 0x002000 bit is unallocated.
 
-| File | Lines | Role |
-|------|-------|------|
-| `Glamourer/Services/CodeService.cs` | ~210 | `CodeFlag` enum, `Toggle()`, `DisableAll()`, `GetMutuallyExclusive()`, `GetName()`, `GetDescription()` |
-| `Glamourer/State/FunModule.cs` | ~500 | `IRequiredService` applying transformations on character load/equip/weapon changes |
-| `Glamourer/Gui/Tabs/SettingsTab/CodeDrawer.cs` | ~80 | Settings UI: checkbox list, Disable All button, Who Am I / Who Is That clipboard buttons |
-| `Glamourer/State/FunEquipSet.cs` | — | Festival-specific outfit definitions |
+### Mutually Exclusive Groups (`CodeService.cs:42-62`)
 
-**CodeService** — Reads/writes `Configuration.EnabledCheats` directly:
+Constants combine flags that conflict:
 
-- `Toggle(CodeFlag flag, bool enable)` — applies mutual exclusivity via `GetMutuallyExclusive()` then saves
-- `DisableAll()` — sets `EnabledCheats = 0` and saves
-- `Enabled(CodeFlag)` / `AnyEnabled(CodeFlag)` / `Masked(CodeFlag)` — query methods
+- `DyeCodes = Clown | World | Elephants | Dolphins`
+- `GearCodes = Emperor | World | Elephants | Dolphins`
+- `RaceCodes = OopsHyur | OopsElezen | OopsLalafell | OopsMiqote | OopsRoegadyn | OopsAuRa | OopsHrothgar | OopsViera`
+- `FullCodes = Face | Manderville | Smiles`
+- `SizeCodes = Dwarf | Giant`
 
-**FunModule** — Hooks into `StateListener` and modifies character data:
+`private static GetMutuallyExclusive(CodeFlag flag)` returns the conflict mask for a single flag. Enabling a `Clown` clears every other bit in `DyeCodes`, etc. `SixtyThree` is its own one-flag group — `GetMutuallyExclusive(SixtyThree)` returns `FullCodes` (the full-replacement modes win over a gender swap).
 
-- `ApplyFunOnLoad(actor, armor[], customize)` — main entry point on character load:
-  1. `ValidFunTarget?` (must be PC, not transformed, ModelCharaId = 0)
-  2. `ApplyFullCode` — NPC replacement from weighted random pools
-  3. `SetRace` — maps CodeFlag to target clan via `ChangeClan()`
-  4. `SetGender` — `AllMale` → `ChangeGender(Male)`, `AllFemale` → `ChangeGender(Female)`, `SixtyThree` → flip
-  5. `RandomizeCustomize` — randomizes all non-face indices
-  6. `SetSize` — Dwarf/Giant based on actor index
-  7. Festival gear or code-specific gear
-- `ApplyFunToSlot(actor, armor, slot)` — individual equipment changes
-- `ApplyFunToWeapon(actor, weapon, slot)` — weapon changes
-- `WhoAmI()` / `WhoIsThat()` — export actual in-game appearance (including fun mode effects) as clipboard design
+### CodeService Public Surface (`Glamourer/Services/CodeService.cs`)
 
-**CodeDrawer** — UI in Settings tab:
+`CodeService` is an upstream service, NOT a GT addition. Public members:
 
-- `DrawFeatureToggles()` — iterates all `CodeFlag.Values` except debug modes, draws checkbox per flag
-- `DrawCopyButtons()` — "Who am I?!?" and "Who is that!?!" buttons
-- `ForceRedrawAll()` — after toggling, iterates `ActorObjectManager.Objects` and calls `StateManager.ReapplyState()` on each valid actor
+| Member | Purpose |
+|--------|---------|
+| `Enabled(CodeFlag) → bool` | Single-flag query |
+| `AnyEnabled(CodeFlag mask) → bool` | Any-of-mask query |
+| `Masked(CodeFlag mask) → CodeFlag` | Returns `_enabled & mask` |
+| `GetRace() → Race` | If a `RaceCodes` flag is enabled, returns the race it maps to; otherwise `Unknown` |
+| `CheckCode(string) → (Action<bool>?, CodeFlag)` | Hash the input; return the toggle action and resolved flag, or `(null, 0)` on no match |
+| `AddCode(string) → bool` | Calls `CheckCode`; if valid and not already in `_config.Codes`, appends it as enabled |
+| `GetCode(CodeFlag) → string?` | Reverse-lookup: returns the plaintext currently stored in `_config.Codes` for the given flag (used by "Who am I?!?" clipboard helper) |
+| `SaveState()` | Rebuilds `_enabled` from `_config.Codes` and persists |
+| `static GetData(CodeFlag) → (bool Display, int CapitalCount, string Punctuation, string Hint, string Effect)` | Returns the hint metadata used by `CodeDrawer.DrawCodeHints` — `Display: false` hides the flag (Face/Manderville/Smiles) |
+| `static GetSha(CodeFlag) → ReadOnlySpan<byte>` | Returns the hardcoded 32-byte SHA-256 digest for a flag |
+
+There is **no `Toggle`, `DisableAll`, `GetName`, or `GetDescription` method**. Toggling happens via the `Action<bool>` returned by `CheckCode`; the closest thing to a "name" or "description" is the `Hint`/`Effect` fields of the `GetData` tuple.
+
+### FunModule (`Glamourer/State/FunModule.cs`)
+
+`FunModule` (~520 lines, `IRequiredService`) applies the actual transformations. Constructor dependencies include `CodeService`, `StateListener`, `ItemManager`, `NpcCustomizeSet`, `IDalamudPluginInterface`, `FestivalNotification`. Public entry points:
+
+- **`ApplyFunOnLoad(Actor actor, Span<CharacterArmor> armor, ref CustomizeArray customize)`** — called when an actor's full state loads. Order of operations:
+  1. `ValidFunTarget(actor)` guard (must be a PC, must not be already transformed, `ModelCharaId == 0`).
+  2. `ApplyFullCode` — if a `FullCodes` flag is set, replace the entire NPC appearance from one of the `PrioritizedList<NpcId>` pools (see below).
+  3. `RandomizeCustomize(ref customize)` — when `Individual` is set, randomize every customize index except `Face`.
+  4. `SetRace(...)` — when a `RaceCodes` flag is set, derive `targetClan = (SubRace)((int)race * 2 - (int)customize.Clan % 2)` (preserving the user's clan parity within the new race) and call `ChangeClan`.
+  5. `SetGender(...)` — when `SixtyThree` is set, flip `Male ↔ Female`. **There are no AllMale/AllFemale branches** because the corresponding flags don't exist.
+  6. `SetSize(...)` — when `Dwarf`/`Giant` is set, shrink the player and stretch other actors (or vice versa).
+  7. Apply festival or per-flag gear via `ApplyFunToSlot` for each slot.
+
+- **`ApplyFunToSlot(Actor, ref CharacterArmor, EquipSlot)`** — per-equipment-piece hook. **Short-circuits** when `IsInFestival` is true: festival gear is then applied via `FunEquipSet`. Otherwise routes per flag: `Emperor` → `SetRandomItem`, `Clown` → `SetRandomDye`, `World` → job-appropriate, `Elephants`/`Dolphins`/`Crown` → fixed costume.
+
+- **`ApplyFunToWeapon(Actor, ref CharacterWeapon, EquipSlot)`** — analogous weapon-specific hook.
+
+- **`WhoAmI()` / `WhoIsThat()`** — exports the actor's *post-fun-mode* visible state as a Glamourer design JSON to the clipboard. The two methods delegate to a shared `private WhoIsThat(Actor)` against `_objects.Player` and `_objects.Target` respectively.
+
+### PrioritizedList<T> (`FunModule.cs:157-181`)
+
+Internal sealed class used for Face/Manderville/Smiles NPC selection. Wraps a `List<(T Item, int Priority)>` and exposes `GetRandom(Random rng)` which performs cumulative-weight selection: build a running sum of priorities, pick a random integer in `[0, total)`, walk the list until the cumulative sum exceeds it. This means a Priority-10 entry is 10× more likely than a Priority-1 entry. Used by:
+
+- `MandervilleMale` / `MandervilleFemale` (Hildibrand-cast NPCs, split by player gender)
+- `Smile` (Smile-variant NPCs)
+- `FaceMale` / `FaceFemale` (random face NPCs)
+
+The pools live as `private static readonly` fields on `FunModule`.
 
 ### Festival System
 
-`FunModule` also includes an automatic festival system:
+`FunModule` has a separate festival pathway, driven by:
 
-- **Halloween** (Oct 31, Nov 1): Spooky costumes
-- **Christmas** (Dec 24–26): Holiday outfits
-- **April Fools** (Apr 1): Joke gear
-- `Configuration.FestivalMode` (`FestivalSetting.Undefined` / enabled / disabled)
-- `Configuration.LastFestivalPopup` — tracks when the user last saw the permission notification
+- **`FestivalNotification _notification`** — the prompt service shown to the user on first encounter to opt in/out
+- **`IsInFestival` property** — `true` only when ALL of the following hold: `IDalamudPluginInterface.AllowSeasonalEvents` is true, `Configuration.FestivalMode` is `FestivalSetting.AskYes` or `NeverAskYes`, and the current date matches a `FunEquipSet` festival window
+- **`FunEquipSet`** (`Glamourer/State/FunEquipSet.cs`) — declarative table of festival outfits (Halloween / Christmas / April Fools etc.). Each entry binds a date range to a `KeepOldArmor` flag + a per-slot armor map
+- **Festival → fun-mode interaction**: when `IsInFestival` is true, `ApplyFunOnLoad` and `ApplyFunToSlot` short-circuit gear/dye codes and apply festival gear instead. Race/gender/size codes still run — only the gear/dye paths defer
+
+The festival window is detected via `DayChangeTracker.DayChanged` (NOT per-frame), so flipping in and out of a festival mid-session requires a midnight tick. `Configuration.LastFestivalPopup` (a `DateOnly`) tracks the most recent notification so the user isn't re-prompted every day.
+
+### CodeDrawer (`Glamourer/Gui/Tabs/SettingsTab/CodeDrawer.cs`, ~188 lines)
+
+The Settings-tab UI for entering / managing codes. Top-down structure inside `Draw()`:
+
+1. **`DrawCodeInput()`** — `Im.InputText("Enter Cheat Code...##codeInput", ...)` plus an "Add" button. On submit, calls `_codes.AddCode(_currentCode)`; clears the field on success.
+2. **`DrawCopyButtons()`** — "Who am I?!?" / "Who is that!?!" wide buttons. Each one calls into `FunModule.WhoAmI` / `WhoIsThat` to copy the corresponding actor's post-fun design to the clipboard, then `_codes.GetCode(flag)` to surface the plaintext for the currently active codes.
+3. **`DrawCodes()`** — iterates `_config.Codes`, drawing one row per saved code with:
+   - Drag-and-drop reorder handle
+   - "Delete" trash-can button (removes the entry from `_config.Codes`)
+   - Plaintext label
+   - Enabled checkbox (flips `Codes[i].Enabled` then calls `SaveState`)
+4. **`DrawCodeHints()`** — when "Show Hints" is enabled, iterates `CodeFlag.GetValues()` excluding entries whose `GetData(flag).Display` is `false`. For each, renders the (CapitalCount, Punctuation, Hint, Effect) tuple to help users guess passphrases. Debug modes (Face/Manderville/Smiles) are hidden because `Display = false` in their `GetData` row.
+
+The two private helpers `DrawSource` and `DrawTarget` are tooltip/popup wrappers used inside `DrawCopyButtons`.
+
+There is no "Disable All" button and no checkbox-grid UI — those were never built; the doc previously described work that doesn't exist.
 
 ### Configuration
 
 | Property | Type | Default | Purpose |
 |----------|------|---------|---------|
-| `EnabledCheats` | `CodeService.CodeFlag` | `0` | Active fun mode bitmask |
-| `FestivalMode` | `FestivalSetting` | `Undefined` | Festival costume behavior |
-| `LastFestivalPopup` | `DateOnly` | `MinValue` | Last festival notification date |
+| `Codes` | `List<(string Code, bool Enabled)>` | `[]` | Persistent passphrase list (upstream `Configuration` field). Each entry is the plaintext (already validated via SHA-256 at AddCode time) plus an on/off toggle |
+| `FestivalMode` | `FestivalSetting` | `Undefined` | Festival opt-in state (`Undefined` / `AskYes` / `AskNo` / `NeverAskYes` / `NeverAskNo`) |
+| `LastFestivalPopup` | `DateOnly` | `MinValue` | Last date the festival opt-in popup was shown |
+
+`_enabled` (the live `CodeFlag` bitmask) is a **derived** value in `CodeService`, not persisted directly — it's rebuilt from `Configuration.Codes` on every `SaveState()`.
 
 ---
 
@@ -565,21 +636,29 @@ Override the display language for equipment item names throughout the plugin ind
 
 | File | Role |
 |------|------|
-| `Glamourer/GlamorousTerror/EquipmentLanguage/ItemNameService.cs` | Language-specific Lumina sheet loading, name caching |
+| `Glamourer/GlamorousTerror/EquipmentLanguage/ItemNameService.cs` | Language-specific Lumina sheet loading, name caching. **Note:** lives in the GT folder by file layout but is declared in the upstream-shaped `Glamourer.Services` namespace (not a GT-namespaced service), since it's injected throughout upstream combo code |
 | `Glamourer/GlamorousTerror/Config/SettingsTab.GT.cs` | `DrawGlamorousTerrorSettings()` / `DrawEquipmentLanguageSettings()` combo UI |
 | `Glamourer/GlamorousTerror/Config/Configuration.GT.cs` | `EquipmentNameLanguage` property |
 
 **`EquipmentNameLanguage`** enum: `GameDefault`, `English`, `Japanese`, `German`, `French`
 
-**ItemNameService** — `IService` that:
+**ItemNameService** — `IService` that maintains two parallel sheet structures:
 
-- Loads all 4 language `ExcelSheet<Item>` sheets from Lumina in constructor
-- `GetItemName(EquipItem)` / `GetItemName(uint itemId, string fallback)` — returns name in configured language
-- Uses a per-language `Dictionary<uint, string>` cache (`_nameCache`) to avoid repeated Lumina lookups
-- `CheckLanguageChange()` — detects config change, clears cache and refreshes active sheet
-- `ClearCache()` — called from settings UI when language changes
+- An `_allLanguageSheets[4]` array of `ExcelSheet<Item>` (one per language; loaded once in the constructor) used by cross-language search.
+- A single `_itemSheet` reflecting the **currently selected display language**, refreshed via `RefreshSheet()` (line 64). `RefreshSheet` resolves the configured `EquipmentNameLanguage` to a Lumina `ClientLanguage`, reloads `_itemSheet`, and clears `_nameCache`.
+- `GetItemName(EquipItem)` — returns the configured-language display name, caching into `_nameCache`.
+- `GetItemName(uint itemId, string fallback)` — id-keyed overload for callers that don't have an `EquipItem` (e.g. icon picker tooltips). Returns `fallback` when the row is missing.
+- `GetCurrentLanguageDisplay()` — UI-facing helper that resolves the configured enum to a display string ("English", "Japanese", etc., or the game-default name).
+- `_nameCache: Dictionary<uint, string>` — **single dictionary** for the currently-selected display language (cleared by `RefreshSheet`/`ClearCache`). NOT per-language; the per-language structure lives in `_allLanguageNamesCache` and is used by §6 cross-language search.
+- `CheckLanguageChange()` — detects config change, calls `ClearCache()` + `RefreshSheet()`.
+- `ClearCache()` — called from settings UI when language changes; also triggered when cross-language is toggled (to drop stale per-language entries).
 
-**SettingsTab.DrawGlamorousTerrorSettings()** (and the standalone `DrawEquipmentLanguageSettings()` panel) renders a language selection combo and calls `ItemNameService.ClearCache()` on change.
+**SettingsTab** exposes the combo in **two places** with different ImGui IDs so the same setting is reachable from either entry point:
+
+- The GT section in `DrawGlamorousTerrorSettings()` uses `##gtEquipLangCombo`.
+- The standalone equipment-language panel `DrawEquipmentLanguageSettings()` uses `##equipLangCombo`.
+
+Both call `ItemNameService.ClearCache()` on change. The tooltip in `SettingsTab.GT.cs:61` notes "Requires a UI reload to take full effect" — existing rendered items keep their captured names until the next combo re-population, so a complete refresh sometimes needs `/xlreload`.
 
 ### Data Flow
 
@@ -619,7 +698,7 @@ Search for equipment items in **any language** regardless of the current display
 |------|------|
 | `Glamourer/Gui/Equipment/BaseItemCombo.cs` | `ItemFilter` base class with `WouldBeVisible(...)` pipeline and partial-method hooks (`GTPreFilterItem`, `GTFallbackNameMatch`) |
 | `Glamourer/GlamorousTerror/ItemOwnership/BaseItemCombo.GT.cs` | Implements `GTFallbackNameMatch` (cross-language) and `GTPreFilterItem` (owned check) |
-| `Glamourer/GlamorousTerror/EquipmentLanguage/ItemNameService.cs` | `GetAllLanguageNames(uint)` — returns `string[4]` of all language names, cached; `MatchesAnyLanguage(EquipItem, string)` standalone helper |
+| `Glamourer/GlamorousTerror/EquipmentLanguage/ItemNameService.cs` | `GetAllLanguageNames(uint)` — returns `string[4]?` (nullable; `null` when no language has a name for the id) of all language names, cached in `_allLanguageNamesCache`. `MatchesAnyLanguage(EquipItem, string)` exists as a standalone helper but has **no in-tree callers** today — the active integration path goes through `GetAllLanguageNames` + the inherited partwise overload, not `MatchesAnyLanguage` |
 | `Glamourer/Gui/Equipment/EquipmentDrawer.cs` | Injects `ItemNameService` into all combo constructors |
 | `Glamourer/GlamorousTerror/Config/SettingsTab.GT.cs` | Checkbox UI + `ClearCache()` on toggle |
 | `Glamourer/GlamorousTerror/Config/Configuration.GT.cs` | `CrossLanguageEquipmentSearch` property |
@@ -637,11 +716,13 @@ Search for equipment items in **any language** regardless of the current display
 
 1. Early-out if `config.CrossLanguageEquipmentSearch` is `false` or `Parts.Length is 0`
 2. Early-out for special items (ID 0 or ≥ `uint.MaxValue - 512`)
-3. Calls `itemNameService.GetAllLanguageNames(itemId)` → `string[4]` (EN, JP, DE, FR), cached in `_allLanguageNamesCache`
-4. For each non-empty name, calls inherited `WouldBeVisible(string)` — this reuses the partwise filter logic (`Parts.All(p => text.Contains(p, Comparison))`)
+3. Calls `itemNameService.GetAllLanguageNames(itemId)` → `string[4]?` cached in `_allLanguageNamesCache`. **Array order is `[English, Japanese, German, French]` matching the order of the `AllLanguages` array** — reordering would silently rebind every consumer to the wrong language. The result is nullable: `null` means no language returned a name for this id (e.g. a row that exists in the type table but has empty `Name` cells everywhere).
+4. For each non-empty name, calls the inherited `WouldBeVisible(string)` — this is the `PartwiseFilterBase<T>.WouldBeVisible(string)` overload from Luna; it reuses the partwise filter logic (`Parts.All(p => text.Contains(p, Comparison))`)
 5. Returns `true` if **any** language name passes all filter tokens
 
 **Key design: per-language partwise matching** — All filter tokens must match within the **same** language name. The filter does NOT mix matches across languages. This is achieved by calling `WouldBeVisible(name)` (the `PartwiseFilterBase<T>.WouldBeVisible(string)` overload) per language, which checks that every token in `Parts` appears in that single string.
+
+**Short-circuit OR** at `BaseItemCombo.cs:129` — the visibility check reads `return base.WouldBeVisible(...) || WouldBeVisible(item.Model.Utf16) || GTFallbackNameMatch(in item);`. The cross-language fallback is the most expensive of the three (per-language hash lookup + four partwise scans), and the short-circuit ensures it only runs when both the display-language name and the model string have already missed.
 
 **Dependency injection chain:**
 
@@ -659,8 +740,8 @@ EquipmentDrawer(…, ItemNameService itemNameService, ItemUnlockManager itemUnlo
 
 - Checks `_allLanguageNamesCache` (separate from single-language `_nameCache`)
 - On miss: loads names from all 4 `ExcelSheet<Item>` language sheets via `row.Name.ExtractText()`
-- Caches and returns `string[4]`, or `null` if no names found
-- `ClearCache()` clears both `_nameCache` and `_allLanguageNamesCache`
+- Caches and returns `string[4]?` in `[English, Japanese, German, French]` order, or `null` if no names found in any sheet
+- `ClearCache()` clears both `_nameCache` and `_allLanguageNamesCache`, and additionally calls `RefreshSheet()` (line 165) — which reloads `_itemSheet` for the current display language and clears `_nameCache` a second time. The double-clear of `_nameCache` is harmless but worth knowing about if you're debugging cache-warming behavior
 
 **Settings UI** — `DrawEquipmentLanguageSettings()` in `SettingsTab.cs`:
 
@@ -682,12 +763,12 @@ User types filter text in equipment combo (e.g. "鉄")
       → 1. base.WouldBeVisible() → ToFilterString() = item.Name.Utf16 (display language)
            → Parts.All(p => displayName.Contains(p)) → false (English name doesn't contain "鉄")
       → 2. WouldBeVisible(item.Model.Utf16) → false (model string doesn't match)
-      → 3. MatchesCrossLanguage(in item)
+      → 3. GTFallbackNameMatch(in item)
            → config.CrossLanguageEquipmentSearch? → true
            → itemId valid? (not 0, not special) → true
            → itemNameService.GetAllLanguageNames(itemId)
              → _allLanguageNamesCache miss
-             → Load from 4 ExcelSheet<Item> sheets → cache string[4]
+             → Load from 4 ExcelSheet<Item> sheets → cache string[4] in [EN, JP, DE, FR] order
            → foreach name in [EN, JP, DE, FR]:
                → WouldBeVisible("鉄の鎖帷子") → Parts.All(p => name.Contains(p)) → true!
            → return true → item is visible in filtered list
@@ -724,7 +805,7 @@ Filter equipment, weapon, and bonus item combo dropdowns to show only items the 
 
 | File | Role |
 |------|------|
-| `Glamourer/Services/FilenameService.cs` | `UnlockFileItemsForCharacter(ulong contentId)` → `{ConfigDir}/unlocks_items_{contentId:X16}.dat` |
+| `Glamourer/Services/FilenameService.cs` | `UnlockFileItemsForCharacter(ulong contentId)` → `{ConfigDir}/unlocks_items_{contentId:X16}.dat` (binary v3 format with magic header). The legacy `UnlockFileItems` (`.json`) path is still referenced for `GetBackupFiles()` but no longer used for live persistence when a character is logged in |
 | `Glamourer/GlamorousTerror/ItemOwnership/ItemUnlockManager.cs` | Per-character lifecycle: login/logout handlers, `_currentContentId` field, source tracking, pruning |
 
 **Character lifecycle** in `ItemUnlockManager`:
@@ -757,8 +838,8 @@ Filter equipment, weapon, and bonus item combo dropdowns to show only items the 
 
 **`_sources` dictionary** (`Dictionary<uint, ItemSource>`) — Parallel to `_unlocked`, stores the OR-combination of all sources an item has been detected from. Updated in `AddItem()`: sources always OR-in, even for already-unlocked items.
 
-**`GetInventorySource(InventoryType)`** — Maps 29 `InventoryType` values to `ItemSource`:
-- `Inventory1–4`, `EquippedItems`, `Mail`, `Armory*` → `Inventory`
+**`GetInventorySource(InventoryType)`** — Method body only explicitly matches Saddlebags and Retainers; everything else (`Inventory1–4`, `EquippedItems`, `Mail`, `Armory*`) falls through to the default `_ => ItemSource.Inventory`. The behavior matches the enumeration below, but the implementation is a default-catch-all switch, not an explicit per-type map:
+- `Inventory1–4`, `EquippedItems`, `Mail`, `Armory*` → `Inventory` (default case)
 - `SaddleBag1/2`, `PremiumSaddleBag1/2` → `Saddlebags`
 - `RetainerPage1–7`, `RetainerEquippedItems`, `RetainerMarket` → `Retainers`
 
@@ -809,16 +890,17 @@ Two pruning mechanisms ensure stale items are removed:
 
 **ItemFilter integration** — The `ItemFilter` nested class receives `ItemUnlockManager` as a primary constructor parameter and declares the `GTPreFilterItem(in CacheItem)` partial-method hook (implemented in `BaseItemCombo.GT.cs`).
 
-`WouldBeVisible(in CacheItem, int)` order (fastest reject first):
+`WouldBeVisible(in CacheItem, int)` order (fastest reject first — the owned gate is an O(1) dictionary lookup, while the partwise text checks scan every search token against every character of every name):
 
-1. **Owned pre-gate** (new, via `GTPreFilterItem`): If `config.OwnedOnlyComboFilter` is true and `itemUnlockManager.IsOwnedFromSources(item.Item.ItemId, config.OwnedComboFilterSources)` returns false → **reject immediately** (return false)
-2. `base.WouldBeVisible()` — display-language name match
+1. **Owned pre-gate** (new, via `GTPreFilterItem`): If `config.OwnedOnlyComboFilter` is true and `itemUnlockManager.IsOwnedFromSources(item.Item.ItemId, config.OwnedComboFilterSources)` returns false → **reject immediately** (return false). Note: this also short-circuits cross-language search — an item the user doesn't own never reaches step 4, even if its non-English name matches the search.
+2. `base.WouldBeVisible()` — display-language name match (inherited partwise filter from Luna's `PartwiseFilterBase<T>`)
 3. `WouldBeVisible(item.Model.Utf16)` — model string match
-4. `GTFallbackNameMatch(in item)` — cross-language match
+4. `GTFallbackNameMatch(in item)` — cross-language match (only invoked when steps 2 and 3 both miss, due to the short-circuit OR at `BaseItemCombo.cs:129`)
 
 **`IsOwnedFromSources(CustomItemId, ItemSource filter)`** — Public query method on `ItemUnlockManager`:
+- **`itemId.IsItem` guard first** (load-bearing — `ItemUnlockManager.cs:473`): if the ID does not pass `IsItem`, the method falls back to the default-source check. Bonus items and custom items have high flag bits set in their ID; without the guard they would coincidentally land in the pseudo-item range below and always report owned. The CLAUDE.md invariant on this is critical to preserve.
 - Pseudo items (ID 0 or ≥ `uint.MaxValue - 512`) always return `true`
-- Otherwise checks `(_sources[id] & filter) != 0`
+- Otherwise checks `(_sources[id] & filter) != 0` — i.e. an item is "owned" when it has been seen in **at least one** of the user-selected sources (OR-match), not when it has been seen in all of them. This is the user-intent semantic: ticking only "Inventory" means "items I have in my inventory now"; ticking "Inventory + Glamour Dresser" means "items I have in either".
 
 **Cache invalidation** — `BaseItemCombo` sets `DirtyCacheOnClose = true` in `ConfigData`, ensuring the filter re-evaluates ownership each time the combo popup opens. This avoids needing explicit event-driven cache invalidation.
 
@@ -838,7 +920,7 @@ EquipmentDrawer(…, ItemNameService, ItemUnlockManager)
 
 - Master checkbox: "Show Only Owned Items in Combos" — toggles `config.OwnedOnlyComboFilter`, saves on change
 - When master is enabled, a summary combo ("All", "None", or "N sources") expands into six source checkboxes via `DrawSourceToggle()`, each XOR-toggling one `ItemSource` flag in `config.OwnedComboFilterSources`
-- Called from three locations: `ActorPanel`, `DesignPanel`, and the icon picker's inline settings panel (see [Icon Equipment Drawer](#8-icon-equipment-drawer)). The GT section of `SettingsTab` also calls it under its own header — this is the only "legacy" call site left from before the filter became icon-picker-inline
+- Called from four locations: `ActorPanel.cs:208`, `DesignPanel.cs:88`, the icon picker's inline settings panel (`EquipmentDrawer.IconMode.cs:199`, see [Icon Equipment Drawer](#8-icon-equipment-drawer)), and the GT section of `SettingsTab` (`SettingsTab.GT.cs:75`). The SettingsTab call site is the "legacy" one left from before the filter became icon-picker-inline
 - **Keep Item Filter** (upstream behavior) and the owned filter are drawn alongside each other wherever they appear
 
 ### Data Flow
@@ -884,14 +966,14 @@ Character logs out:
 
 ### Bug Fix: Glamour Dresser Save Trigger
 
-The original `OnFramework` had a bug where `changes = false;` was written before the inventory scanning block, discarding any `changes = true` set by the glamour dresser/plates scanning above. This silently prevented `Save()` from being called when new items were detected in the glamour dresser. Fixed by removing the erroneous reset — `changes` now accumulates across both dresser and inventory scanning sections.
+The original `OnFramework` had a bug where `changes = false;` was written **between** the glamour-dresser scanning block and the inventory scanning block, discarding any `changes = true` set by the dresser/plates scanning above. This silently prevented `Save()` from being called when new items were detected in the glamour dresser (the inventory block alone wouldn't re-flip `changes` for items it had already seen). Fixed by removing the erroneous reset — `changes` is now declared once at the top of `OnFramework` and accumulates across both dresser and inventory scanning sections.
 
 ### Configuration
 
 | Property | Type | Default | Purpose |
 |----------|------|---------|---------|
 | `OwnedOnlyComboFilter` | `bool` | `false` | Master toggle for owned-only filtering |
-| `OwnedComboFilterSources` | `ItemUnlockManager.ItemSource` | `All` (`0x3F`) | Bitmask of sources that count as "owned" |
+| `OwnedComboFilterSources` | `ItemUnlockManager.ItemSource` | `All` (`0x3F`) | Bitmask of sources that count as "owned". OR-matched: an item passes when `(item._sources & OwnedComboFilterSources) != 0`, not when it intersects every set bit |
 
 ### Known Pitfalls (for future upstream merges)
 
@@ -905,6 +987,12 @@ The original `OnFramework` had a bug where `changes = false;` was written before
 
 5. **Retainer scan safety**: Retainer containers are only loaded when at a retainer bell. The `_fullyScannedSources` mechanism prevents false pruning — retainer items won't be pruned unless all retainer inventory types were actually loaded and fully iterated that cycle.
 
+6. **`ItemUnlockManager` is empty until login fires** (CLAUDE.md invariant): Construction does NOT populate `_unlocked`/`_sources` — only the login handler does. Any service that queries owned-state during construction will see zero unlocks. `Configuration` is loaded before login, so the bitmask is set, but every `IsOwnedFromSources` call returns `false` for non-pseudo items until the first `OnLogin()` completes its `Load() → Scan()` sequence.
+
+7. **`UpdateModels(int version)` backfill** (`ItemUnlockManager.cs:582-605`): v1 files predate the source byte, so on load they backfill every entry's `_sources` value to `ItemSource.All`. This is why an upgraded user sees every old unlock as "owned from all sources" until the next scan cycle prunes the false positives. Don't change the backfill default to anything narrower — it would silently drop items below the user's source filter without explanation.
+
+8. **`IsUnlocked` is also a write site** (`ItemUnlockManager.cs:416-451`): The lazy-add path inside `IsUnlocked` writes to both `_unlocked` and `_sources` outside the scan cycle. So source tracking has two entry points: the scan-cycle `AddItem` and the lazy `IsUnlocked`. Both must keep `_sources` in sync.
+
 ---
 
 ## 8. Icon Equipment Drawer
@@ -914,9 +1002,9 @@ Replaces the name-based equipment combo list with a compact **icon grid**. Click
 ### User-Facing Functionality
 
 - **Master toggle**: `UseIconEquipmentDrawer` in Settings → Glamorous Terror section ("Icon Equipment Drawer")
-- Renders armor slots, weapons, and bonus items as square icon buttons in the Actor panel, Design panel, and Immersive Dresser equipment panels
+- Renders armor slots, weapons, and bonus items as square icon buttons in the Actor panel, Design panel, NPC panel, and Immersive Dresser equipment panels (the Equipment Bar window does NOT use icon mode — it sticks with compact combos)
 - **Click an icon** → opens icon picker popup anchored next to the button, edge-clamped to the viewport
-- **Right-click an icon (outside popup)** → revert/clear that slot (standard upstream behavior). For weapons this is implemented separately inside `DrawWeaponSlotIcon` (mainhand/offhand take their own paths through `ResetOrClear`, since the weapon icon does not flow through `DrawEquipIcon`). When a mainhand right-click changes weapon type, the offhand is auto-replaced with `_items.GetDefaultOffhand(...)` to keep the pair compatible — preserve this branch when overlaying.
+- **Right-click an icon (outside popup)** → revert/clear that slot (standard upstream behavior). For weapons this is implemented separately inside `DrawWeaponSlotIcon` (mainhand/offhand take their own paths through `ResetOrClear`, since the weapon icon does not flow through `DrawEquipIcon`). When a mainhand right-click changes weapon type, the offhand is auto-replaced with `_items.GetDefaultOffhand(...)` to keep the pair compatible. The compatibility test is `!changedItem.Value.Type.ValidOffhand().IsCompatible(mainhand.CurrentItem.Type.ValidOffhand())` (the left-click selection path uses a stricter direct `!=` check instead — preserve both branches when overlaying upstream changes).
 - **Right-click an item (inside popup)** → toggles favorite for that item (see [Favorites](#9-favorites)); favorited items are highlighted with a yellow frame (ABGR `0xFF00CFFF`)
 - **Filter bar** at the top of the popup:
   - Text search (case-insensitive substring, auto-focused on open)
@@ -924,7 +1012,7 @@ Replaces the name-based equipment combo list with a compact **icon grid**. Click
   - **K** button — toggles `KeepIconPickerOpen` (if set, the popup stays open after each selection)
   - **Thumbtack (pin)** button — toggles `IconPickerPinned`. When pinned the picker is hoisted out of the transient popup into a regular ImGui window that survives click-off; click the source equipment icon again to close, or another icon to switch slots
   - **Cog** button — expands an inline settings panel with `DrawOwnedOnlyFilter(config)` + "Group by Model" + "Remember Scroll Per Slot"
-  - Job filter combo (by role: Tanks, Healers, Melee, Physical Ranged, Magical Ranged, Crafters, Gatherers; plus "Unrestricted" shortcut for gear equippable by all jobs)
+  - Job filter combo (by role: Tanks, Healers, Melee DPS, Physical Ranged, Magical Ranged, Crafters, Gatherers; plus "Unrestricted" shortcut for gear equippable by all jobs)
   - Dye channel filter combo (Any, 0, 1, 2)
   - Sort combo (A → Z, Z → A, ID ↑, ID ↓)
 - **Grouping by model** (`GroupIconPickerByModel`, default `true`) — deduplicates items that share the same `(Type, PrimaryId, SecondaryId, Variant)`, keeping only the first after sorting
@@ -957,6 +1045,13 @@ Replaces the name-based equipment combo list with a compact **icon grid**. Click
 | `_iconPickerNameFilter`, `_iconPickerFavoritesOnly`, `_iconPickerJobFilter`, `_iconPickerNeutralJobFilter`, `_iconPickerDyeChannelFilter`, `_iconPickerSortMode`, `_iconPickerShowSettings` | Filter & sort state |
 
 **Popup positioning** (`PositionIconPickerPopup`) opens the popup to the left or right of the source window's center (whichever side has more space), clamps the anchor inside the viewport, and sizes the popup to fit `IconPickerMaxRows` rows and 8 columns (`IconPickerColumns = 8`).
+
+**Two parallel render pipelines — popup vs. pinned window.** Each draw entry point (`DrawEquipIconPickerPopup`, `DrawBonusIconPickerPopup`, `DrawWeaponIconPickerPopup`) branches on `_config.IconPickerPinned`:
+
+- **Popup mode** (default) — opened via `Im.Popup.Open(IconPickerPopup)` using the `##` ID prefix (transient popup state).
+- **Pinned mode** — rendered as a regular `Im.Window.Begin` window with the `###GTIconPickerWindow` ID. The `###` prefix is intentional: the window's *title* is updated to reflect the active slot, but ImGui keeps the window state (position, size, scroll) keyed by the trailing ID. The popup and window use different ID conventions because their state systems are different — don't unify them.
+
+A future change adding a new picker entry MUST replicate both branches; touching only one will silently break either popup users or pinned-mode users. `OpenOrToggleIconPicker(slot, isWeapon, isBonus)` is the sole sanctioned entry point — it handles the popup↔window transition and the pinned-mode "click the same icon again to close" behavior. Bypassing it (e.g., raw `Im.Popup.Open(IconPickerPopup)`) skips the same-target close path.
 
 **Item pipeline** (per popup):
 
@@ -1002,6 +1097,8 @@ Users can **favorite** equipment items, stains, bonus items, and a specific set 
 | File | Role |
 |------|------|
 | `Glamourer/GlamorousTerror/ItemOwnership/FavoriteManager.cs` | `ISavable + IService` — four `HashSet`s (items, stains, hair styles, bonus items), JSON v1 persistence, `FavoriteChanged` event |
+| `Glamourer/Gui/Equipment/BaseItemCombo.cs` (upstream, with GT edits) | Owns the `protected readonly FavoriteManager Favorites;` field (line ~14) and calls `UiHelpers.DrawFavoriteStar(Favorites, item.Item)` at line ~163. The favorite-star rendering hooks into the upstream combo, not `BaseItemCombo.GT.cs` |
+| `Glamourer/GlamorousTerror/IconEquipment/EquipmentDrawer.IconMode.cs` | Consumes `Favorites.Contains(item)` to apply the yellow icon frame, and routes right-click-inside-popup to `TryAdd`/`Remove` |
 
 **`FavoriteManager`** — Dependencies: `SaveService`. Stores:
 
@@ -1010,29 +1107,29 @@ Users can **favorite** equipment items, stains, bonus items, and a specific set 
 | `_favorites` | `HashSet<ItemId>` | Equipment item IDs |
 | `_favoriteColors` | `HashSet<StainId>` | Stain IDs |
 | `_favoriteBonusItems` | `HashSet<BonusItemId>` | Bonus item IDs |
-| `_favoriteHairStyles` | `HashSet<FavoriteHairStyle>` | Packed `(Gender, SubRace, CustomizeIndex, CustomizeValue)` — see below |
+| `_favoriteHairStyles` | `HashSet<FavoriteHairStyle>` | Packed `(Gender, Race, Type, Id)` — see below |
 
-**`FavoriteHairStyle`** — A `readonly record struct` that packs four bytes into one `uint`:
+**`FavoriteHairStyle`** — A `readonly record struct` with named fields `(Gender Gender, SubRace Race, CustomizeIndex Type, CustomizeValue Id)` that packs four bytes into one `uint`:
 
 ```
 bits 24–31: Gender
-bits 16–23: SubRace
-bits  8–15: CustomizeIndex
-bits  0–7:  CustomizeValue
+bits 16–23: Race (SubRace)
+bits  8–15: Type (CustomizeIndex)
+bits  0–7:  Id (CustomizeValue)
 ```
 
 `ToValue()` packs, the constructor overload `FavoriteHairStyle(uint)` unpacks. This uint is what gets persisted in JSON.
 
-**Persistence** — JSON with a version header. V0 was a bare `uint[]` of item IDs only; V1 is `{ Version, FavoriteItems, FavoriteColors, FavoriteHairStyles, FavoriteBonusItems }`. V0 files auto-migrate to V1 on load.
+**Persistence** — JSON with a version header. V0 was a bare `uint[]` of item IDs only; V1 is `{ Version, FavoriteItems, FavoriteColors, FavoriteHairStyles, FavoriteBonusItems }`. V0 files auto-migrate to V1 on load — the trigger is the heuristic `text.StartsWith('[')` in `Load()` (a fragile but workable detection because V1 starts with `{`).
 
-**Storage path** — `FilenameService.FavoriteFile` (a global, not per-character, file). Uses `SaveService.DelaySave(this)` for debounced writes.
+**Storage path** — `FilenameService.FavoriteFile` (global, not per-character) — resolves to `favorites.json` under `pi.ConfigDirectory`. Uses `SaveService.DelaySave(this)` for debounced writes.
 
 **Public API:**
 
 - `TryAdd(EquipItem)`, `TryAdd(ItemId)`, `TryAdd(BonusItemId)`, `TryAdd(StainId)`, `TryAdd(Gender, SubRace, CustomizeIndex, CustomizeValue)` — returns `false` if already present or id is 0
-- `Remove(...)` — symmetric
-- `Contains(...)` — O(1) hash-set lookup
-- `FavoriteChanged` event fires with `(FavoriteType, uint id, bool added)` — consumers (e.g., combo caches) can invalidate on change
+- `Remove(...)` — mostly symmetric, with **one known bug**: `Remove(Gender, SubRace, CustomizeIndex, CustomizeValue)` (line ~244 of `FavoriteManager.cs`) fires `FavoriteChanged?.Invoke(FavoriteType.Customization, id.ToValue(), added: true)` — the `added` arg should be `false`. Subscribers that act on the `added` flag will mis-classify a customization remove as an add. Left as-is for now because no in-tree subscriber depends on the flag (the favorite star rendering reads the set directly, not the event).
+- `Contains(EquipItem)` (line ~249) — O(1) hash-set lookup with a special-case carve-out: if `item.Id.IsBonusItem`, it checks `_favoriteBonusItems.Contains(item.Id.BonusItem)` instead. Callers that hand-roll `_favorites.Contains(itemId)` will miss bonus favorites — always go through `Contains(EquipItem)` when you have an `EquipItem` in hand.
+- `FavoriteChanged` event fires with `(FavoriteType, uint id, bool added)` — intended for combo cache invalidation, but currently has no in-tree subscribers (favorite-star rendering reads `Favorites` directly each frame).
 - `TypeAllowed(CustomizeIndex)` — `true` only for `Hairstyle` and `FacePaint`; enforced by `TryAdd(...)` for customizations
 
 ---
@@ -1057,14 +1154,15 @@ Allows the user to freely rotate any target actor around all three axes (yaw / p
 
 **`RotationService`** — Key state:
 
-- `Dictionary<nint, RotationOverride> _overrides` — keyed by actor address; the override struct stores the computed final quaternion, the original quaternion, the last model address, and the Euler offset the user set
-- `IFramework` subscription — activated lazily when the first override is added, deactivated when the last is cleared (zero overhead when unused)
+- `Dictionary<nint, RotationOverride> _overrides` — keyed by actor address. Struct field order (load-bearing — matches `RotationService.cs:178`): `record struct RotationOverride(Quaternion Rotation, nint LastModelAddress, Quaternion OriginalRotation, Vector3 OffsetDegrees)`
+- `IFramework` subscription — activated lazily when the first override is added (`_overrides.Count` transitions `0 → 1`), deactivated when the last is cleared (`Count → 0`). Zero per-frame overhead when no overrides are active
+- `ClearAll()` is called from `Dispose()` so plugin unload removes every override cleanly
 
 **Per-frame loop** (`OnFrameworkUpdate`):
 
 1. For each override, read the current actor; if invalid, queue for removal
 2. Write `ov.Rotation` onto `drawObj->Object.Rotation`, set `IsTransformChanged = true`
-3. Also write onto `drawObj->Object.ChildObject` so weapons follow the body rotation
+3. Also write onto `drawObj->Object.ChildObject->Rotation` AND set `IsTransformChanged = true` on the child draw object so weapons follow the body rotation (both writes are required — the child has its own dirty flag)
 4. Remove stale overrides after iteration
 
 **`SetRotation(actor, offsetDegrees)`** — Computes the final quaternion as `OriginalRotation × EulerOffset`. The "original" is captured once on first `SetRotation` and reused for subsequent updates (so setting a new offset composes with the game's current rotation at capture time, not with the previous override).
@@ -1073,24 +1171,28 @@ Allows the user to freely rotate any target actor around all three axes (yaw / p
 
 **`RotationDrawer`** — Tracks the last actor it drew for; on actor change, clears the previous override and re-initializes its local `_euler` buffer from `RotationService.TryGetEuler` (so reopening the dresser on the same actor restores the user's Euler values).
 
-**Wiring** — `ImmersiveDresserManager.OptionsPanel.Draw()` wraps the drawer in a `Character Rotation` tree header and calls `manager._rotationDrawer.Draw(objects.Player)`. `ImmersiveDresserManager.Close()` calls `_rotationDrawer.Reset()` which in turn clears the override for the last actor.
+**Euler axis mapping** (non-obvious — `RotationDrawer.cs:38, 45, 52`): the UI labels read "Yaw / Pitch / Roll" but they are written into the offset `Vector3` as `Yaw → _euler.Y`, `Pitch → _euler.X`, `Roll → _euler.Z`. The vector is then passed to `Quaternion.CreateFromEuler(new Vector3(X, Y, Z))`. Reordering the axes in the UI without also reordering the writes will silently rotate around the wrong axis.
+
+**Stateful per instance**: `RotationDrawer` holds a single `(_lastActor, _euler, _initialized)` triple. Multiple concurrent drawer surfaces would interfere — today only the dresser hosts it, but a future surface that also wants per-frame Yaw/Pitch/Roll drags needs its own drawer instance.
+
+**Wiring** — `ImmersiveDresserManager.OptionsPanel.Draw()` wraps the drawer in a `Character Rotation` tree header and calls `manager._rotationDrawer.Draw(playerData.Objects[0])` — passing the resolved actor from `ResolveTarget()` (defaults to the player; can be any actor when the dresser target picker is used). `ImmersiveDresserManager.Close()` calls `_rotationDrawer.Reset()` which in turn clears the override for the last actor. `SetTarget()` also calls `Reset()` before the swap so the old target's override is not left orphaned on the new one.
 
 ---
 
 ## 11. Immersive Dresser
 
-Right-clicking the **local player character** in-game adds an **"Immersive Dresser"** entry to the context menu. Clicking it — or running `/glamour dresser` / `/gt dresser` — opens a multi-panel glamour editor anchored to the player character, optionally hiding the game HUD.
+Right-clicking the **local player character** in-game adds an **"Immersive Dresser"** entry to the context menu. Clicking it — or running `/glamour dresser` / `/gt dresser` — opens a multi-panel glamour editor anchored to the player character, optionally hiding the game HUD. The dresser can be **retargeted to any actor** post-open via the target picker in the Options panel; the context-menu entry and command both open against the player as the initial target.
 
 ### User-Facing Functionality
 
-- Context menu entry appears only when right-clicking the player's own character; also openable via `/glamour dresser` / `/gt dresser`
+- Context menu entry appears only when right-clicking the player's own character; also openable via `/glamour dresser` / `/gt dresser`. Once open, the target can be swapped to any actor via the Options-panel target picker (combo + "switch to current in-game target" icon + "Return to Self" button)
 - Three floating panels, each with a title bar (collapsible) and movable independently:
   - **Equipment / Customization** (left of center) — switches between armor slots + bonus items and the full customization drawer depending on mode
   - **Accessories / Parameters** (right of center) — switches between off-hand + accessory slots and the customize-parameter drawer
-  - **Options** (below center) — mode toggle, design actions (clipboard/save/undo), game-UI/panel-lock/free-cam icon buttons, Dye All Slots, meta toggles, camera settings, character rotation
+  - **Options** (below center) — target picker, mode toggle, design actions (clipboard/save/undo), game-UI/panel-lock/free-cam icon buttons, Dye All Slots, meta toggles, camera settings, character rotation
 - Two **modes** toggled from the Options panel: `Equipment` (default) and `Appearance`
 - **Single-window layout** (`SingleWindowDresser`) — when enabled, the Left panel renders both equipment and accessories (iterating `EquipSlotExtensions.EqdpSlots` plus the offhand) and the Right panel hides itself in Equipment mode. Useful for collapsing the dresser to one floating window
-- **Simplified layout** (`SimplifiedDresserLayout`) — stacks dye channels vertically beside each icon and hides the advanced-dye buttons. Implemented by passing `simplified: true` (and `stainsBeside: true`) into `DrawEquipIcon` / `DrawBonusItemIcon` / `DrawSingleWeaponIcon`
+- **Simplified layout** (`SimplifiedDresserLayout`) — stacks dye channels vertically beside each icon and hides the advanced-dye buttons. Implemented by passing `simplified: SimplifiedDresserLayout` into `DrawEquipIcon` / `DrawBonusItemIcon` / `DrawSingleWeaponIcon` (the config flag drives the `simplified` parameter; `stainsBeside: true` is passed unconditionally regardless of the simplified flag)
 - **Override window background** (`OverrideDresserBgColor` + `ImmersiveDresserBgColor`) — replaces the Left/Right window background with a user-picked `Rgba32`. To keep checkboxes/inputs readable when the background is translucent, the panels also force `FrameBackground{,Hovered,Active}` to `| 0xFF000000` (alpha-`0xFF`) every frame
 - Full **preview-on-hover** support — uses the same `EquipmentDrawer` combos as the Actor panel (see [Preview-on-Hover](#2-preview-on-hover)); the Options panel also drives the Dye-All-Slots preview via `ApplyAllStainHoverPreview`
 - **Panel lock** — icon button in the Options panel sets `WindowFlags.NoMove` on all three panels
@@ -1113,7 +1215,8 @@ Right-clicking the **local player character** in-game adds an **"Immersive Dress
 | `Glamourer/GlamorousTerror/ContextMenu/ContextMenuService.cs` | Adds "Immersive Dresser" `MenuItem` with player-only guard, click → `Open()` |
 | `Glamourer/Services/CommandService.cs` | Registers `/glamour`/`/gt` alias; `dresser` sub-command → `Open()` |
 | `Glamourer/Gui/GlamourerWindowSystem.cs` | Registers `Left`, `Right`, `Options` windows with Dalamud's window system |
-| `Glamourer/Gui/Equipment/EquipmentDrawer.cs` | `DrawEquipIcon` / `DrawBonusItemIcon` / `DrawSingleWeaponIcon` / `DrawAllStain` / `DrawMetaToggle` — all `internal`/`public` so the dresser panels can drive them |
+| `Glamourer/GlamorousTerror/IconEquipment/EquipmentDrawer.IconMode.cs` | `DrawEquipIcon` / `DrawBonusItemIcon` / `DrawSingleWeaponIcon` — GT-only icon-render entry points the dresser drives directly |
+| `Glamourer/Gui/Equipment/EquipmentDrawer.cs` | `DrawAllStain` / `DrawMetaToggle` (static) — upstream entry points reused by the Options panel |
 | `Glamourer/Gui/Materials/AdvancedDyePopup.cs` | `Draw(...)` accepts a `forceFloating` flag (defaults `false`) so the dresser panels can render the popup as a free-floating window regardless of `KeepAdvancedDyesAttached` |
 | `Glamourer/GlamorousTerror/Config/Configuration.GT.cs` | `EnableImmersiveDresser`, `SingleWindowDresser`, `SimplifiedDresserLayout`, `OverrideDresserBgColor`, `ImmersiveDresserBgColor`, `AutoHideGameUi`, `LockImmersiveDresserPanels`, `ImmersiveDresserCameraY`, `AllowCameraClipping`, `DisableFirstPerson` |
 | `Glamourer/GlamorousTerror/Config/SettingsTab.GT.cs` | Master toggle in the Glamorous Terror section |
@@ -1132,12 +1235,43 @@ Right-clicking the **local player character** in-game adds an **"Immersive Dress
 | `_currentMode` | `DresserMode.Equipment` or `DresserMode.Appearance` — controls which drawer each panel shows |
 | `_showParameters` | Whether the Right panel shows `CustomizeParameterDrawer` in Appearance mode |
 | `_isOpen` | Re-entrancy guard for `Open()` / `Close()` |
+| `_targetIdentifier` | Permanent `ActorIdentifier` for the dresser's current target. `ActorIdentifier.Invalid` (the default) means "follow the local player"; any other value pins the dresser to that actor via `ResolveTarget()` |
+| `_objects` | `ActorObjectManager` — used by `ResolveTarget` and the target picker to enumerate live actors |
+| `_advancedDyes` | The shared `AdvancedDyePopup` instance (passed in via DI); the equipment/accessory panels invoke `_advancedDyes.Draw(...)` themselves with `forceFloating: true` |
+| `_advancedDyesDrawnFrame` | Frame counter so the advanced-dye popup only `Begin`s once per frame across the Left and Right panels |
 | `_didHideUi`, `_wasUiVisible`, `_savedDisableUserUiHide` | Save/restore state for the game-UI hide toggle |
 | `_savedAutoChangePointOfView` | Snapshot of the player's original "Switch to 1st person view when fully zoomed in" game-config value; `null` when no override is in flight |
 | `_cammyFreeCamActive`, `_lastValidCameraY` | Free-cam and camera-height detour state |
 | `_cameraUpdateHook` | Dalamud `Hook<>` attached via vtable offset 3 on the active `CameraBase` (camera-update detour for the camera-height slider) |
 
 **Constructor** — Receives `EquipmentDrawer`, `CustomizationDrawer`, `CustomizeParameterDrawer`, `PreviewService`, `StateManager`, `ActorObjectManager`, `Configuration`, `IUiBuilder`, `IKeyState`, `IFramework`, `ICommandManager`, `IGameConfig`, `IGameInteropProvider`, `RotationDrawer`, `DesignConverter`, `DesignManager`, `EditorHistory`, `AdvancedDyePopup` via DI. Creates the three panel instances. The camera-update hook is installed lazily via `EnsureCameraHook()` on the first `Open()` (the lobby camera has a different vtable from the world camera). The `AdvancedDyePopup` reference is exposed as `_advancedDyes` so the equipment/accessory panels can render the popup window themselves (see Panel Details).
+
+### Target Resolution
+
+The dresser is no longer pinned to the local player — it can be retargeted to any actor with a model. Three pieces drive this:
+
+- **`Open(ActorIdentifier identifier = default)`** — Initial target. The context-menu entry and `/glamour dresser` command both pass `default` (→ player); IPC or other callers may pass a specific identifier. Stored as a permanent copy via `identifier.CreatePermanent()` so the dresser doesn't hold a borrowed reference.
+- **`ResolveTarget() → (ActorIdentifier, ActorData)`** — Called by each panel's `DrawConditions()` and at the top of each panel's `Draw()`. Resolution order:
+  1. If `_targetIdentifier.IsValid` AND `_objects.TryGetValue(_targetIdentifier, ...)` returns a valid `ActorData`, use that.
+  2. Otherwise fall back to `_objects.PlayerData`.
+  
+  Falling back when the override target despawns means a dressed-up alt or party member doesn't crash the dresser when they leave the area — it just snaps back to the player until the user re-picks.
+- **`SetTarget(ActorIdentifier identifier)`** — Swaps the target. **Critical sequence** (see Pitfall #11):
+  1. Resolve the new identifier (permanent copy or `Invalid`)
+  2. No-op if it equals the current target
+  3. Call `_previewService.EndPreview()` — restore any in-flight preview on the OLD target before the swap (otherwise the old actor is left with the preview state still written into game memory)
+  4. Call `_rotationDrawer.Reset()` — clear the rotation override on the old target (so it doesn't orphan)
+  5. Then assign `_targetIdentifier = resolved`
+
+Passing `default` (or `ActorIdentifier.Invalid`) to `SetTarget` reverts to "follow the player" mode.
+
+**`DrawTargetPicker(currentId)`** (Options panel, line ~932) — the UI that drives `SetTarget`:
+
+- A 220-px wide combo (`##dresserTarget`) listing every entry in `_objects` (preview text is `{name} (Self)` for the player, `{name}` for others). Selecting a row calls `SetTarget(pair.Key)`. The combo has a top-row "Return to Self" entry when an override is active.
+- A "hand-pointer" icon button next to the combo — switches the dresser to whatever actor the player currently has targeted in-game (only enabled when a target exists and differs from the dresser's current target).
+- A separate "Return to Self" button to the right of the combo when an override is active — equivalent to selecting the combo's first row but always visible for quick access.
+
+The picker is rendered above the Equipment-mode block in the Options panel.
 
 **`Open()`** — Guarded by `_isOpen`:
 
@@ -1168,16 +1302,16 @@ All three panels share:
 
 - **`PanelFlags`**: `NoTitleBar | NoDocking | AlwaysAutoResize | NoCollapse` — auto-sized to content
 - In **Appearance mode** the left panel clears `NoTitleBar | NoCollapse` so the customization drawer has a title bar (easier to resize/move). The **Options** panel always clears those flags (so the user can always collapse it)
-- **`DrawConditions()`**: Returns `objects.Player.Valid` — panels only render when the player object exists. The Right panel additionally returns `false` in Equipment mode when `SingleWindowDresser` is on (everything is in the Left panel) and only renders in Appearance mode when `_showParameters` is set
+- **`DrawConditions()`**: Returns `manager.ResolveTarget().Data.Valid` — panels only render when the resolved target (player by default, override if `_targetIdentifier` is set) has a valid actor. The Right panel additionally returns `false` in Equipment mode when `SingleWindowDresser` is on (everything is in the Left panel) and only renders in Appearance mode when `_showParameters` is set
 - **`PreDraw()`**: Positions the window via `Im.Window.SetNextPosition(center ± offset, Condition.FirstUseEver, pivot)` — ImGui remembers user repositioning via its ini file. When `LockImmersiveDresserPanels` is set, `WindowFlags.NoMove` is OR'd in each frame
 - **Style stack (Left/Right only)** — Each panel holds an `Im.ColorStyleDisposable _style` field that is pushed in `PreDraw()` and disposed in `PostDraw()`. In Equipment mode it stacks `WindowPadding = (GlobalScale * 4, GlobalScale * 4)` and `WindowBorderThickness = 0`. When `OverrideDresserBgColor` is on, `ImGuiColor.WindowBackground` is pushed from `ImmersiveDresserBgColor`. Unconditionally, `FrameBackground{,Hovered,Active}` are pushed with their existing color OR'd with `0xFF000000` to keep frame widgets opaque even when the window background is translucent. The Options panel does not currently use this stack
 - **`OnClose()`**: Delegates to `manager.Close()` — safe against re-entrancy due to the `_isOpen` guard
 
 **EquipmentPanel** (left of center, pivot `1, 0.5`):
 
-- **Equipment mode**: `equipmentDrawer.Prepare()`, draws Main Hand weapon icon (`DrawSingleWeaponIcon`, `stainsBeside: true`), iterates `EquipSlotExtensions.EquipmentSlots` (or `EqdpSlots` when `SingleWindowDresser` is on, which extends through the accessory range) → `DrawEquipIcon`, optionally draws the offhand at the end (single-window-mode-only, when offhand `Type` is not `Unknown`), iterates `BonusExtensions.AllFlags` → `DrawBonusItemIcon`, then `ApplyHoverPreview`. All three icon-draw calls forward `stainsBeside: true` and `simplified: SimplifiedDresserLayout`
+- **Equipment mode**: `equipmentDrawer.Prepare(false)` (the `compact` overload — passed `false` so the dresser uses full-width combos), draws Main Hand weapon icon (`DrawSingleWeaponIcon`, `stainsBeside: true`), iterates `EquipSlotExtensions.EquipmentSlots` (or `EqdpSlots` when `SingleWindowDresser` is on, which extends through the accessory range) → `DrawEquipIcon`, optionally draws the offhand at the end (single-window-mode-only, when offhand `Type` is not `Unknown`), iterates `BonusExtensions.AllFlags` → `DrawBonusItemIcon`, then `ApplyHoverPreview`. All three icon-draw calls forward `stainsBeside: true` (unconditional) and `simplified: SimplifiedDresserLayout` (config-driven)
 - **Appearance mode**: draws `CustomizationDrawer` (with full-customize change dispatch), then `customizationDrawer.ApplyHoverPreview(stateManager, state)`
-- **Advanced dye popup** — after the mode-specific block, calls `manager._advancedDyes.Draw(playerData.Objects[0], state, centered: false, forceFloating: true)` if `manager._advancedDyesDrawnFrame != Im.State.FrameCount`, then stamps the frame counter. `forceFloating: true` overrides `KeepAdvancedDyesAttached` so the popup opens as a free-floating ImGui window the user can drag, instead of pinning to the right of the panel
+- **Advanced dye popup** — after the mode-specific block, when `manager._advancedDyesDrawnFrame != Im.State.FrameCount`, **stamps the counter first** then calls `manager._advancedDyes.Draw(playerData.Objects[0], state, centered: false, forceFloating: true)`. Stamping before the draw means a re-entrant call from inside Draw (or from the sibling panel later in the same frame) sees the counter already current and skips. `forceFloating: true` overrides `KeepAdvancedDyesAttached` so the popup opens as a free-floating ImGui window the user can drag, instead of pinning to the right of the panel
 
 **AccessoryPanel** (right of center, pivot `0, 0.5`):
 
@@ -1191,7 +1325,7 @@ All three panels share:
 2. **Reset to Game State** — `stateManager.ResetState(state, StateSource.Manual, isFinal: true)`
 3. **Design actions row** (`DrawDesignActions`) — clipboard-in / clipboard-out / save / undo icon buttons, with modifier-driven apply rules (`UiHelpers.ConvertKeysToBool()`)
 4. **Right-aligned icon buttons** — game-UI eye, panel lock, free-cam video; positioning computed from `Im.ContentRegion.Available.X` so they sit flush right on the same line as the design actions row
-5. **Target label** — `Im.Text($"Target: {id.ToName()}")` displays the current dresser target name above the Equipment-mode block
+5. **Target picker** — `DrawTargetPicker(id)` renders the actor combo + "switch to current in-game target" hand-pointer icon + "Return to Self" button (see [Target Resolution](#target-resolution) above). Sits above the Equipment-mode block
 6. **Dye All Slots + meta toggles** (Equipment mode only):
    - `equipmentDrawer.DrawAllStain()` combo; on selection, writes `StainIds.All(newAllStain)` to every `EqdpSlot` via `stateManager.ChangeStains`
    - Always followed by `equipmentDrawer.ApplyAllStainHoverPreview(stateManager, state)` (the preview dispatcher specific to this panel)
@@ -1269,6 +1403,10 @@ Called from `Open()` (gated on `DisableFirstPerson`), `Close()` (always — rest
 
 10. **Advanced dye popup needs an explicit `Draw()` call**: `EquipmentDrawer.DrawEquipIcon` only renders the palette **button** (which sets `_drawIndex` on `AdvancedDyePopup`). The popup window itself is rendered by `AdvancedDyePopup.Draw(...)` — `EquipmentPanel.Draw()` and `AccessoryPanel.Draw()` both call it after the equipment loop, gated by `_advancedDyesDrawnFrame == Im.State.FrameCount` so split-window mode does not double-`Begin` the popup window in the same frame. `forceFloating: true` is passed so the popup ignores `KeepAdvancedDyesAttached` (otherwise it would pin to the calling panel and visually overlap the other panel in split mode).
 
+11. **`SetTarget` re-entrancy during active preview**: `SetTarget` calls `_previewService.EndPreview()` AND `_rotationDrawer.Reset()` **before** writing `_targetIdentifier`. Without the `EndPreview` call, an in-flight preview on the old target would remain written into game memory after the swap — leaving the old actor dressed up in whatever the user was hovering. Without the `Reset` call, a rotation override on the old target would silently re-bind to the new target's address on the next framework update (since the override dictionary is keyed by actor address, not identifier). Both restores must run before the field write; reorder at your peril.
+
+12. **Free-cam close-time toggle is best-effort**: `Close()` sends `/cammy freecam` again if `_cammyFreeCamActive` is true, to toggle Cammy back off. If Cammy was unloaded between `Open()` and `Close()` (the user can `/xlplugins` disable it mid-session), the command is a no-op and the player is left in free-cam. There is no IPC handshake — the heuristic is "if we thought it was on, try to turn it off." Acceptable failure mode; documented here so a future maintainer doesn't see the "extra" toggle as a bug.
+
 ---
 
 ## Configuration Summary
@@ -1294,9 +1432,9 @@ All GlamorousTerror-specific properties live in `Glamourer/GlamorousTerror/Confi
 | `KeepIconPickerOpen` | `bool` | `false` | Icon Equipment Drawer |
 | `IconPickerPinned` | `bool` | `false` | Icon Equipment Drawer |
 | `RememberIconPickerScroll` | `bool` | `false` | Icon Equipment Drawer |
-| `EnabledCheats` | `CodeService.CodeFlag` | `0` | Fun Modes |
-| `FestivalMode` | `FestivalSetting` | `Undefined` | Fun Modes (festivals) |
-| `LastFestivalPopup` | `DateOnly` | `MinValue` | Fun Modes (festivals) |
+| `Codes` | `List<(string Code, bool Enabled)>` | `[]` | Fun Modes (upstream — plaintext passphrase list) |
+| `FestivalMode` | `FestivalSetting` | `Undefined` | Fun Modes (festivals; upstream) |
+| `LastFestivalPopup` | `DateOnly` | `MinValue` | Fun Modes (festivals; upstream) |
 | `EquipmentNameLanguage` | `EquipmentNameLanguage` | `GameDefault` | Equipment Language |
 | `CrossLanguageEquipmentSearch` | `bool` | `false` | Cross-Language Search |
 | `OwnedOnlyComboFilter` | `bool` | `false` | Owned-Only Combo Filter |

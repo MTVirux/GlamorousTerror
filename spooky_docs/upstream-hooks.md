@@ -16,6 +16,9 @@ Upstream files are modified minimally — most use C# **partial classes** with
 
 ```
 Glamourer/GlamorousTerror/
+  CharacterRotation/
+    RotationDrawer.cs            ← Per-actor rotation drag UI (standalone)
+    RotationService.cs           ← Per-frame rotation override service (standalone)
   Config/
     Configuration.GT.cs          ← GT config properties (partial of Configuration)
     SettingsTab.GT.cs            ← GT settings UI (partial of SettingsTab)
@@ -29,7 +32,7 @@ Glamourer/GlamorousTerror/
   ImmersiveDresser/
     ImmersiveDresserWindow.cs    ← Immersive dresser panels (standalone)
   ItemOwnership/
-    BaseItemCombo.GT.cs          ← Owned-only + cross-language filter (partial of ItemFilter)
+    BaseItemCombo.GT.cs          ← Owned-only + cross-language filter (partial of BaseItemCombo + nested ItemFilter)
     CustomizeUnlockManager.cs    ← Customization unlock tracking (standalone)
     EquipmentDrawer.OwnedFilter.cs ← Owned-only filter UI (partial of EquipmentDrawer)
     FavoriteManager.cs           ← Favorite items tracking (standalone)
@@ -77,39 +80,52 @@ _windowSystem.AddWindow(immersiveDresser.Options);
 ### 4. `Glamourer/Gui/Tabs/SettingsTab/SettingsTab.cs`
 
 - Add `partial` keyword to class declaration
-- Call `DrawGlamorousTerrorSettings()` in the draw method (line ~229)
+- **Primary-ctor parameters**: Add `ContextMenuService contextMenuService` (used to enable/disable the in-game menu when the GT checkbox flips) and `ItemNameService itemNameService` (used by the equipment-language combo)
+- Call `DrawGlamorousTerrorSettings()` in the draw method (currently at line ~65, just after the "Enable Auto Designs" checkbox)
 - GT methods are defined in `SettingsTab.GT.cs`
 - After the "Enable Auto Designs" checkbox, change the cursor offset from `Im.Style.FrameHeightWithSpacing * 4` to `Im.Style.FrameHeightWithSpacing`. Upstream reserves 4 lines for the stacked support-button column; GT only draws a single "Show Changelogs" button (see #19), so the larger offset leaves a visible empty gap above the settings child.
 
 ### 5. `Glamourer/Gui/Equipment/EquipmentDrawer.cs`
 
 - Add `sealed partial class` keywords
-- **Constructor**: Add `PreviewService`, `ItemNameService`, `ItemUnlockManager` parameters
-- **Fields**: Keep `_previewService` and `_itemUnlockManager` declarations (assigned in constructor)
-- **`Prepare()`**: Call `GTResetPreviewState()` and `GTResetIconState()`
-- **`DrawStain()`**: Call `GTCaptureStainSlot()` after popup open detection
-- **`DrawEquip()`**: Call `GTTryDrawEquipIcon()` with early return
-- **`DrawBonusItem()`**: Call `GTTryDrawBonusItemIcon()` with early return
-- **`DrawWeapons()`**: Call `GTTryDrawWeaponsIcon()` with early return
+- **Constructor**: Add `PreviewService previewService`, `ItemNameService itemNameService`, `ItemUnlockManager itemUnlockManager`, `JobService jobService`, and `FavoriteManager favoriteManager` parameters
+- **Fields** (GT additions): `_previewService`, `_itemNameService`, `_itemUnlockManager`, `_favoriteManager`, `_jobService`, and `_lastPrepareFrame = -1` (frame-gate guard so the once-per-frame reset only fires once even though `Prepare()` is called from every panel)
+- **`Prepare()`**: Wrap `GTResetPreviewState()` and `GTResetIconState()` inside `if (_lastPrepareFrame != Im.State.FrameCount) { _lastPrepareFrame = Im.State.FrameCount; ... }`. **Critical**: see CLAUDE.md "Critical Invariants" #1 — these resets must run exactly once per frame; calling them per slot would clobber popup flags between slots
+- **`DrawStain()`**: Call `GTCaptureStainSlot(slot, index)` on the false→true transition of `_stainCombo.IsPopupOpen` (i.e. after `var wasPopupOpen = _stainCombo.IsPopupOpen; ... if (!wasPopupOpen && _stainCombo.IsPopupOpen) GTCaptureStainSlot(slot, index);`)
+- **`DrawAllStain()`**: Call `GTCaptureAllStain()` on the same false→true transition of the "Dye All Slots" combo
+- **`DrawEquip()`**: Call `GTTryDrawEquipIcon(data)` with early return
+- **`DrawBonusItem()`**: Call `GTTryDrawBonusItemIcon(data)` with early return
+- **`DrawWeapons()`**: Call `GTTryDrawWeaponsIcon(mainhand, offhand, allWeapons)` with early return
 
 **Partial method declarations** (at end of class):
 ```csharp
-partial void GTResetPreviewState();
-partial void GTResetIconState();
-partial void GTCaptureStainSlot(EquipSlot slot, int index, bool isOpen);
-private partial bool GTTryDrawEquipIcon(in DesignData designData, EquipSlot slot, State.ActorState? lockedState);
-private partial bool GTTryDrawBonusItemIcon(in DesignData designData, BonusItemFlag slot, State.ActorState? lockedState);
-private partial bool GTTryDrawWeaponsIcon(in DesignData designData, State.ActorState? lockedState);
+private partial void GTResetPreviewState();
+private partial void GTResetIconState();
+private partial void GTCaptureStainSlot(EquipSlot slot, int index);
+private partial void GTCaptureAllStain();
+private partial bool GTTryDrawEquipIcon(EquipDrawData data);
+private partial bool GTTryDrawBonusItemIcon(BonusDrawData data);
+private partial bool GTTryDrawWeaponsIcon(EquipDrawData mainhand, EquipDrawData offhand, bool allWeapons);
 ```
+
+**Implementations live in**: `GlamorousTerror/PreviewOnHover/EquipmentDrawer.Preview.cs` (preview/capture partials) and `GlamorousTerror/IconEquipment/EquipmentDrawer.IconMode.cs` (icon-draw partials).
 
 ### 6. `Glamourer/Gui/Equipment/BaseItemCombo.cs`
 
 - Add `partial` to `BaseItemCombo` class declaration
 - Add `partial` to nested `ItemFilter` class declaration
 - **Constructor**: Add `ItemNameService`, `ItemUnlockManager` parameters
-- Replace `WouldBeVisible()` body with `GTPreFilterItem` / `GTFallbackNameMatch` calls
-- Remove inline `MatchesCrossLanguage()` method
-- **`DrawBehavior(in EquipItem, out EquipItem, float)`**: Mirror `Draw`'s state lifecycle so compact-mode surfaces (Equipment Bar) get hover-preview tracking. At the top, reset `IsPopupOpen = false; HoveredItem = null;`. In both selection branches (`CustomVariant.Id is not 0 && Identify(...)` and `if (ret) { ... }`), set `ItemSelected = true;` before `return true;`.
+- **GT-added field**: `protected readonly FavoriteManager Favorites;` (line ~14) — also a new ctor param, forwarded by every concrete subclass (`ItemCombo`/`BonusItemCombo`/`WeaponCombo`, see #18)
+- **GT-added properties** (lines ~22-24) — consumed by `EquipmentDrawer.Preview.cs` for hover-preview state tracking:
+  ```csharp
+  public EquipItem? HoveredItem  { get; private set; }
+  public bool       IsPopupOpen  { get; private set; }
+  public bool       ItemSelected { get; private set; }
+  ```
+- **GT-added method** `ResetSelection()` (line ~26) — clears `ItemSelected` (`EquipmentDrawer.Preview.cs` calls this after consuming the selection signal)
+- **`Draw(in EquipItem, out EquipItem, float)`** AND **`DrawBehavior(in EquipItem, out EquipItem, float)`** — both must mirror the same GT state lifecycle. At the top: `IsPopupOpen = false; HoveredItem = null;`. In each selection branch (`CustomVariant.Id is not 0 && Identify(...)` and `if (ret) { ... }`), set `ItemSelected = true;` before `return true;`. **Why both:** compact-mode surfaces (Equipment Bar, NPC panel) call `DrawBehavior`; without parity edits there, those surfaces silently drop hover-preview on every other slot (CLAUDE.md Critical Invariant #7).
+- **`PreDrawList()`** (line ~104) — set `IsPopupOpen = true;` before delegating to `base.PreDrawList()`. This is the only place `IsPopupOpen` is set to `true` (the resets at the top of `Draw`/`DrawBehavior` clear it; `PreDrawList` only runs when the popup is actually rendering, so the flag latches `true` for the popup's lifetime).
+- **`WouldBeVisible(in CacheItem)`**: augment the body — current pattern is `return base.WouldBeVisible(...) || WouldBeVisible(item.Model.Utf16) || GTFallbackNameMatch(in item);` with a `GTPreFilterItem` short-circuit (returns `false` early if the item is filtered out by owned-only). Not a full replacement — the upstream partwise check still runs.
 
 **Partial method declarations** (inside `ItemFilter`):
 ```csharp
@@ -131,15 +147,21 @@ private partial bool GTFallbackNameMatch(in CacheItem item);
 
 ### 8. `Glamourer/Gui/Customization/CustomizationDrawer.Icon.cs`
 
-- Remove GT preview method (moved to `CustomizationDrawer.Preview.cs`)
+- **GT-added field** (line ~17): `private bool _iconPopupOpen;`
+- **GT-added setter** (line ~83): `_iconPopupOpen = true;` inside the icon popup body (after `Im.Popup.Begin(...)` returns true). The flag is read by `ApplyHoverPreview` to route capture into the icon branch.
+- The actual preview method `ApplyIconHoverPreview` lives in `CustomizationDrawer.Preview.cs`. Without the field + setter surviving the sync, the dispatcher never sees a `true` flag and customization hover preview silently breaks.
 
 ### 9. `Glamourer/Gui/Customization/CustomizationDrawer.Simple.cs`
 
-- Remove GT preview method (moved to `CustomizationDrawer.Preview.cs`)
+- **GT-added field** (line ~12): `private bool _listPopupOpen;`
+- **GT-added setters** at lines ~178 and ~223 — set `_listPopupOpen = true;` inside each combo/list popup body. There are two setter sites because the list popup is reached via two different draw paths.
+- The actual preview method `ApplyListHoverPreview` lives in `CustomizationDrawer.Preview.cs`.
 
 ### 10. `Glamourer/Gui/Customization/CustomizationDrawer.Color.cs`
 
-- Remove GT preview method (moved to `CustomizationDrawer.Preview.cs`)
+- **GT-added field** (line ~21): `private bool _colorPopupOpen;`
+- **GT-added setter** (line ~143): `_colorPopupOpen = true;` inside the color picker popup body.
+- The actual preview method `ApplyColorHoverPreview` lives in `CustomizationDrawer.Preview.cs`.
 
 ### 11. `Glamourer/Automation/AutoDesignApplier.cs`
 
@@ -158,7 +180,13 @@ private partial bool GTFallbackNameMatch(in CacheItem item);
 ### 11b. `Glamourer/Gui/Tabs/AutomationTab/IdentifierDrawer.cs`
 
 - Add `using Glamourer.GlamorousTerror.WildcardAutomation;`
-- In `UpdateIdentifiers()`, replace the three `actors.CreatePlayer/CreateRetainer/CreateOwned` calls with `WildcardIdentifier.PlayerOrFallback/RetainerOrFallback/OwnedOrFallback(actors, ...)`. The `NpcIdentifier` line and the trailing standalone NPC block are untouched (NPCs don't use wildcards).
+- In `UpdateIdentifiers()`, replace the **four** wildcard-eligible factory calls (lines 69-74) with `WildcardIdentifier.*OrFallback(actors, ...)`:
+  - `actors.CreatePlayer(...)` → `WildcardIdentifier.PlayerOrFallback(actors, ...)`
+  - `actors.CreateRetainer(...)` for the Bell retainer → `WildcardIdentifier.RetainerOrFallback(actors, ..., RetainerType.Bell)`
+  - `actors.CreateRetainer(...)` for the Mannequin retainer → `WildcardIdentifier.RetainerOrFallback(actors, ..., RetainerType.Mannequin)`
+  - `actors.CreateOwned(...)` → `WildcardIdentifier.OwnedOrFallback(actors, ...)`
+  
+  The `NpcIdentifier` line and the trailing standalone NPC block are untouched (NPCs don't use wildcards).
 - After this change, the editor accepts wildcard names directly. The previous submodule-fork approach only affected JSON load, so wildcards had to be authored by editing the config file manually.
 
 ### 11c. `Glamourer/GlamorousTerror/WildcardAutomation/WildcardIdentifier.cs`
@@ -310,9 +338,9 @@ Upstream rewrites this file each version to append a new `Add1_X_Y_Z(Changelog)`
 
 ---
 
-## Configuration Field Conflicts (1.6.0.5 → 1.6.1.4)
+## Configuration Field Conflicts (carried since 1.6.1.4, still present as of 1.6.1.6+)
 
-Upstream 1.6.1.4 introduced its own `EnableGameContextMenu` config field on `Configuration`. The duplicate field was removed from `Configuration.GT.cs`; the GT context-menu wiring (`contextMenuService.Enable/Disable()`) still hangs off the GT settings checkbox. Two checkboxes now bind to the same flag — upstream's (added in 1.6.1.4) and the GT one in `SettingsTab.GT.cs`. Consolidate before publish.
+Upstream 1.6.1.4 introduced its own `EnableGameContextMenu` config field on `Configuration` (now at `Configuration.cs:39`). The duplicate field was removed from `Configuration.GT.cs`; the GT context-menu wiring (`contextMenuService.Enable/Disable()`) still hangs off the GT settings checkbox. Two checkboxes now bind to the same flag — upstream's (added in 1.6.1.4) and the GT one in `SettingsTab.GT.cs`. Consolidate before publish: pick one canonical checkbox and remove the other.
 
 ---
 
