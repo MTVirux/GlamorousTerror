@@ -1,6 +1,6 @@
 ﻿using Dalamud.Game.ClientState.Objects.Enums;
-using ImSharp;
 using Glamourer.GlamorousTerror.WildcardAutomation;
+using ImSharp;
 using Luna;
 using Penumbra.GameData.Actors;
 using Penumbra.GameData.DataContainers;
