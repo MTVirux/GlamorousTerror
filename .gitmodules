@@ -1,7 +1,7 @@
 [submodule "Penumbra.GameData"]
 	path = Penumbra.GameData
-	url = https://github.com/MTVirux/Penumbra.GameData.git
-	branch = wildcard-on-1.6.1.6
+	url = https://github.com/Ottermandias/Penumbra.GameData.git
+	branch = main
 [submodule "Penumbra.String"]
 	path = Penumbra.String
 	url = https://github.com/MTVirux/Penumbra.String.git
