@@ -348,7 +348,7 @@ Upstream 1.6.1.4 introduced its own `EnableGameContextMenu` config field on `Con
 
 1. Branch off `main` to `upstream-port-vX.Y.Z.W`; tag the pre-overlay commit as `backup/pre-upstream-port-vX.Y.Z.W`
 2. Snapshot `Glamourer/GlamorousTerror/` and the GT-modified upstream files into `_custom_backup/` (gitignored)
-3. Update submodules: for `Penumbra.GameData`, fast-forward the submodule pointer to the latest vanilla Ottermandias `upstream/main` (no fork rebase needed — wildcard support lives in `Glamourer/GlamorousTerror/WildcardAutomation/` now). For `Penumbra.String`, rebase the MTVirux fork if it carries other patches, otherwise fast-forward.
+3. Update submodules: fast-forward `Penumbra.GameData` and `Penumbra.String` pointers to the latest vanilla Ottermandias `upstream/main`. Both track upstream — wildcard support lives in `Glamourer/GlamorousTerror/WildcardAutomation/`.
 4. `git checkout <new-tag> -- <list-of-Glamourer/-paths>` and `git rm` upstream copies of files we keep in GT folders (`Unlocks/*`, `Interop/ContextMenuService.cs`)
 5. Re-apply hooks above. Verify partial method signatures match GT-folder declarations.
 6. Restore the `AddGlamorousTerrorFeatures` block in `GlamourerChangelog.cs` (see #22) — upstream overwrites it on every version bump
