@@ -43,6 +43,8 @@ Glamourer/GlamorousTerror/
     PreviewService.cs            ← Core preview state machine (standalone)
   WildcardAutomation/
     AutoDesignApplier.Wildcard.cs ← Wildcard name matching (partial of AutoDesignApplier)
+    GTActorIdentifierJson.cs      ← Wildcard-aware JSON deserialization wrapper
+    WildcardIdentifier.cs         ← Wildcard ActorIdentifier construction shim
 ```
 
 ---
@@ -144,6 +146,28 @@ private partial bool GTFallbackNameMatch(in CacheItem item);
 - Add `partial` keyword to class declaration
 - Wildcard methods moved to `AutoDesignApplier.Wildcard.cs`
 - `GetPlayerSet()` Player branch calls `TryGettingSetExactOrWildcard(identifier, out set)` as the final fallthrough
+
+### 11a. `Glamourer/Automation/AutoDesignManager.cs`
+
+- Add `using Glamourer.GlamorousTerror.WildcardAutomation;`
+- In the V1 loader (`LoadV1`), both `_actors.FromJson(...)` calls become `GTActorIdentifierJson.FromJson(_actors, ...)`:
+  - The primary identifier read inside `foreach (var obj in array)` (after the empty-name guard)
+  - The secondary identifier read inside the `SecondaryIdentifiers` JArray foreach
+- Other `_actors.FromJson` call sites in the codebase (CollectionOverrideService, PcpService, UiConfig) are intentionally left untouched — they do not carry wildcard identifiers.
+
+### 11b. `Glamourer/Gui/Tabs/AutomationTab/IdentifierDrawer.cs`
+
+- Add `using Glamourer.GlamorousTerror.WildcardAutomation;`
+- In `UpdateIdentifiers()`, replace the three `actors.CreatePlayer/CreateRetainer/CreateOwned` calls with `WildcardIdentifier.PlayerOrFallback/RetainerOrFallback/OwnedOrFallback(actors, ...)`. The `NpcIdentifier` line and the trailing standalone NPC block are untouched (NPCs don't use wildcards).
+- After this change, the editor accepts wildcard names directly. The previous submodule-fork approach only affected JSON load, so wildcards had to be authored by editing the config file manually.
+
+### 11c. `Glamourer/GlamorousTerror/WildcardAutomation/WildcardIdentifier.cs`
+
+GT-only file. Routes `*`-bearing names through the upstream public API `ActorManager.CreateIndividualUnchecked` (which bypasses SE name validation), and delegates non-wildcard names to the validated factory unchanged. No reflection, no `[UnsafeAccessor]`, no submodule patch.
+
+### 11d. `Glamourer/GlamorousTerror/WildcardAutomation/GTActorIdentifierJson.cs`
+
+GT-only file. Wraps `ActorManager.FromJson`. When the `PlayerName` field of an incoming `JObject` contains `*`, constructs the identifier via `WildcardIdentifier`. Otherwise delegates to upstream `FromJson`.
 
 ### 12. `Glamourer/Gui/Tabs/ActorTab/ActorPanel.cs`
 
@@ -296,7 +320,7 @@ Upstream 1.6.1.4 introduced its own `EnableGameContextMenu` config field on `Con
 
 1. Branch off `main` to `upstream-port-vX.Y.Z.W`; tag the pre-overlay commit as `backup/pre-upstream-port-vX.Y.Z.W`
 2. Snapshot `Glamourer/GlamorousTerror/` and the GT-modified upstream files into `_custom_backup/` (gitignored)
-3. Update submodules: rebase MTVirux Penumbra forks onto the latest upstream Ottermandias commits, push to a new branch on the MTVirux fork (`wildcard-on-vX.Y.Z.W`), and bump `.gitmodules` `branch = ` to that
+3. Update submodules: for `Penumbra.GameData`, fast-forward the submodule pointer to the latest vanilla Ottermandias `upstream/main` (no fork rebase needed — wildcard support lives in `Glamourer/GlamorousTerror/WildcardAutomation/` now). For `Penumbra.String`, rebase the MTVirux fork if it carries other patches, otherwise fast-forward.
 4. `git checkout <new-tag> -- <list-of-Glamourer/-paths>` and `git rm` upstream copies of files we keep in GT folders (`Unlocks/*`, `Interop/ContextMenuService.cs`)
 5. Re-apply hooks above. Verify partial method signatures match GT-folder declarations.
 6. Restore the `AddGlamorousTerrorFeatures` block in `GlamourerChangelog.cs` (see #22) — upstream overwrites it on every version bump

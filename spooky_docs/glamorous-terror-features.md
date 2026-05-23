@@ -26,7 +26,7 @@ Fork-specific code lives under `Glamourer/GlamorousTerror/` and is organized by 
 |--------------|-----------|
 | `ContextMenu/` | Context Menu, CharacterPopupMenu |
 | `PreviewOnHover/` | PreviewService, per-drawer hover wiring, DesignPreviewService |
-| `WildcardAutomation/` | `AutoDesignApplier.Wildcard.cs` |
+| `WildcardAutomation/` | `AutoDesignApplier.Wildcard.cs`, `WildcardIdentifier.cs`, `GTActorIdentifierJson.cs` |
 | `EquipmentLanguage/` | `ItemNameService.cs` (language override + cross-language names) |
 | `ItemOwnership/` | `ItemUnlockManager.cs`, `CustomizeUnlockManager.cs`, `FavoriteManager.cs`, owned-only combo filter UI, unlock serialization |
 | `IconEquipment/` | `EquipmentDrawer.IconMode.cs` (icon grid + icon picker popup) |
@@ -399,7 +399,13 @@ Extends the automation system to allow **wildcard patterns** (`*`) in character 
 
 ### Implementation
 
-All code is in `Glamourer/GlamorousTerror/WildcardAutomation/AutoDesignApplier.Wildcard.cs` (partial class extension of the upstream `AutoDesignApplier`):
+| File | Role |
+|------|------|
+| `Glamourer/GlamorousTerror/WildcardAutomation/AutoDesignApplier.Wildcard.cs` | Partial-class extension of upstream `AutoDesignApplier`; wildcard name matching against enabled sets |
+| `Glamourer/GlamorousTerror/WildcardAutomation/WildcardIdentifier.cs` | Constructs `ActorIdentifier`s for `*`-bearing names via upstream's public `ActorManager.CreateIndividualUnchecked` API (bypasses SE name validation); falls back to the validated factory for non-wildcard names |
+| `Glamourer/GlamorousTerror/WildcardAutomation/GTActorIdentifierJson.cs` | Wraps `ActorManager.FromJson` so config loads with `*` in `PlayerName` route through `WildcardIdentifier` instead of the validated parse |
+
+The feature **no longer requires a `Penumbra.GameData` fork**: wildcard identifiers are constructed entirely through upstream's public `CreateIndividualUnchecked` entry point, so the submodule tracks vanilla Ottermandias `upstream/main`. JSON load is intercepted in `AutoDesignManager.LoadV1` (see [upstream-hooks.md #11a](upstream-hooks.md)), and the automation editor is intercepted in `IdentifierDrawer.UpdateIdentifiers` (#11b), which means wildcard names can now be typed directly into the UI rather than only being authored by hand-editing the config file.
 
 **`TryGettingSetExactOrWildcard(ActorIdentifier)`** — Entry point replacing the original `GetPlayerSet`:
 
