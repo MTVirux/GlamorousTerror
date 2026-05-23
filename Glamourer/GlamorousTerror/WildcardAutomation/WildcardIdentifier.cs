@@ -9,7 +9,7 @@ namespace Glamourer.GlamorousTerror.WildcardAutomation;
 internal static class WildcardIdentifier
 {
     public static bool IsWildcard(ByteString name)
-        => !name.IsEmpty && name.ToString().Contains('*');
+        => !name.IsEmpty && name.IndexOf((byte)'*') >= 0;
 
     public static bool IsWildcard(string? name)
         => !string.IsNullOrEmpty(name) && name.Contains('*');
