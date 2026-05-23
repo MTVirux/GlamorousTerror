@@ -1,5 +1,6 @@
 ﻿using Dalamud.Game.ClientState.Objects.Enums;
 using ImSharp;
+using Glamourer.GlamorousTerror.WildcardAutomation;
 using Luna;
 using Penumbra.GameData.Actors;
 using Penumbra.GameData.DataContainers;
@@ -65,12 +66,12 @@ public sealed class IdentifierDrawer(
     {
         if (ByteString.FromString(_characterName, out var byteName))
         {
-            PlayerIdentifier    = actors.CreatePlayer(byteName, _worldCombo.Selected.Key);
-            RetainerIdentifier  = actors.CreateRetainer(byteName, ActorIdentifier.RetainerType.Bell);
-            MannequinIdentifier = actors.CreateRetainer(byteName, ActorIdentifier.RetainerType.Mannequin);
+            PlayerIdentifier    = WildcardIdentifier.PlayerOrFallback(actors, byteName, _worldCombo.Selected.Key);
+            RetainerIdentifier  = WildcardIdentifier.RetainerOrFallback(actors, byteName, ActorIdentifier.RetainerType.Bell);
+            MannequinIdentifier = WildcardIdentifier.RetainerOrFallback(actors, byteName, ActorIdentifier.RetainerType.Mannequin);
 
             if (_humanNpcCombo.Selection.Kind is ObjectKind.EventNpc or ObjectKind.BattleNpc)
-                OwnedIdentifier = actors.CreateOwned(byteName, _worldCombo.Selected.Key, _humanNpcCombo.Selection.Kind,
+                OwnedIdentifier = WildcardIdentifier.OwnedOrFallback(actors, byteName, _worldCombo.Selected.Key, _humanNpcCombo.Selection.Kind,
                     _humanNpcCombo.Selection.Ids.First());
             else
                 OwnedIdentifier = ActorIdentifier.Invalid;
