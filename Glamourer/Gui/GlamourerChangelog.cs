@@ -75,6 +75,7 @@ public sealed class GlamourerChangelog : IUiService
         => log.NextVersion("Glamorous Terror Features"u8)
             .RegisterHighlight("Immersive Dresser — floating three-panel glamour editor with optional game-UI hide, camera height slider, disable-first-person toggle, free-cam button (Cammy), design clipboard/save/undo actions, and panel lock. Open via right-click on your own character or /glamour dresser."u8)
             .RegisterHighlight("Added a context menu entry when right-clicking any character in-game, allowing you to copy, apply, or preview designs between characters."u8)
+            .RegisterHighlight("Try On from context menus — right-click an equippable item in your inventory, in shops and exchange menus, the market board, or item links to instantly apply it to your character."u8)
             .RegisterHighlight("Gear name language selection — override the display language for equipment item names."u8)
             .RegisterHighlight("Cross-language equipment search — search for items in any language regardless of display settings."u8)
             .RegisterHighlight("Icon Equipment Drawer — optional icon grid replacement for the equipment combo list, with favourites, cross-language text search, job and dye channel filters, sort modes, and grouping by model. Right-click an item in the picker to favourite it."u8)
