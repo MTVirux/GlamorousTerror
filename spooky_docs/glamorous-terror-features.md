@@ -156,7 +156,7 @@ The central preview engine in `Glamourer/GlamorousTerror/PreviewOnHover/PreviewS
 **`PreviewService`** — Methods organized by lifecycle:
 
 - **Start**: `StartSingleItemPreview()`, `StartSingleBonusItemPreview()`, `StartSingleCustomizationPreview(state, index, requiresCtrl)`, `StartSingleStainPreview()`, `StartAllSlotsStainPreview()`
-- **Apply**: `PreviewSingleItem()`, `PreviewSingleBonusItem()`, `PreviewSingleStain()`, `PreviewAllSlotsStain(state, stainValue)`, `HandleCustomizationPopupFrame(state, index, hoveredIndex, hoveredValue, ctrlHeld)`
+- **Apply**: `PreviewSingleItem()`, `PreviewSingleBonusItem()`, `PreviewSingleStain()`, `PreviewSingleCustomization(state, index, value)`, `PreviewAllSlotsStain(state, stainValue)`, `HandleCustomizationPopupFrame(state, index, hoveredIndex, hoveredValue, ctrlHeld)`
 - **Restore**: `RestoreSingleValuePreview()`, `EndSingleValuePreview(wasSelectionMade)`, `EndCustomizationPopupFrame()`, `EndPreviewIfType(PreviewType)`
 - **Query**: `IsSingleItemPreview(slot)`, `IsSingleBonusItemPreview(slot)`, `IsSingleCustomizationPreview(index)`, `IsSingleStainPreview(slot, stainIndex)`, `IsAllSlotsStainPreview()`, `IsSameTypePreview(PreviewType)`
 
@@ -478,149 +478,135 @@ Character loads → AutoDesignApplier.GetPlayerSet(identifier)
 
 ## 4. Fun Modes
 
-Cosmetic transformation modes that modify visible players' appearances in real-time. **This subsystem is entirely upstream Glamourer code**, untouched by the GT fork — included here only because it interacts with the GT context menu (WhoAmI/WhoIsThat actions) and is a frequent question during upstream syncs. Future GT additions should land here if they extend the system.
+Cosmetic transformation modes that modify visible players' appearances in real-time (random dyes/clothing, race/gender/size overrides, full-NPC replacements, holiday costumes). The GT fork replaced the old upstream SHA-256 passphrase entry with a plain **checkbox UI** backed by a single serialized `EnabledCheats` bitmask. There is no passphrase, hashing, hint, or per-code plaintext list anymore. The transformation engine (`FunModule`/`FunEquipSet`) is otherwise upstream-shaped and interacts with the GT context menu via the WhoAmI/WhoIsThat clipboard actions.
 
-### How the SHA-256 Passphrase System Works (Upstream)
+### How Modes Are Enabled
 
-Modes are unlocked by typing a **secret passphrase** into a text input in the Settings tab. The plaintext is **never compared directly** — `CodeService.CheckCode(name)` runs SHA-256 on the input and compares the 32-byte digest against the hardcoded `ReadOnlySpan<byte>` returned by `GetSha(CodeFlag)`. Each `CodeFlag` has its own digest; collisions are not allowed.
+Each mode is a `CodeService.CodeFlag` bit. The Settings-tab "Fun Modes" header (`CodeDrawer`) renders one checkbox per flag; ticking a box calls `CodeService.Toggle(flag, true)`, which ORs the bit in (after clearing mutually-exclusive bits) and persists the whole mask to `Configuration.EnabledCheats`. Unticking calls `Toggle(flag, false)`. There is also a single **"Disable All"** button (`CodeService.DisableAll()` → mask `0`). State survives sessions because `EnabledCheats` is a serialized config field — `CodeService._enabled` is simply loaded from it in the constructor and written back to it on every toggle.
 
-Successfully matching a passphrase returns an `(Action<bool>?, CodeFlag)` tuple — invoking the action with `true` adds the flag to `_enabled` (clearing mutually-exclusive flags) and persists the plaintext into `Configuration.Codes` so the user doesn't have to re-type it next session. The plaintext is intentionally stored in cleartext: the SHA-256 layer is a one-way gate at *first-entry* time only, after which the system trusts the user's local config.
-
-`Configuration.Codes` is a `List<(string Code, bool Enabled)>` — each entry is the previously-validated plaintext + a per-entry on/off toggle the user can flip without re-typing. On startup, every entry is fed through `CheckCode` again to rebuild `_enabled` from scratch (so deleting the digest constant for a flag effectively disables it everywhere — no migration needed).
-
-### CodeFlag enum (`CodeService.cs:14-40`)
+### CodeFlag enum (`CodeService.cs:11-39`)
 
 ```csharp
-[Flags] public enum CodeFlag : uint
+[Flags] public enum CodeFlag : ulong
 {
     Clown        = 0x000001,  // Random Dyes
     Emperor      = 0x000002,  // Random Clothing
     Individual   = 0x000004,  // Random Customizations
-    Dwarf        = 0x000008,  // Player Dwarf
-    Giant        = 0x000010,  // Player Giant
-    OopsHyur     = 0x000020,
-    OopsElezen   = 0x000040,
-    OopsLalafell = 0x000080,
-    OopsMiqote   = 0x000100,
-    OopsRoegadyn = 0x000200,
-    OopsAuRa     = 0x000400,
-    OopsHrothgar = 0x000800,
-    OopsViera    = 0x001000,
-
-    // 0x002000 is currently UNUSED (commented "//Artisan = 0x002000")
-    // — reserved by leaving the bit unallocated. Future additions should pick this slot.
-
-    SixtyThree   = 0x004000,  // Invert genders
-    Shirts       = 0x008000,
-    World        = 0x010000,
-    Elephants    = 0x020000,
-    Crown        = 0x040000,
-    Dolphins     = 0x080000,
-    Face         = 0x100000,  // Debug — hidden from hint UI
-    Manderville  = 0x200000,  // Debug — hidden
-    Smiles       = 0x400000,  // Debug — hidden
+    Dwarf        = 0x000008,  // Player Dwarf Mode
+    Giant        = 0x000010,  // Player Giant Mode
+    OopsHyur     = 0x000020,  // All Hyur
+    OopsElezen   = 0x000040,  // All Elezen
+    OopsLalafell = 0x000080,  // All Lalafell
+    OopsMiqote   = 0x000100,  // All Miqo'te
+    OopsRoegadyn = 0x000200,  // All Roegadyn
+    OopsAuRa     = 0x000400,  // All Au Ra
+    OopsHrothgar = 0x000800,  // All Hrothgar
+    OopsViera    = 0x001000,  // All Viera
+    AllMale      = 0x002000,  // All Male
+    AllFemale    = 0x004000,  // All Female
+    SixtyThree   = 0x008000,  // Invert Genders
+    Shirts       = 0x010000,  // Show All Items Unlocked
+    World        = 0x020000,  // Job-Appropriate Gear
+    Elephants    = 0x040000,  // Everyone Elephants
+    Crown        = 0x080000,  // Clown Mentors
+    Dolphins     = 0x100000,  // Everyone Namazu
+    Face         = 0x200000,  // Debug — hidden from UI
+    Manderville  = 0x400000,  // Debug — hidden from UI
+    Smiles       = 0x800000,  // Debug — hidden from UI
 }
 ```
 
-There is **no `AllMale` or `AllFemale` flag** — the only gender code is `SixtyThree` (the male↔female swap). The 0x002000 bit is unallocated.
+The enum is `: ulong`. `AllMale = 0x002000` and `AllFemale = 0x004000` occupy what was previously a single reserved bit; they shift every later flag up by two bits relative to the old layout (`SixtyThree` → `0x008000`, `Shirts` → `0x010000`, …, `Smiles` → `0x800000`).
 
-### Mutually Exclusive Groups (`CodeService.cs:42-62`)
+### Mutually Exclusive Groups (`CodeService.cs:41-60`)
 
 Constants combine flags that conflict:
 
 - `DyeCodes = Clown | World | Elephants | Dolphins`
 - `GearCodes = Emperor | World | Elephants | Dolphins`
 - `RaceCodes = OopsHyur | OopsElezen | OopsLalafell | OopsMiqote | OopsRoegadyn | OopsAuRa | OopsHrothgar | OopsViera`
+- `GenderCodes = AllMale | AllFemale | SixtyThree`
 - `FullCodes = Face | Manderville | Smiles`
 - `SizeCodes = Dwarf | Giant`
 
-`private static GetMutuallyExclusive(CodeFlag flag)` returns the conflict mask for a single flag. Enabling a `Clown` clears every other bit in `DyeCodes`, etc. `SixtyThree` is its own one-flag group — `GetMutuallyExclusive(SixtyThree)` returns `FullCodes` (the full-replacement modes win over a gender swap).
+`private static GetMutuallyExclusive(CodeFlag flag)` (`CodeService.cs:120-148`) returns the conflict mask cleared when a flag is enabled. The pattern is `(FullCodes | <ownGroup>) & ~self` — `FullCodes` is always added so any full-replacement mode is dropped when a "lesser" mode is enabled. For the three gender flags, `GetMutuallyExclusive` returns `(FullCodes | GenderCodes) & ~self` (so ticking `AllMale` clears `AllFemale` and `SixtyThree` as well as the full codes). The `FullCodes` flags themselves (`Face`/`Manderville`/`Smiles`) clear nearly everything: `(FullCodes | RaceCodes | SizeCodes | GearCodes | DyeCodes | GenderCodes | Crown) & ~self`. `Shirts` is a one-flag group (returns `0` — coexists with anything).
 
 ### CodeService Public Surface (`Glamourer/Services/CodeService.cs`)
 
-`CodeService` is an upstream service, NOT a GT addition. Public members:
-
 | Member | Purpose |
 |--------|---------|
-| `Enabled(CodeFlag) → bool` | Single-flag query |
+| `AllEnabled` (property → `CodeFlag`) | Returns the full `_enabled` mask |
+| `Enabled(CodeFlag) → bool` | Single-flag query (`HasFlag`) |
 | `AnyEnabled(CodeFlag mask) → bool` | Any-of-mask query |
 | `Masked(CodeFlag mask) → CodeFlag` | Returns `_enabled & mask` |
 | `GetRace() → Race` | If a `RaceCodes` flag is enabled, returns the race it maps to; otherwise `Unknown` |
-| `CheckCode(string) → (Action<bool>?, CodeFlag)` | Hash the input; return the toggle action and resolved flag, or `(null, 0)` on no match |
-| `AddCode(string) → bool` | Calls `CheckCode`; if valid and not already in `_config.Codes`, appends it as enabled |
-| `GetCode(CodeFlag) → string?` | Reverse-lookup: returns the plaintext currently stored in `_config.Codes` for the given flag (used by "Who am I?!?" clipboard helper) |
-| `SaveState()` | Rebuilds `_enabled` from `_config.Codes` and persists |
-| `static GetData(CodeFlag) → (bool Display, int CapitalCount, string Punctuation, string Hint, string Effect)` | Returns the hint metadata used by `CodeDrawer.DrawCodeHints` — `Display: false` hides the flag (Face/Manderville/Smiles) |
-| `static GetSha(CodeFlag) → ReadOnlySpan<byte>` | Returns the hardcoded 32-byte SHA-256 digest for a flag |
+| `Toggle(CodeFlag flag, bool enable)` | Enable: OR the flag in, then AND with `~GetMutuallyExclusive(flag)`. Disable: AND with `~flag`. Either way writes `_config.EnabledCheats = _enabled` and `Save()`s |
+| `DisableAll()` | Sets `_enabled = 0`, `_config.EnabledCheats = 0`, saves |
+| `static GetName(CodeFlag) → string` | UI label (e.g. `Clown` → "Random Dyes", `AllMale` → "All Male") |
+| `static GetDescription(CodeFlag) → string` | Tooltip text for the checkbox |
 
-There is **no `Toggle`, `DisableAll`, `GetName`, or `GetDescription` method**. Toggling happens via the `Action<bool>` returned by `CheckCode`; the closest thing to a "name" or "description" is the `Hint`/`Effect` fields of the `GetData` tuple.
+`_enabled` is loaded directly from `_config.EnabledCheats` in the constructor (`CodeService.cs:90-94`) and saved straight back on every `Toggle`/`DisableAll`. There is **no** `CheckCode`, `GetSha`, `GetData`, `AddCode`, `GetCode`, `SaveState`, `Load`, or hint-metadata surface anymore — the SHA-256 passphrase system was removed.
 
 ### FunModule (`Glamourer/State/FunModule.cs`)
 
-`FunModule` (~520 lines, `IRequiredService`) applies the actual transformations. Constructor dependencies include `CodeService`, `StateListener`, `ItemManager`, `NpcCustomizeSet`, `IDalamudPluginInterface`, `FestivalNotification`. Public entry points:
+`FunModule` (~500 lines, `IDisposable`, `IRequiredService`) applies the actual transformations. Constructor dependencies are `IDalamudPluginInterface`, `CodeService`, `CustomizeService`, `ItemManager`, `Configuration`, **`StateManager`**, `ActorObjectManager`, `DesignConverter`, `DesignManager`, `NpcCustomizeSet`, and `FestivalNotification`. It subscribes to `DayChangeTracker.DayChanged += OnDayChange` and unsubscribes in `Dispose`. Public entry points:
 
-- **`ApplyFunOnLoad(Actor actor, Span<CharacterArmor> armor, ref CustomizeArray customize)`** — called when an actor's full state loads. Order of operations:
-  1. `ValidFunTarget(actor)` guard (must be a PC, must not be already transformed, `ModelCharaId == 0`).
-  2. `ApplyFullCode` — if a `FullCodes` flag is set, replace the entire NPC appearance from one of the `PrioritizedList<NpcId>` pools (see below).
-  3. `RandomizeCustomize(ref customize)` — when `Individual` is set, randomize every customize index except `Face`.
-  4. `SetRace(...)` — when a `RaceCodes` flag is set, derive `targetClan = (SubRace)((int)race * 2 - (int)customize.Clan % 2)` (preserving the user's clan parity within the new race) and call `ChangeClan`.
-  5. `SetGender(...)` — when `SixtyThree` is set, flip `Male ↔ Female`. **There are no AllMale/AllFemale branches** because the corresponding flags don't exist.
-  6. `SetSize(...)` — when `Dwarf`/`Giant` is set, shrink the player and stretch other actors (or vice versa).
-  7. Apply festival or per-flag gear via `ApplyFunToSlot` for each slot.
+- **`ApplyFunOnLoad(Actor actor, Span<CharacterArmor> armor, ref CustomizeArray customize)`** (`FunModule.cs:274`) — called when an actor's full state loads. Order of operations:
+  1. `ValidFunTarget(actor)` guard (must be a PC `ObjectKind.Pc`, not transformed, `ModelCharaId == 0`).
+  2. `ApplyFullCode(...)` — if a `FullCodes` flag is set, replace the entire NPC appearance + armor from one of the `PrioritizedList<NpcId>` pools (see below) and return early.
+  3. `SetRace(ref customize)` — when a `RaceCodes` flag is set, derive `targetClan = (SubRace)((int)race * 2 - (int)customize.Clan % 2)` (preserving clan parity within the new race) and call `ChangeClan`.
+  4. `SetGender(ref customize)` — see explicit branches below.
+  5. `RandomizeCustomize(ref customize)` — when `Individual` is set, randomize every customize index except `Face` (and skipping unavailable indices).
+  6. `SetSize(actor, ref customize)` — when `Dwarf`/`Giant` is set, set the player to one extreme and other actors to the opposite (`Height`, plus `BustSize` for female).
+  7. Then gear: if `IsInFestival`, apply the festival set and return; else `Crown` mentor hat; else per-`GearCodes` gear (`Emperor` random items / `Elephants` / `Dolphins` / `World`); then per-`DyeCodes` dye (`Clown` random dyes).
 
-- **`ApplyFunToSlot(Actor, ref CharacterArmor, EquipSlot)`** — per-equipment-piece hook. **Short-circuits** when `IsInFestival` is true: festival gear is then applied via `FunEquipSet`. Otherwise routes per flag: `Emperor` → `SetRandomItem`, `Clown` → `SetRandomDye`, `World` → job-appropriate, `Elephants`/`Dolphins`/`Crown` → fixed costume.
+  The order is **ApplyFullCode → SetRace → SetGender → RandomizeCustomize → SetSize**, then gear/dye.
 
-- **`ApplyFunToWeapon(Actor, ref CharacterWeapon, EquipSlot)`** — analogous weapon-specific hook.
+- **`SetGender(ref CustomizeArray)`** (`FunModule.cs:433`) — explicit branches: `AllMale` → `ChangeGender(Male)`; else `AllFemale` → `ChangeGender(Female)`; else `SixtyThree` → flip (`Male ? Female : Male`). No-op if none set.
 
-- **`WhoAmI()` / `WhoIsThat()`** — exports the actor's *post-fun-mode* visible state as a Glamourer design JSON to the clipboard. The two methods delegate to a shared `private WhoIsThat(Actor)` against `_objects.Player` and `_objects.Target` respectively.
+- **`ApplyFunToSlot(Actor, ref CharacterArmor, EquipSlot)`** (`FunModule.cs:112`) — per-equipment-piece hook. **Returns early when `IsInFestival` is true** (calling `KeepOldArmor` so the festival path in `ApplyFunOnLoad` owns gear). Otherwise: `FullCodes`/`Crown` keep-old or mentor-hat special cases, then per-`GearCodes` (`Emperor` → `SetRandomItem`, `Elephants`/`Dolphins`/`World` → keep-old here) and per-`DyeCodes` (`Clown` → `SetRandomDye`).
+
+- **`ApplyFunToWeapon(Actor, ref CharacterWeapon, EquipSlot)`** (`FunModule.cs:332`) — applies `World` job-appropriate weapon via `_worldSets` for non-player actors.
+
+- **`WhoAmI()` / `WhoIsThat()`** (`FunModule.cs:477-481`) — export the actor's *post-fun-mode* visible state as a Glamourer base64 design to the clipboard. Both delegate to a shared `private WhoIsThat(Actor)` (`FunModule.cs:483`) against `_objects.Player` / `_objects.Target` respectively.
+
+- **`IsInFestival`** (private property, `FunModule.cs:107`) — `true` only when ALL three hold: `IDalamudPluginInterface.AllowSeasonalEvents`, `Configuration.FestivalMode is AskYes or NeverAskYes`, and `_festivalSet is not null`.
 
 ### PrioritizedList<T> (`FunModule.cs:157-181`)
 
-Internal sealed class used for Face/Manderville/Smiles NPC selection. Wraps a `List<(T Item, int Priority)>` and exposes `GetRandom(Random rng)` which performs cumulative-weight selection: build a running sum of priorities, pick a random integer in `[0, total)`, walk the list until the cumulative sum exceeds it. This means a Priority-10 entry is 10× more likely than a Priority-1 entry. Used by:
+Internal sealed class (`List<(T Item, int Priority)>` subclass) used for the Face/Manderville/Smiles full-NPC pools. The constructor drops zero-priority entries, sorts by descending priority, and rewrites each entry's stored value to a **running cumulative sum**. `GetRandom(Random rng)` then picks a random integer in `[0, _cumulative)` and walks the list returning the first entry whose cumulative sum exceeds it — so a Priority-10 entry is 10× more likely than a Priority-1 entry. Pools (all `private static readonly` fields on `FunModule`):
 
 - `MandervilleMale` / `MandervilleFemale` (Hildibrand-cast NPCs, split by player gender)
 - `Smile` (Smile-variant NPCs)
 - `FaceMale` / `FaceFemale` (random face NPCs)
 
-The pools live as `private static readonly` fields on `FunModule`.
+### Festival System (`Glamourer/State/FunEquipSet.cs`)
 
-### Festival System
+The festival pathway is driven by `DayChangeTracker.DayChanged → FunModule.OnDayChange(day, month, year)` (`FunModule.cs:46`), which maps the calendar date to a `FestivalType` (`Halloween` 31 Oct / 1 Nov, `Christmas` 24-26 Dec, `AprilFirst` 1 Apr, else `None`), resolves `_festivalSet = FunEquipSet.GetSet(type)`, and updates the opt-in `FestivalNotification` if the user hasn't been asked recently. Detection therefore only flips at a midnight tick, not per-frame. `Configuration.LastFestivalPopup` (`DateOnly`) gates re-prompting.
 
-`FunModule` has a separate festival pathway, driven by:
+`FunEquipSet` is an `internal class` holding a `Group[]`. Each **`Group`** is a `readonly record struct` of five `CharacterArmor` slots (`Head, Body, Hands, Legs, Feet`) plus an optional `StainId[]? Stains` (null → use all stains). There is **no `KeepOldArmor` flag on `Group`** — `KeepOldArmor` is a *method on `FunModule`* (`FunModule.cs:347`) that copies the actor's existing armor. `Group` has helper constructors (`FullSet`, `FullSetWithoutHat`) and a `(set, variant)` shorthand ctor. `FunEquipSet.Apply(StainId[] allStains, Random rng, Span<CharacterArmor> armor)` picks a random group, picks a random stain from `group.Stains ?? allStains`, and writes each non-empty slot (`Set != 0`) into `armor`. The three sets `Christmas`, `Halloween`, `AprilFirst` are `public static readonly` instances.
 
-- **`FestivalNotification _notification`** — the prompt service shown to the user on first encounter to opt in/out
-- **`IsInFestival` property** — `true` only when ALL of the following hold: `IDalamudPluginInterface.AllowSeasonalEvents` is true, `Configuration.FestivalMode` is `FestivalSetting.AskYes` or `NeverAskYes`, and the current date matches a `FunEquipSet` festival window
-- **`FunEquipSet`** (`Glamourer/State/FunEquipSet.cs`) — declarative table of festival outfits (Halloween / Christmas / April Fools etc.). Each entry binds a date range to a `KeepOldArmor` flag + a per-slot armor map
-- **Festival → fun-mode interaction**: when `IsInFestival` is true, `ApplyFunOnLoad` and `ApplyFunToSlot` short-circuit gear/dye codes and apply festival gear instead. Race/gender/size codes still run — only the gear/dye paths defer
+When `IsInFestival` is true, `ApplyFunOnLoad` applies the festival set (after race/gender/size codes have already run) and `ApplyFunToSlot` short-circuits to keep-old; race/gender/size codes still apply, only gear/dye defer to the festival outfit.
 
-The festival window is detected via `DayChangeTracker.DayChanged` (NOT per-frame), so flipping in and out of a festival mid-session requires a midnight tick. `Configuration.LastFestivalPopup` (a `DateOnly`) tracks the most recent notification so the user isn't re-prompted every day.
+### CodeDrawer (`Glamourer/Gui/Tabs/SettingsTab/CodeDrawer.cs`, ~72 lines)
 
-### CodeDrawer (`Glamourer/Gui/Tabs/SettingsTab/CodeDrawer.cs`, ~188 lines)
+The Settings-tab UI. The class is a primary-constructor `IUiService` taking `CodeService`, `FunModule`, **`StateManager`**, and **`ActorObjectManager`** (the old `Configuration` dependency is gone). `Draw()` renders an `Im.Tree.Header("Fun Modes")` and, when open:
 
-The Settings-tab UI for entering / managing codes. Top-down structure inside `Draw()`:
+1. **`DrawFeatureToggles()`** — iterates `CodeService.CodeFlag.Values`, skipping the three debug flags (`Face`/`Manderville`/`Smiles`). For each, draws an `Im.Checkbox(CodeService.GetName(flag), ref enabled)`; on change calls `codeService.Toggle(flag, enabled)` then `ForceRedrawAll()`. Hovering shows `GetDescription(flag)` as a tooltip.
+2. **`DrawCopyButtons()`** — "Who am I?!?" / "Who is that!?!" 250-wide buttons calling `funModule.WhoAmI()` / `funModule.WhoIsThat()`, each with an explanatory tooltip.
+3. **"Disable All" button** — calls `codeService.DisableAll()` then `ForceRedrawAll()`.
 
-1. **`DrawCodeInput()`** — `Im.InputText("Enter Cheat Code...##codeInput", ...)` plus an "Add" button. On submit, calls `_codes.AddCode(_currentCode)`; clears the field on success.
-2. **`DrawCopyButtons()`** — "Who am I?!?" / "Who is that!?!" wide buttons. Each one calls into `FunModule.WhoAmI` / `WhoIsThat` to copy the corresponding actor's post-fun design to the clipboard, then `_codes.GetCode(flag)` to surface the plaintext for the currently active codes.
-3. **`DrawCodes()`** — iterates `_config.Codes`, drawing one row per saved code with:
-   - Drag-and-drop reorder handle
-   - "Delete" trash-can button (removes the entry from `_config.Codes`)
-   - Plaintext label
-   - Enabled checkbox (flips `Codes[i].Enabled` then calls `SaveState`)
-4. **`DrawCodeHints()`** — when "Show Hints" is enabled, iterates `CodeFlag.GetValues()` excluding entries whose `GetData(flag).Display` is `false`. For each, renders the (CapitalCount, Punctuation, Hint, Effect) tuple to help users guess passphrases. Debug modes (Face/Manderville/Smiles) are hidden because `Display = false` in their `GetData` row.
-
-The two private helpers `DrawSource` and `DrawTarget` are tooltip/popup wrappers used inside `DrawCopyButtons`.
-
-There is no "Disable All" button and no checkbox-grid UI — those were never built; the doc previously described work that doesn't exist.
+`ForceRedrawAll()` walks `actorObjectManager.Objects` and calls `stateManager.ReapplyState(actor, true, StateSource.Manual)` for each valid actor so the change is visible immediately. There is no passphrase input, no per-code list, and no hint section.
 
 ### Configuration
 
 | Property | Type | Default | Purpose |
 |----------|------|---------|---------|
-| `Codes` | `List<(string Code, bool Enabled)>` | `[]` | Persistent passphrase list (upstream `Configuration` field). Each entry is the plaintext (already validated via SHA-256 at AddCode time) plus an on/off toggle |
+| `EnabledCheats` | `CodeService.CodeFlag` | `0` | **The live serialized Fun Modes bitmask** (`Configuration.GT.cs:49`). `CodeService._enabled` mirrors this field |
 | `FestivalMode` | `FestivalSetting` | `Undefined` | Festival opt-in state (`Undefined` / `AskYes` / `AskNo` / `NeverAskYes` / `NeverAskNo`) |
 | `LastFestivalPopup` | `DateOnly` | `MinValue` | Last date the festival opt-in popup was shown |
 
-`_enabled` (the live `CodeFlag` bitmask) is a **derived** value in `CodeService`, not persisted directly — it's rebuilt from `Configuration.Codes` on every `SaveState()`.
+`Configuration.Codes` (the upstream `List<(string Code, bool Enabled)>` passphrase list) still exists on the upstream `Configuration` partial but is now **orphaned/dead** for this feature — nothing in the GT Fun Modes path reads or writes it.
 
 ---
 
@@ -652,8 +638,8 @@ Override the display language for equipment item names throughout the plugin ind
 - `GetItemName(uint itemId, string fallback)` — id-keyed overload for callers that don't have an `EquipItem` (e.g. icon picker tooltips). Returns `fallback` when the row is missing.
 - `GetCurrentLanguageDisplay()` — UI-facing helper that resolves the configured enum to a display string ("English", "Japanese", etc., or the game-default name).
 - `_nameCache: Dictionary<uint, string>` — **single dictionary** for the currently-selected display language (cleared by `RefreshSheet`/`ClearCache`). NOT per-language; the per-language structure lives in `_allLanguageNamesCache` and is used by §6 cross-language search.
-- `CheckLanguageChange()` — detects config change, calls `ClearCache()` + `RefreshSheet()`.
-- `ClearCache()` — called from settings UI when language changes; also triggered when cross-language is toggled (to drop stale per-language entries).
+- `CheckLanguageChange()` (line 71) — detects a config language change and, if changed, calls **only** `RefreshSheet()` (which reloads `_itemSheet` and clears `_nameCache`, but does NOT clear `_allLanguageNamesCache`). It does not call `ClearCache()`.
+- `ClearCache()` — called only from the settings UI (language change / cross-language toggle) to drop stale entries; clears both `_nameCache` and `_allLanguageNamesCache` and additionally re-runs `RefreshSheet()`.
 
 **SettingsTab** exposes the combo in **two places** with different ImGui IDs so the same setting is reachable from either entry point:
 
@@ -819,6 +805,15 @@ Filter equipment, weapon, and bonus item combo dropdowns to show only items the 
 - **`ToFilePath()`**: Returns `fileNames.UnlockFileItemsForCharacter(_currentContentId)` when a character is logged in, falls back to `fileNames.UnlockFileItems` otherwise.
 - **`ResetScanState()`**: Resets all scan-related fields: `_currentInventory`, `_currentInventoryIndex`, armoire/achievement/glamour/plate state booleans, `_seenThisCycle`, `_fullyScannedSources`.
 
+### Implementation — CustomizeUnlockManager
+
+`Glamourer/GlamorousTerror/ItemOwnership/CustomizeUnlockManager.cs` (`IDisposable`, `ISavable`, `IRequiredService`) is the parallel manager for **unlockable customizations** (purchasable hairstyles and face paints), used to gate those entries in the customization drawer the same way `ItemUnlockManager` gates equipment. Unlike item unlocks it is **not per-character** — `ToFilePath` returns the single global `fileNames.UnlockFileCustomize`, and persistence goes through `UnlockDictionaryHelpers.Save/Load` (it has no source byte, so the no-source `Save` overload writes `0x00`).
+
+- **`CreateUnlockableCustomizations(customizations, gameData)`** (line 180) — built once in the constructor. Walks every `(clan, gender)` set; for each hairstyle and face paint it looks up the matching `CharaMakeCustomize` row (English sheet) by `FeatureID` and keeps only rows where `IsPurchasable is true`. The display name comes from the row's `HintItem` (stripping the `"Modern Aesthetics - "` / `"Modern Cosmetics - "` prefixes), with a hardcoded "Eternal Bond" name for `FeatureID == 61`. Result is `Unlockable: IReadOnlyDictionary<CustomizeData, (uint Data, StringU8 Name)>`.
+- **`Scan()`** (line 98) — runs in the constructor and on `_clientState.Login`. Guards on `_objects.Player.Valid` and `UIState.Instance()`, then for every `Unlockable` entry whose `UnlockLink` reports `IsUnlockLinkUnlocked(id)` and isn't already recorded, adds it to `_unlocked` (timestamped), fires `ObjectUnlocked`, and `Save()`s if anything new was found.
+- **`SetUnlockLinkValueDetour(nint uiState, uint data, byte value)`** (line 138) — a `[Signature(Sigs.SetUnlockLinkValue)]` hook that detours the game's unlock-link writer. After calling the original, on a non-zero `value` it matches `data` against the `Unlockable` map's `UnlockLink` ids and, on first sight, records the unlock + fires the event + saves. This catches unlocks that happen mid-session (e.g. buying a hairstyle) without waiting for the next `Scan`.
+- **`IsUnlocked(CustomizeData, out time)`** (line 53) — returns `true` for any non-hairstyle/non-facepaint index and for non-purchasable rows; otherwise checks `_unlocked`, falling back to a lazy `IsUnlockedGame` (`IsUnlockLinkUnlocked`) check that records-on-hit (a second write site, like `ItemUnlockManager.IsUnlocked`).
+
 ### Implementation — Source Tracking
 
 | File | Role |
@@ -850,6 +845,7 @@ Filter equipment, weapon, and bonus item combo dropdowns to show only items the 
 - Per entry: `[ItemId (uint32)] [Timestamp (int64)] [Source (byte)]`
 - Backward compatible: v1/v2 files load with `ItemSource.All` default. v3 reads the source byte.
 - The non-source `Save()` overload (used by `CustomizeUnlockManager`) writes `0x00` as the source byte.
+- **Cross-endian load**: the magic is accepted in either byte order — `0x00C0FFEE` (native) or the byte-swapped `0xEEFFC000`. When the swapped magic is seen, `id` and `timestamp` are run through `RevertEndianness` per entry, so a file written on the opposite endianness still loads.
 
 ### Implementation — Pruning
 
@@ -1020,14 +1016,14 @@ Replaces the name-based equipment combo list with a compact **icon grid**. Click
 - **Grouping by model** (`GroupIconPickerByModel`, default `true`) — deduplicates items that share the same `(Type, PrimaryId, SecondaryId, Variant)`, keeping only the first after sorting
 - **Owned-only gate** runs before the filter for each item (fast reject)
 - **Preview-on-hover** — hovering an icon while CTRL is held previews the item (see [Preview-on-Hover](#2-preview-on-hover))
-- **Scroll behavior** — by default the popup's scroll position is forced to 0 for 2 frames after opening (prevents inheriting the previous popup's scroll). When `RememberIconPickerScroll` is enabled, the picker instead restores the per-`(slot, isWeapon, isBonus)` scroll position recorded the last time the user closed/switched the picker for that slot
+- **Scroll behavior** — by default the popup's scroll position is forced to 0 for 2 frames after opening (prevents inheriting the previous popup's scroll). When `RememberIconPickerScroll` is enabled, the picker instead restores the per-slot scroll position recorded the last time the user closed/switched the picker for that slot. Scroll is tracked by **two separate dictionaries** (`EquipmentDrawer.IconMode.cs:46-47`): `_iconPickerSlotScroll` keyed by `EquipSlot` and `_iconPickerBonusSlotScroll` keyed by `BonusItemFlag`. Weapons reuse `_iconPickerSlotScroll` keyed by their `EquipSlot` (MainHand/OffHand) — there is no `isWeapon`/`isBonus` component to the key
 - **Max rows** — popup height is capped at `IconPickerMaxRows` rows (default `10`), configurable via slider in Settings
 
 ### Implementation
 
 | File | Role |
 |------|------|
-| `Glamourer/GlamorousTerror/IconEquipment/EquipmentDrawer.IconMode.cs` | ~1000-line partial class extension of `EquipmentDrawer` — all icon mode state, filter/sort logic, popup/window layout, pin handling, item/bonus/weapon icon draws |
+| `Glamourer/GlamorousTerror/IconEquipment/EquipmentDrawer.IconMode.cs` | ~1085-line partial class extension of `EquipmentDrawer` — all icon mode state, filter/sort logic, popup/window layout, pin handling, item/bonus/weapon icon draws |
 | `Glamourer/Gui/Equipment/EquipmentDrawer.cs` | Upstream drawer declares `GTTryDrawEquipIcon`, `GTTryDrawBonusItemIcon`, `GTTryDrawWeaponsIcon`, `GTResetIconState` partial-method hooks that early-short-circuit when the icon drawer is active |
 | `Glamourer/GlamorousTerror/Config/SettingsTab.GT.cs` | Master toggle + sub-settings (Group by Model, Keep Picker Open, Max Rows slider) |
 
@@ -1043,7 +1039,7 @@ Replaces the name-based equipment combo list with a compact **icon grid**. Click
 | `_iconPickerSelectionMade` | Click-to-commit flag |
 | `_iconPickerClickY` | Vertical anchor point so the popup opens at the clicked icon's Y |
 | `_iconPickerScrollResetFrames` | Countdown that zeros `Im.Scroll.Y` for 2 frames after popup appears (when `RememberIconPickerScroll` is off) |
-| Per-slot scroll dictionaries | When `RememberIconPickerScroll` is on, the picker restores the previous scroll for the `(slot, isWeapon, isBonus)` key it was opened for |
+| `_iconPickerSlotScroll` (`Dictionary<EquipSlot, float>`) / `_iconPickerBonusSlotScroll` (`Dictionary<BonusItemFlag, float>`) | When `RememberIconPickerScroll` is on, the picker restores the previous scroll keyed by `EquipSlot` (armor + weapon slots) or `BonusItemFlag` (bonus slots) — no `isWeapon`/`isBonus` dimension in the key |
 | `_iconPickerNameFilter`, `_iconPickerFavoritesOnly`, `_iconPickerJobFilter`, `_iconPickerNeutralJobFilter`, `_iconPickerDyeChannelFilter`, `_iconPickerSortMode`, `_iconPickerShowSettings` | Filter & sort state |
 
 **Popup positioning** (`PositionIconPickerPopup`) opens the popup to the left or right of the source window's center (whichever side has more space), clamps the anchor inside the viewport, and sizes the popup to fit `IconPickerMaxRows` rows and 8 columns (`IconPickerColumns = 8`).
@@ -1413,7 +1409,7 @@ Called from `Open()` (gated on `DisableFirstPerson`), `Close()` (always — rest
 
 ## Configuration Summary
 
-All GlamorousTerror-specific properties live in `Glamourer/GlamorousTerror/Config/Configuration.GT.cs` (a partial of the upstream `Configuration` class). Fun Modes properties remain on the upstream `Configuration` partial.
+All GlamorousTerror-specific properties live in `Glamourer/GlamorousTerror/Config/Configuration.GT.cs` (a partial of the upstream `Configuration` class). The serialized Fun Modes bitmask (`EnabledCheats`) lives on the GT partial too; the upstream festival fields (`FestivalMode`, `LastFestivalPopup`) and the now-dead `Codes` list remain on the upstream `Configuration` partial.
 
 | Property | Type | Default | Feature |
 |----------|------|---------|---------|
@@ -1434,7 +1430,8 @@ All GlamorousTerror-specific properties live in `Glamourer/GlamorousTerror/Confi
 | `KeepIconPickerOpen` | `bool` | `false` | Icon Equipment Drawer |
 | `IconPickerPinned` | `bool` | `false` | Icon Equipment Drawer |
 | `RememberIconPickerScroll` | `bool` | `false` | Icon Equipment Drawer |
-| `Codes` | `List<(string Code, bool Enabled)>` | `[]` | Fun Modes (upstream — plaintext passphrase list) |
+| `EnabledCheats` | `CodeService.CodeFlag` | `0` | Fun Modes (the live serialized mode bitmask; `Configuration.GT.cs:49`) |
+| `Codes` | `List<(string Code, bool Enabled)>` | `[]` | Fun Modes (upstream — orphaned/dead plaintext passphrase list) |
 | `FestivalMode` | `FestivalSetting` | `Undefined` | Fun Modes (festivals; upstream) |
 | `LastFestivalPopup` | `DateOnly` | `MinValue` | Fun Modes (festivals; upstream) |
 | `EquipmentNameLanguage` | `EquipmentNameLanguage` | `GameDefault` | Equipment Language |

@@ -25,6 +25,7 @@ Glamourer/GlamorousTerror/
   ContextMenu/
     CharacterPopupMenu.cs        ← In-game character context menu (standalone)
     ContextMenuService.cs        ← Context menu hook service (standalone)
+    ContextMenuService.Shops.cs  ← "Try On" entry for shop/exchange menus (partial of ContextMenuService)
   EquipmentLanguage/
     ItemNameService.cs           ← Multi-language item name lookups (standalone)
   IconEquipment/
@@ -338,7 +339,7 @@ Upstream rewrites this file each version to append a new `Add1_X_Y_Z(Changelog)`
 
 ---
 
-## Configuration Field Conflicts (carried since 1.6.1.4, still present as of 1.6.1.6+)
+## Configuration Field Conflicts (carried since 1.6.1.4, still present as of 1.6.1.17)
 
 Upstream 1.6.1.4 introduced its own `EnableGameContextMenu` config field on `Configuration` (now at `Configuration.cs:39`). The duplicate field was removed from `Configuration.GT.cs`; the GT context-menu wiring (`contextMenuService.Enable/Disable()`) still hangs off the GT settings checkbox. Two checkboxes now bind to the same flag — upstream's (added in 1.6.1.4) and the GT one in `SettingsTab.GT.cs`. Consolidate before publish: pick one canonical checkbox and remove the other.
 
@@ -350,7 +351,7 @@ Upstream 1.6.1.4 introduced its own `EnableGameContextMenu` config field on `Con
 2. Snapshot `Glamourer/GlamorousTerror/` and the GT-modified upstream files into `_custom_backup/` (gitignored)
 3. Update submodules: fast-forward `Penumbra.GameData` and `Penumbra.String` pointers to the latest vanilla Ottermandias `upstream/main`. Both track upstream — wildcard support lives in `Glamourer/GlamorousTerror/WildcardAutomation/`.
 4. `git checkout <new-tag> -- <list-of-Glamourer/-paths>` and `git rm` upstream copies of files we keep in GT folders (`Unlocks/*`, `Interop/ContextMenuService.cs`)
-5. Re-apply hooks above. Verify partial method signatures match GT-folder declarations.
+5. Re-apply hooks above. Verify partial method signatures match GT-folder declarations. Preserve the GT `ContextMenuService` partials in `Glamourer/GlamorousTerror/ContextMenu/` (notably `ContextMenuService.Shops.cs`, which carries `GTTryAddShopItem`) — overlaying upstream's `Interop/ContextMenuService.cs` must not drop them.
 6. Restore the `AddGlamorousTerrorFeatures` block in `GlamourerChangelog.cs` (see #22) — upstream overwrites it on every version bump
 7. Build: `.\scripts\build\debug.ps1` until 0 errors / 0 warnings
 8. Smoke-test the Critical Invariants checklist from `CLAUDE.md` in-game
