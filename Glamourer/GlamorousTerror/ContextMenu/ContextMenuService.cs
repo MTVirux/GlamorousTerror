@@ -13,7 +13,7 @@ using Penumbra.GameData.Structs;
 
 namespace Glamourer.Interop;
 
-public sealed class ContextMenuService : IDisposable, IRequiredService
+public sealed partial class ContextMenuService : IDisposable, IRequiredService
 {
     public const int ChatLogContextItemId = 0x958;
 
@@ -54,7 +54,7 @@ public sealed class ContextMenuService : IDisposable, IRequiredService
             Name        = "Try On",
             OnClicked   = OnClick,
             IsSubmenu   = false,
-            PrefixColor = 541,
+            PrefixColor = SeStringBuilderExtensions.Purple,
         };
         _characterItem = new MenuItem
         {
@@ -64,7 +64,7 @@ public sealed class ContextMenuService : IDisposable, IRequiredService
             Name        = "Glamorous Terror",
             OnClicked   = OnCharacterClick,
             IsSubmenu   = false,
-            PrefixColor = 541,
+            PrefixColor = SeStringBuilderExtensions.Purple,
         };
         _immersiveDresserItem = new MenuItem
         {
@@ -74,7 +74,7 @@ public sealed class ContextMenuService : IDisposable, IRequiredService
             Name        = "Immersive Dresser",
             OnClicked   = OnImmersiveDresserClick,
             IsSubmenu   = false,
-            PrefixColor = 541,
+            PrefixColor = SeStringBuilderExtensions.Purple,
         };
     }
 
@@ -145,22 +145,9 @@ public sealed class ContextMenuService : IDisposable, IRequiredService
 
                     break;
                 }
-                case "InclusionShop":
-                {
-                    var agent = AgentRecipeItemContext.Instance();
-                    if (agent == null)
-                        return;
-
-                    if (HandleItem(agent->ResultItemId))
-                    {
-                        for (var i = 0; i < _lastStains.Length; ++i)
-                            _lastStains[i] = 0;
-                        args.AddMenuItem(_inventoryItem);
-                    }
-
-                    break;
-                }
             }
+
+            GTTryAddShopItem(args);
         }
     }
 

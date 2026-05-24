@@ -57,7 +57,8 @@ Right-clicking any player character in-game adds a **"Glamorous Terror"** entry 
 
 | File | Role |
 |------|------|
-| `Glamourer/GlamorousTerror/ContextMenu/ContextMenuService.cs` | Hooks Dalamud's `IContextMenu`. Adds a player-character entry ("Glamorous Terror"), a "Try On" entry on inventory/ItemSearch/ChatLog/RecipeNote/InclusionShop addons, and an "Immersive Dresser" entry on the local player only |
+| `Glamourer/GlamorousTerror/ContextMenu/ContextMenuService.cs` | Hooks Dalamud's `IContextMenu`. Adds a player-character entry ("Glamorous Terror"), a "Try On" entry on inventory/ItemSearch/ChatLog/RecipeNote addons, and an "Immersive Dresser" entry on the local player only. Partial class — store/exchange handling lives in `ContextMenuService.Shops.cs` |
+| `Glamourer/GlamorousTerror/ContextMenu/ContextMenuService.Shops.cs` | `GTTryAddShopItem` — adds the same "Try On" entry in vendor/exchange addons (`Shop`, `ShopExchangeItem`, `ShopExchangeCurrency`, `ShopExchangeCoin`, `GrandCompanyExchange`, `FreeCompanyExchange`, `InclusionShop`). Reads the hovered item from `AgentItemDetail.ItemId` (the tooltip agent), falling back to `AgentRecipeItemContext.ResultItemId`. Called from `OnMenuOpened`'s default branch |
 | `Glamourer/GlamorousTerror/ContextMenu/CharacterPopupMenu.cs` | ~1000-line custom ImGui popup with all menu logic |
 | `Glamourer/GlamorousTerror/PreviewOnHover/PreviewService.cs` | Preview engine shared with equipment/customization drawers |
 
@@ -65,7 +66,8 @@ Right-clicking any player character in-game adds a **"Glamorous Terror"** entry 
 
 - Character-type menus → `_characterItem` (`PrefixChar = 'G'`, name "Glamorous Terror"); the click handler fires `_popupMenu.Open(actor, name)`
 - Local-player character menus AND `EnableImmersiveDresser` is true → additionally append `_immersiveDresserItem`
-- Inventory / ItemSearch / ChatLog / RecipeNote / InclusionShop → `_inventoryItem` ("Try On"), which opens the on-self preview path
+- Inventory / ItemSearch / ChatLog / RecipeNote → `_inventoryItem` ("Try On"), which opens the on-self preview path
+- Vendor / exchange addons (`Shop`, `ShopExchangeItem`, `ShopExchangeCurrency`, `ShopExchangeCoin`, `GrandCompanyExchange`, `FreeCompanyExchange`, `InclusionShop`) → `GTTryAddShopItem` adds the same `_inventoryItem` ("Try On"). These addons do **not** populate `AgentRecipeItemContext`, so the item is read from `AgentItemDetail.ItemId` (the tooltip agent that tracks the hovered item), with `AgentRecipeItemContext.ResultItemId` as a fallback
 
 **CharacterPopupMenu** registers on `_uiBuilder.Draw += OnDraw` and renders an ImGui popup (`Im.Popup.Begin("GlamorousTerrorPopup")`). Key draw methods:
 
