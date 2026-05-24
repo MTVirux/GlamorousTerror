@@ -45,4 +45,6 @@ public sealed partial class Configuration
 
     public bool                                   OwnedOnlyComboFilter    { get; set; } = false;
     public Unlocks.ItemUnlockManager.ItemSource   OwnedComboFilterSources { get; set; } = Unlocks.ItemUnlockManager.ItemSource.All;
+
+    public Services.CodeService.CodeFlag          EnabledCheats           { get; set; } = 0;
 }
