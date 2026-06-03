@@ -104,7 +104,79 @@ public sealed partial class SettingsTab
                 "Maximum number of rows visible in the icon equipment picker popup before scrolling."u8);
         }
 
+        DrawUiActorMirrorSettings();
+
         Im.Line.New();
+    }
+
+    private void DrawUiActorMirrorSettings()
+    {
+        Im.Dummy(Vector2.Zero);
+        Im.Separator();
+        Im.Dummy(Vector2.Zero);
+
+        using var tree = Im.Tree.Node("UI Actors"u8);
+        if (!tree)
+            return;
+
+        Checkbox("Mirror Glamour onto UI Actors"u8,
+            "Master switch. When enabled, the character models shown in menus (character window, examine, fitting room, dye preview, adventurer plate, party/PvP banners) reflect your glamoured appearance instead of your real gear."u8,
+            config.MirrorUiActors, v => config.MirrorUiActors = v);
+
+        if (!config.MirrorUiActors)
+            return;
+
+        DrawSurfaceRow("Character Window"u8,
+            "Your own gear/character window."u8,
+            config.MirrorCharacterWindow, v => config.MirrorCharacterWindow = v,
+            config.MirrorCharacterWindowCustomize, v => config.MirrorCharacterWindowCustomize = v,
+            config.MirrorCharacterWindowGear, v => config.MirrorCharacterWindowGear = v);
+
+        DrawSurfaceRow("Examine"u8,
+            "Other players you inspect. Only applies a design if you have automation matching that player."u8,
+            config.MirrorExamine, v => config.MirrorExamine = v,
+            config.MirrorExamineCustomize, v => config.MirrorExamineCustomize = v,
+            config.MirrorExamineGear, v => config.MirrorExamineGear = v);
+
+        DrawSurfaceRow("Fitting Room"u8,
+            "The try-on window. The slot you are trying on is left untouched so the previewed item still shows."u8,
+            config.MirrorFittingRoom, v => config.MirrorFittingRoom = v,
+            config.MirrorFittingRoomCustomize, v => config.MirrorFittingRoomCustomize = v,
+            config.MirrorFittingRoomGear, v => config.MirrorFittingRoomGear = v);
+
+        DrawSurfaceRow("Dye Preview"u8,
+            "The dye preview window. The dyed slot is left untouched so the previewed dye still shows."u8,
+            config.MirrorDyePreview, v => config.MirrorDyePreview = v,
+            config.MirrorDyePreviewCustomize, v => config.MirrorDyePreviewCustomize = v,
+            config.MirrorDyePreviewGear, v => config.MirrorDyePreviewGear = v);
+
+        DrawSurfaceRow("Adventurer Plate"u8,
+            "Your own portrait shown on the adventurer plate / banner."u8,
+            config.MirrorAdventurerPlate, v => config.MirrorAdventurerPlate = v,
+            config.MirrorAdventurerPlateCustomize, v => config.MirrorAdventurerPlateCustomize = v,
+            config.MirrorAdventurerPlateGear, v => config.MirrorAdventurerPlateGear = v);
+
+        DrawSurfaceRow("Party / PvP Banners"u8,
+            "Group banner/card portraits. Mirrors your look for yourself and applies matching automation designs for other players shown."u8,
+            config.MirrorBanner, v => config.MirrorBanner = v,
+            config.MirrorBannerCustomize, v => config.MirrorBannerCustomize = v,
+            config.MirrorBannerGear, v => config.MirrorBannerGear = v);
+    }
+
+    private void DrawSurfaceRow(ReadOnlySpan<byte> label, ReadOnlySpan<byte> tooltip,
+        bool enabled, Action<bool> setEnabled,
+        bool customize, Action<bool> setCustomize,
+        bool gear, Action<bool> setGear)
+    {
+        using var id = Im.Id.Push(label);
+        Checkbox(label, tooltip, enabled, setEnabled);
+        if (!enabled)
+            return;
+
+        Checkbox("Customizations"u8, "Mirror body/face customizations (skin, hair, etc.) for this surface."u8,
+            customize, setCustomize);
+        Checkbox("Gear"u8, "Mirror equipment for this surface."u8,
+            gear, setGear);
     }
 
     private void DrawEquipmentLanguageSettings()
