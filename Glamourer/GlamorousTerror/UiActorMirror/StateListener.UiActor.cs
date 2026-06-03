@@ -1,5 +1,6 @@
 using Glamourer.Services;
 using Penumbra.GameData.Enums;
+using Penumbra.GameData.Interop;
 using Penumbra.GameData.Structs;
 
 namespace Glamourer.State;
@@ -72,5 +73,33 @@ public sealed partial class StateListener
                 armor[idx] = _gtUiState.ModelData.ArmorWithState(slot);
             }
         }
+    }
+
+    /// <summary>
+    /// Glamorous Terror: special UI actors (fitting room, dye preview, banners, …) reload their
+    /// equipment per slot through this hook after creation, which would overwrite the creation-time
+    /// mirror. Re-apply the glamoured armor here for the enabled, non-previewed slots, read-only.
+    /// </summary>
+    private partial void GTMirrorUiEquipSlot(Actor actor, EquipSlot slot, ref CharacterArmor armor)
+    {
+        if (!actor.Valid || actor.Index.Index < (ushort)ScreenActor.CharacterScreen)
+            return;
+
+        if (!_uiActorMirror.TryResolve(actor.GetIdentifier(_actors), out var realId, out var surface, out var mask) || !mask.Gear)
+            return;
+
+        if (surface is UiActorSurface.FittingRoom or UiActorSurface.DyePreview)
+        {
+            // Leave the slot the try-on/dye window is previewing; bail if we cannot read which it is.
+            if (!_uiActorMirror.TryGetPreviewedSlotMask(out var previewMask))
+                return;
+
+            var idx = (int)slot.ToIndex();
+            if (idx is >= 0 and < 10 && (previewMask & (1 << idx)) != 0)
+                return;
+        }
+
+        if (_manager.TryGetValue(realId, out var state))
+            armor = state.ModelData.ArmorWithState(slot);
     }
 }
