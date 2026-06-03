@@ -62,7 +62,7 @@ public sealed partial class StateListener : IDisposable, IRequiredService
     private ActorState?     _customizeState;
 
     // Glamorous Terror: UI actor glamour mirroring (implemented in GlamorousTerror/UiActorMirror/StateListener.UiActor.cs).
-    private unsafe partial void GTRemapUiActor(nint customizePtr, nint equipDataPtr);
+    private partial void GTResolveUiActor();
     private unsafe partial void GTApplyUiActor(nint customizePtr, nint equipDataPtr);
 
     public StateListener(StateManager manager, ItemManager items, PenumbraService penumbra, ActorManager actors, Configuration config,
@@ -134,7 +134,7 @@ public sealed partial class StateListener : IDisposable, IRequiredService
             return;
 
         _creatingIdentifier = actor.GetIdentifier(_actors);
-        GTRemapUiActor(customizePtr, equipDataPtr);
+        GTResolveUiActor();
         ref var modelId   = ref *(uint*)modelPtr;
         ref var customize = ref *(CustomizeArray*)customizePtr;
         if (_autoDesignApplier.Reduce(actor, _creatingIdentifier, out _creatingState))
@@ -157,9 +157,10 @@ public sealed partial class StateListener : IDisposable, IRequiredService
                     break;
             }
 
-            GTApplyUiActor(customizePtr, equipDataPtr);
             _creatingState.TempUnlock();
         }
+
+        GTApplyUiActor(customizePtr, equipDataPtr);
 
         _funModule.ApplyFunOnLoad(actor, new Span<CharacterArmor>((void*)equipDataPtr, 10), ref customize);
         if (modelId is 0 && _creatingState is not { IsLocked: true })

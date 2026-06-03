@@ -6,27 +6,32 @@ namespace Glamourer.State;
 
 public sealed partial class StateListener
 {
-    private bool                      _gtUiActive;
-    private UiActorMask               _gtUiMask;
-    private bool                      _gtUiGearAllowed;
-    private ushort                    _gtUiPreviewMask;
-    private CustomizeArray            _gtUiCustomizeSnapshot;
-    private readonly CharacterArmor[] _gtUiEquipSnapshot = new CharacterArmor[10];
+    private bool        _gtUiActive;
+    private UiActorMask _gtUiMask;
+    private bool        _gtUiGearAllowed;
+    private ushort      _gtUiPreviewMask;
+    private ActorState? _gtUiState;
 
     /// <summary>
-    /// Glamorous Terror: if the actor being created is a special UI/menu actor and its surface is
-    /// enabled, snapshot the original buffers and remap <see cref="_creatingIdentifier"/> to the
-    /// real character so the normal Reduce + apply path resolves that character's glamour state.
+    /// Glamorous Terror: detect a special UI/menu actor and look up (read-only) the real character's
+    /// glamour state. Deliberately does NOT touch <see cref="_creatingIdentifier"/>, so the upstream
+    /// Reduce/UpdateBaseData path stays skipped for the special actor and the real character's state
+    /// is never mutated — only the UI actor's transient draw buffers are written, in GTApplyUiActor.
     /// </summary>
-    private unsafe partial void GTRemapUiActor(nint customizePtr, nint equipDataPtr)
+    private partial void GTResolveUiActor()
     {
         _gtUiActive      = false;
         _gtUiGearAllowed = false;
         _gtUiPreviewMask = 0;
+        _gtUiState       = null;
 
         if (!_uiActorMirror.TryResolve(_creatingIdentifier, out var realId, out var surface, out var mask))
             return;
 
+        if (!_manager.TryGetValue(realId, out var state))
+            return;
+
+        _gtUiState       = state;
         _gtUiMask        = mask;
         _gtUiGearAllowed = mask.Gear;
 
@@ -38,41 +43,34 @@ public sealed partial class StateListener
                 _gtUiGearAllowed = false;
         }
 
-        // Snapshot the game's original buffers before the apply path overwrites them, so disabled
-        // aspects and previewed slots can be restored deterministically in GTApplyUiActor.
-        _gtUiCustomizeSnapshot = *(CustomizeArray*)customizePtr;
-        var srcArmor = (CharacterArmor*)equipDataPtr;
-        for (var i = 0; i < 10; ++i)
-            _gtUiEquipSnapshot[i] = srcArmor[i];
-
-        _gtUiActive         = true;
-        _creatingIdentifier = realId;
+        _gtUiActive = true;
     }
 
     /// <summary>
-    /// Glamorous Terror: author every aspect of the UI actor's customize/equip buffers — glamour
-    /// from the resolved state for enabled, non-previewed aspects, and the original snapshot for
-    /// disabled aspects and previewed slots. Deterministic regardless of the upstream branch taken.
+    /// Glamorous Terror: write the resolved glamour into the special UI actor's draw buffers for the
+    /// enabled aspects only. Disabled aspects and previewed slots keep the game's original values,
+    /// since the upstream apply path is skipped for these actors and leaves the buffers untouched.
     /// </summary>
     private unsafe partial void GTApplyUiActor(nint customizePtr, nint equipDataPtr)
     {
-        if (!_gtUiActive || _creatingState is null)
+        if (!_gtUiActive || _gtUiState is null)
             return;
 
-        *(CustomizeArray*)customizePtr =
-            _gtUiMask.Customize ? _creatingState.ModelData.Customize : _gtUiCustomizeSnapshot;
+        if (_gtUiMask.Customize)
+            *(CustomizeArray*)customizePtr = _gtUiState.ModelData.Customize;
 
-        var armor = (CharacterArmor*)equipDataPtr;
-        foreach (var slot in EquipSlotExtensions.EqdpSlots)
+        if (_gtUiGearAllowed)
         {
-            var idx = (int)slot.ToIndex();
-            if (idx is < 0 or >= 10)
-                continue;
-
-            var previewed = (_gtUiPreviewMask & (1 << idx)) != 0;
-            armor[idx] = _gtUiGearAllowed && !previewed
-                ? _creatingState.ModelData.ArmorWithState(slot)
-                : _gtUiEquipSnapshot[idx];
+            var armor = (CharacterArmor*)equipDataPtr;
+            foreach (var slot in EquipSlotExtensions.EqdpSlots)
+            {
+                var idx = (int)slot.ToIndex();
+                if (idx is < 0 or >= 10)
+                    continue;
+                if ((_gtUiPreviewMask & (1 << idx)) != 0)
+                    continue;
+                armor[idx] = _gtUiState.ModelData.ArmorWithState(slot);
+            }
         }
     }
 }
