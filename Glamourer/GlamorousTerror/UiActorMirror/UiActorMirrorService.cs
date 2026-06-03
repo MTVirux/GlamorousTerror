@@ -35,9 +35,9 @@ public sealed class UiActorMirrorService(ActorManager actors, Configuration conf
     }
 
     /// <summary> Compute the previewed-slot bitmask for try-on / dye surfaces. </summary>
-    /// <returns> True if detection succeeded (mask valid); false if the try-on agent is unavailable. </returns>
-    public bool TryGetPreviewedSlotMask(out ushort mask)
-        => previewSlots.TryGetPreviewedSlotMask(out mask);
+    /// <returns> True if detection succeeded; false if the try-on agent is unavailable. </returns>
+    public bool TryGetPreviewState(out ushort previewMask, out bool displayGear)
+        => previewSlots.TryGetPreviewState(out previewMask, out displayGear);
 
     private UiActorSurface DetermineSurface(ScreenActor screen, out ActorIdentifier realId)
     {

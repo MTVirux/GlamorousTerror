@@ -38,9 +38,11 @@ public sealed partial class StateListener
 
         if (mask.Gear && surface is UiActorSurface.FittingRoom or UiActorSurface.DyePreview)
         {
-            // Preserve the slot(s) the game is actively previewing. If the agent cannot be read,
-            // fall back to customizations-only for these surfaces rather than clobbering the preview.
-            if (!_uiActorMirror.TryGetPreviewedSlotMask(out _gtUiPreviewMask))
+            // Respect the window's "show other gear" toggle and preserve the previewed slot. If the
+            // agent cannot be read, fall back to customizations-only rather than clobbering the preview.
+            if (_uiActorMirror.TryGetPreviewState(out _gtUiPreviewMask, out var displayGear))
+                _gtUiGearAllowed = displayGear;
+            else
                 _gtUiGearAllowed = false;
         }
 
@@ -90,8 +92,9 @@ public sealed partial class StateListener
 
         if (surface is UiActorSurface.FittingRoom or UiActorSurface.DyePreview)
         {
-            // Leave the slot the try-on/dye window is previewing; bail if we cannot read which it is.
-            if (!_uiActorMirror.TryGetPreviewedSlotMask(out var previewMask))
+            // Honour the "show other gear" toggle; leave the slot the window is previewing. Bail if
+            // the agent is unreadable or other gear is hidden, so the game's own display stands.
+            if (!_uiActorMirror.TryGetPreviewState(out var previewMask, out var displayGear) || !displayGear)
                 return;
 
             var idx = (int)slot.ToIndex();
