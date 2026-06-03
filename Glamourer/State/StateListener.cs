@@ -65,6 +65,7 @@ public sealed partial class StateListener : IDisposable, IRequiredService
     private partial void GTResolveUiActor();
     private unsafe partial void GTApplyUiActor(nint customizePtr, nint equipDataPtr);
     private partial void GTMirrorUiEquipSlot(Actor actor, EquipSlot slot, ref CharacterArmor armor);
+    private partial void GTMirrorUiBonusSlot(Actor actor, BonusItemFlag slot, ref CharacterArmor armor);
 
     public StateListener(StateManager manager, ItemManager items, PenumbraService penumbra, ActorManager actors, Configuration config,
         EquipSlotUpdating equipSlotUpdating, GearsetDataLoaded gearsetDataLoaded, WeaponLoading weaponLoading, VisorStateChanged visorState,
@@ -256,6 +257,7 @@ public sealed partial class StateListener : IDisposable, IRequiredService
     private void OnBonusSlotUpdating(in BonusSlotUpdating.Arguments arguments)
     {
         var actor = _penumbra.GameObjectFromDrawObject(arguments.Model);
+        GTMirrorUiBonusSlot(actor, arguments.Slot, ref arguments.Armor);
         if (_condition[ConditionFlag.CreatingCharacter] && actor.Index >= ObjectIndex.CutsceneStart)
             return;
 
