@@ -145,10 +145,10 @@ public sealed partial class SettingsTab
             config.MirrorFittingRoomGear, v => config.MirrorFittingRoomGear = v);
 
         DrawSurfaceRow("Dye Preview"u8,
-            "The dye preview window. The dyed slot is left untouched so the previewed dye still shows."u8,
+            "The dye preview window. Only customizations are mirrored here — the window shows the item set being dyed, so its gear is left untouched."u8,
             config.MirrorDyePreview, v => config.MirrorDyePreview = v,
             config.MirrorDyePreviewCustomize, v => config.MirrorDyePreviewCustomize = v,
-            config.MirrorDyePreviewGear, v => config.MirrorDyePreviewGear = v);
+            false, null);
 
         DrawSurfaceRow("Adventurer Plate"u8,
             "Your own portrait shown on the adventurer plate / banner."u8,
@@ -166,7 +166,7 @@ public sealed partial class SettingsTab
     private void DrawSurfaceRow(ReadOnlySpan<byte> label, ReadOnlySpan<byte> tooltip,
         bool enabled, Action<bool> setEnabled,
         bool customize, Action<bool> setCustomize,
-        bool gear, Action<bool> setGear)
+        bool gear, Action<bool>? setGear)
     {
         using var id = Im.Id.Push(label);
         Checkbox(label, tooltip, enabled, setEnabled);
@@ -175,8 +175,8 @@ public sealed partial class SettingsTab
 
         Checkbox("Customizations"u8, "Mirror body/face customizations (skin, hair, etc.) for this surface."u8,
             customize, setCustomize);
-        Checkbox("Gear"u8, "Mirror equipment for this surface."u8,
-            gear, setGear);
+        if (setGear != null)
+            Checkbox("Gear"u8, "Mirror equipment for this surface."u8, gear, setGear);
     }
 
     private void DrawEquipmentLanguageSettings()

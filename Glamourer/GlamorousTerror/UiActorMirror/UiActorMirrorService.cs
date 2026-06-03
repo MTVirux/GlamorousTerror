@@ -77,7 +77,7 @@ public sealed class UiActorMirrorService(ActorManager actors, Configuration conf
             UiActorSurface.CharacterWindow => (config.MirrorCharacterWindow, config.MirrorCharacterWindowCustomize, config.MirrorCharacterWindowGear),
             UiActorSurface.Examine         => (config.MirrorExamine,         config.MirrorExamineCustomize,         config.MirrorExamineGear),
             UiActorSurface.FittingRoom     => (config.MirrorFittingRoom,     config.MirrorFittingRoomCustomize,     config.MirrorFittingRoomGear),
-            UiActorSurface.DyePreview      => (config.MirrorDyePreview,      config.MirrorDyePreviewCustomize,      config.MirrorDyePreviewGear),
+            UiActorSurface.DyePreview      => (config.MirrorDyePreview,      config.MirrorDyePreviewCustomize,      false),
             UiActorSurface.AdventurerPlate => (config.MirrorAdventurerPlate, config.MirrorAdventurerPlateCustomize, config.MirrorAdventurerPlateGear),
             UiActorSurface.Banner          => (config.MirrorBanner,          config.MirrorBannerCustomize,          config.MirrorBannerGear),
             _                              => (false, false, false),

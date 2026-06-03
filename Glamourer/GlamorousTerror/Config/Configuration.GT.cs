@@ -65,7 +65,6 @@ public sealed partial class Configuration
 
     public bool MirrorDyePreview          { get; set; } = false;
     public bool MirrorDyePreviewCustomize { get; set; } = true;
-    public bool MirrorDyePreviewGear      { get; set; } = true;
 
     public bool MirrorAdventurerPlate          { get; set; } = false;
     public bool MirrorAdventurerPlateCustomize { get; set; } = true;
