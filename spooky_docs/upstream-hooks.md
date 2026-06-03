@@ -45,6 +45,11 @@ Glamourer/GlamorousTerror/
     DesignPreviewService.cs      ← Design preview orchestration (standalone)
     EquipmentDrawer.Preview.cs   ← Equipment hover preview (partial of EquipmentDrawer)
     PreviewService.cs            ← Core preview state machine (standalone)
+  UiActorMirror/
+    StateListener.UiActor.cs     ← UI actor remap + glamour write (partial of StateListener)
+    UiActorMirrorService.cs      ← Surface resolution + mirroring mask (standalone)
+    UiActorPreviewSlots.cs       ← Try-on/dye previewed-slot detection (standalone)
+    UiActorSurface.cs            ← UiActorSurface enum + UiActorMask record (standalone)
   WildcardAutomation/
     AutoDesignApplier.Wildcard.cs ← Wildcard name matching (partial of AutoDesignApplier)
     GTActorIdentifierJson.cs      ← Wildcard-aware JSON deserialization wrapper
@@ -336,6 +341,24 @@ Upstream rewrites this file each version to append a new `Add1_X_Y_Z(Changelog)`
 - In the constructor, append `AddGlamorousTerrorFeatures(Changelog);` as the **last** call, after the newest upstream `Add1_X_Y_Z(Changelog);`
 - Re-add the `AddGlamorousTerrorFeatures(Changelog log)` method (titled `"Glamorous Terror Features"u8`) — the canonical entry list lives in this file on `main` and should be copied forward verbatim, then extended with any new GT features added during the port
 - Change the `new Changelog(...)` window title to `"Glamourer Changelog (synced with upstream Glamourer X.Y.Z.W)"`, bumping `X.Y.Z.W` to the upstream version just overlaid
+
+### 23. `Glamourer/State/StateListener.cs`
+
+Powers UI Actor Glamour Mirroring (object indices 440–447 → `IdentifierType.Special`). Upstream rewrites `OnCreatingCharacterBase` periodically, so re-apply all of the following after an overlay:
+
+- Add `partial` to the class declaration: `public sealed partial class StateListener : IDisposable, IRequiredService`
+- **Constructor**: add the trailing parameter `UiActorMirrorService uiActorMirror`, add the field `private readonly UiActorMirrorService _uiActorMirror;`, and assign `_uiActorMirror = uiActorMirror;` in the body (before `Subscribe();`)
+- **Partial-method declarations** (alongside the other fields):
+  ```csharp
+  // Glamorous Terror: UI actor glamour mirroring (implemented in GlamorousTerror/UiActorMirror/StateListener.UiActor.cs).
+  private partial void GTRemapUiActor();
+  private unsafe partial void GTApplyUiActor(nint customizePtr, nint equipDataPtr);
+  ```
+- **Two call sites in `OnCreatingCharacterBase`**:
+  - `GTRemapUiActor();` **immediately after** `_creatingIdentifier = actor.GetIdentifier(_actors);` — this rewrites `_creatingIdentifier` to the real character so the existing `_autoDesignApplier.Reduce(actor, _creatingIdentifier, out _creatingState)` resolves that character's glamour.
+  - `GTApplyUiActor(customizePtr, equipDataPtr);` **after** the `switch (UpdateBaseData(actor, _creatingState, modelId, customizePtr, equipDataPtr))` block and **before** `_creatingState.TempUnlock();` (i.e. inside the `if (_autoDesignApplier.Reduce(...))` branch, as the last statement before `TempUnlock`).
+
+**Implementations live in**: `Glamourer/GlamorousTerror/UiActorMirror/StateListener.UiActor.cs`. The remap delegates to `UiActorMirrorService.TryResolve` (surface + mask) and `UiActorPreviewSlots.TryGetPreviewedSlotMask` (try-on/dye slots to preserve); the apply authoritatively writes `_creatingState.ModelData` into the customize/equip buffers for the enabled aspects, skipping previewed slots. Both no-op when `MirrorUiActors` is off or the actor is not a mirrored surface. The feature is render-only — nothing here is persisted.
 
 ---
 
