@@ -47,4 +47,31 @@ public sealed partial class Configuration
     public Unlocks.ItemUnlockManager.ItemSource   OwnedComboFilterSources { get; set; } = Unlocks.ItemUnlockManager.ItemSource.All;
 
     public Services.CodeService.CodeFlag          EnabledCheats           { get; set; } = 0;
+
+    // --- UI Actor Glamour Mirroring (Glamorous Terror) ---
+    public bool MirrorUiActors { get; set; } = false;
+
+    public bool MirrorCharacterWindow          { get; set; } = false;
+    public bool MirrorCharacterWindowCustomize { get; set; } = true;
+    public bool MirrorCharacterWindowGear      { get; set; } = true;
+
+    public bool MirrorExamine          { get; set; } = false;
+    public bool MirrorExamineCustomize { get; set; } = true;
+    public bool MirrorExamineGear      { get; set; } = true;
+
+    public bool MirrorFittingRoom          { get; set; } = false;
+    public bool MirrorFittingRoomCustomize { get; set; } = true;
+    public bool MirrorFittingRoomGear      { get; set; } = true;
+
+    public bool MirrorDyePreview          { get; set; } = false;
+    public bool MirrorDyePreviewCustomize { get; set; } = true;
+    public bool MirrorDyePreviewGear      { get; set; } = true;
+
+    public bool MirrorAdventurerPlate          { get; set; } = false;
+    public bool MirrorAdventurerPlateCustomize { get; set; } = true;
+    public bool MirrorAdventurerPlateGear      { get; set; } = true;
+
+    public bool MirrorBanner          { get; set; } = false;
+    public bool MirrorBannerCustomize { get; set; } = true;
+    public bool MirrorBannerGear      { get; set; } = true;
 }
