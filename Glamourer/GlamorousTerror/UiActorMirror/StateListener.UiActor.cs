@@ -6,17 +6,19 @@ namespace Glamourer.State;
 
 public sealed partial class StateListener
 {
-    private bool         _gtUiActive;
-    private UiActorMask  _gtUiMask;
-    private bool         _gtUiGearAllowed;
-    private ushort       _gtUiPreviewMask;
+    private bool                      _gtUiActive;
+    private UiActorMask               _gtUiMask;
+    private bool                      _gtUiGearAllowed;
+    private ushort                    _gtUiPreviewMask;
+    private CustomizeArray            _gtUiCustomizeSnapshot;
+    private readonly CharacterArmor[] _gtUiEquipSnapshot = new CharacterArmor[10];
 
     /// <summary>
     /// Glamorous Terror: if the actor being created is a special UI/menu actor and its surface is
-    /// enabled, remap <see cref="_creatingIdentifier"/> to the real character so the normal
-    /// Reduce + apply path resolves that character's glamour state.
+    /// enabled, snapshot the original buffers and remap <see cref="_creatingIdentifier"/> to the
+    /// real character so the normal Reduce + apply path resolves that character's glamour state.
     /// </summary>
-    private partial void GTRemapUiActor()
+    private unsafe partial void GTRemapUiActor(nint customizePtr, nint equipDataPtr)
     {
         _gtUiActive      = false;
         _gtUiGearAllowed = false;
@@ -32,40 +34,45 @@ public sealed partial class StateListener
         {
             // Preserve the slot(s) the game is actively previewing. If the agent cannot be read,
             // fall back to customizations-only for these surfaces rather than clobbering the preview.
-            if (_uiActorMirror.TryGetPreviewedSlotMask(out _gtUiPreviewMask))
-            { /* keep gear; previewed slots are skipped in GTApplyUiActor */ }
-            else
+            if (!_uiActorMirror.TryGetPreviewedSlotMask(out _gtUiPreviewMask))
                 _gtUiGearAllowed = false;
         }
+
+        // Snapshot the game's original buffers before the apply path overwrites them, so disabled
+        // aspects and previewed slots can be restored deterministically in GTApplyUiActor.
+        _gtUiCustomizeSnapshot = *(CustomizeArray*)customizePtr;
+        var srcArmor = (CharacterArmor*)equipDataPtr;
+        for (var i = 0; i < 10; ++i)
+            _gtUiEquipSnapshot[i] = srcArmor[i];
 
         _gtUiActive         = true;
         _creatingIdentifier = realId;
     }
 
     /// <summary>
-    /// Glamorous Terror: authoritatively write the resolved glamour state into the UI actor's
-    /// customize/equip buffers for the enabled aspects, skipping any previewed slots.
+    /// Glamorous Terror: author every aspect of the UI actor's customize/equip buffers — glamour
+    /// from the resolved state for enabled, non-previewed aspects, and the original snapshot for
+    /// disabled aspects and previewed slots. Deterministic regardless of the upstream branch taken.
     /// </summary>
     private unsafe partial void GTApplyUiActor(nint customizePtr, nint equipDataPtr)
     {
         if (!_gtUiActive || _creatingState is null)
             return;
 
-        if (_gtUiMask.Customize)
-            *(CustomizeArray*)customizePtr = _creatingState.ModelData.Customize;
+        *(CustomizeArray*)customizePtr =
+            _gtUiMask.Customize ? _creatingState.ModelData.Customize : _gtUiCustomizeSnapshot;
 
-        if (_gtUiGearAllowed)
+        var armor = (CharacterArmor*)equipDataPtr;
+        foreach (var slot in EquipSlotExtensions.EqdpSlots)
         {
-            var armor = (CharacterArmor*)equipDataPtr;
-            foreach (var slot in EquipSlotExtensions.EqdpSlots)
-            {
-                var idx = (int)slot.ToIndex();
-                if (idx is < 0 or >= 10)
-                    continue;
-                if ((_gtUiPreviewMask & (1 << idx)) != 0)
-                    continue;
-                armor[idx] = _creatingState.ModelData.ArmorWithState(slot);
-            }
+            var idx = (int)slot.ToIndex();
+            if (idx is < 0 or >= 10)
+                continue;
+
+            var previewed = (_gtUiPreviewMask & (1 << idx)) != 0;
+            armor[idx] = _gtUiGearAllowed && !previewed
+                ? _creatingState.ModelData.ArmorWithState(slot)
+                : _gtUiEquipSnapshot[idx];
         }
     }
 }
