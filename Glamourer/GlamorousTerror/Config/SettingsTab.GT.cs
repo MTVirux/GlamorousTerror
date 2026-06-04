@@ -126,6 +126,8 @@ public sealed partial class SettingsTab
         if (!config.MirrorUiActors)
             return;
 
+        using var indent = Im.Indent();
+
         DrawSurfaceRow("Character Window"u8,
             "Your own gear/character window."u8,
             config.MirrorCharacterWindow, v => config.MirrorCharacterWindow = v,
