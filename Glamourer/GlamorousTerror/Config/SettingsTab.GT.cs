@@ -173,6 +173,7 @@ public sealed partial class SettingsTab
         if (!enabled)
             return;
 
+        using var indent = Im.Indent();
         Checkbox("Customizations"u8, "Mirror body/face customizations (skin, hair, etc.) for this surface."u8,
             customize, setCustomize);
         if (setGear != null)
