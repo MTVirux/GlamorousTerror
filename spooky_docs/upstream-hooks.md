@@ -46,10 +46,10 @@ Glamourer/GlamorousTerror/
     EquipmentDrawer.Preview.cs   ← Equipment hover preview (partial of EquipmentDrawer)
     PreviewService.cs            ← Core preview state machine (standalone)
   UiActorMirror/
-    StateListener.UiActor.cs     ← UI actor remap + glamour write (partial of StateListener)
-    UiActorMirrorService.cs      ← Surface resolution + mirroring mask (standalone)
-    UiActorPreviewSlots.cs       ← Try-on/dye previewed-slot detection (standalone)
+    StateListener.UiActor.cs     ← Read-only UI actor glamour mirror, 5 hooks (partial of StateListener)
+    UiActorMirrorService.cs      ← Special-id resolution + per-surface mirroring mask (standalone IService)
     UiActorSurface.cs            ← UiActorSurface enum + UiActorMask record (standalone)
+    ColorantPreviewService.cs    ← Dye-preview (index 443) customize mirror via CharaView.SetModelData hook (standalone)
   WildcardAutomation/
     AutoDesignApplier.Wildcard.cs ← Wildcard name matching (partial of AutoDesignApplier)
     GTActorIdentifierJson.cs      ← Wildcard-aware JSON deserialization wrapper
@@ -344,21 +344,28 @@ Upstream rewrites this file each version to append a new `Add1_X_Y_Z(Changelog)`
 
 ### 23. `Glamourer/State/StateListener.cs`
 
-Powers UI Actor Glamour Mirroring (object indices 440–447 → `IdentifierType.Special`). Upstream rewrites `OnCreatingCharacterBase` periodically, so re-apply all of the following after an overlay:
+Powers UI Actor Glamour Mirroring (object indices 440–447 → `IdentifierType.Special`). Upstream rewrites `OnCreatingCharacterBase`, `OnEquipSlotUpdating`, `OnBonusSlotUpdating`, and `OnWeaponLoading` periodically, so re-apply all of the following after an overlay:
 
 - Add `partial` to the class declaration: `public sealed partial class StateListener : IDisposable, IRequiredService`
 - **Constructor**: add the trailing parameter `UiActorMirrorService uiActorMirror`, add the field `private readonly UiActorMirrorService _uiActorMirror;`, and assign `_uiActorMirror = uiActorMirror;` in the body (before `Subscribe();`)
-- **Partial-method declarations** (alongside the other fields):
+- **Five partial-method declarations** (alongside the other fields):
   ```csharp
   // Glamorous Terror: UI actor glamour mirroring (implemented in GlamorousTerror/UiActorMirror/StateListener.UiActor.cs).
-  private partial void GTRemapUiActor();
+  private partial void GTResolveUiActor();
   private unsafe partial void GTApplyUiActor(nint customizePtr, nint equipDataPtr);
+  private partial void GTMirrorUiEquipSlot(Actor actor, EquipSlot slot, ref CharacterArmor armor);
+  private partial void GTMirrorUiBonusSlot(Actor actor, BonusItemFlag slot, ref CharacterArmor armor);
+  private partial void GTMirrorUiWeapon(Actor actor, EquipSlot slot, ref CharacterWeapon weapon);
   ```
-- **Two call sites in `OnCreatingCharacterBase`**:
-  - `GTRemapUiActor();` **immediately after** `_creatingIdentifier = actor.GetIdentifier(_actors);` — this rewrites `_creatingIdentifier` to the real character so the existing `_autoDesignApplier.Reduce(actor, _creatingIdentifier, out _creatingState)` resolves that character's glamour.
-  - `GTApplyUiActor(customizePtr, equipDataPtr);` **after** the `switch (UpdateBaseData(actor, _creatingState, modelId, customizePtr, equipDataPtr))` block and **before** `_creatingState.TempUnlock();` (i.e. inside the `if (_autoDesignApplier.Reduce(...))` branch, as the last statement before `TempUnlock`).
+- **Call sites**:
+  - `OnCreatingCharacterBase`: `GTResolveUiActor();` **immediately after** `_creatingIdentifier = actor.GetIdentifier(_actors);`, and `GTApplyUiActor(customizePtr, equipDataPtr);` **after** the `if (_autoDesignApplier.Reduce(...)) { … }` block.
+  - `OnEquipSlotUpdating`: `GTMirrorUiEquipSlot(actor, arguments.Slot, ref arguments.Armor);` **after** `var actor = _penumbra.GameObjectFromDrawObject(arguments.Model);`.
+  - `OnBonusSlotUpdating`: `GTMirrorUiBonusSlot(actor, arguments.Slot, ref arguments.Armor);` **after** `var actor = _penumbra.GameObjectFromDrawObject(arguments.Model);`.
+  - `OnWeaponLoading`: `GTMirrorUiWeapon(arguments.Actor, arguments.Slot, ref arguments.Weapon);` **after** the CreatingCharacter guard.
 
-**Implementations live in**: `Glamourer/GlamorousTerror/UiActorMirror/StateListener.UiActor.cs`. The remap delegates to `UiActorMirrorService.TryResolve` (surface + mask) and `UiActorPreviewSlots.TryGetPreviewedSlotMask` (try-on/dye slots to preserve); the apply authoritatively writes `_creatingState.ModelData` into the customize/equip buffers for the enabled aspects, skipping previewed slots. Both no-op when `MirrorUiActors` is off or the actor is not a mirrored surface. The feature is render-only — nothing here is persisted.
+**Implementations live in**: `Glamourer/GlamorousTerror/UiActorMirror/StateListener.UiActor.cs`. All five hooks delegate to `UiActorMirrorService.TryResolve` (surface + mask) and then look up the resolved character's `ActorState` **read-only** via `_manager.TryGetValue`, writing the glamour into the UI actor's transient draw buffers. **`GTResolveUiActor` deliberately does NOT remap `_creatingIdentifier`** — it stays `Special`, so upstream's stateful `Reduce`/`UpdateBaseData` never runs against the player's real state. The per-slot equip/bonus/weapon hooks re-mirror after creation because special UI actors reload those buffers per slot. All hooks no-op when `MirrorUiActors` is off, the actor is below `ScreenActor.CharacterScreen`, the surface is not mirrored, or (except customize) the surface's gear flag is off. Render-only — nothing here is persisted.
+
+**Not in this list**: `ColorantPreviewService` (dye-preview surface, index 443) hooks the game function `CharaView.SetModelData` **directly**, not via `StateListener`, so it is unaffected by an overlay of this file.
 
 ---
 

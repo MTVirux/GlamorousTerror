@@ -33,7 +33,7 @@ Fork-specific code lives under `Glamourer/GlamorousTerror/` and is organized by 
 | `IconEquipment/` | `EquipmentDrawer.IconMode.cs` (icon grid + icon picker popup) |
 | `ImmersiveDresser/` | `ImmersiveDresserWindow.cs` (manager + 3 panel classes) |
 | `CharacterRotation/` | `RotationService.cs`, `RotationDrawer.cs` |
-| `UiActorMirror/` | `UiActorMirrorService.cs`, `UiActorPreviewSlots.cs`, `UiActorSurface.cs`, `StateListener.UiActor.cs` (UI/menu actor glamour mirroring) |
+| `UiActorMirror/` | `UiActorMirrorService.cs`, `UiActorSurface.cs`, `StateListener.UiActor.cs`, `ColorantPreviewService.cs` (UI/menu actor glamour mirroring) |
 | `Config/` | `Configuration.GT.cs` (GT-only fields), `SettingsTab.GT.cs` (GT section UI) |
 
 Upstream-shaped code that needed hooks to call into fork code uses the partial-class + partial-method pattern (e.g., `EquipmentDrawer` has `GTTryDrawEquipIcon`, `GTResetIconState`, `GTCaptureStainSlot`, `GTPreFilterItem`, etc. — implemented in the GT folder, declared in the upstream file).
@@ -1411,73 +1411,74 @@ Called from `Open()` (gated on `DisableFirstPerson`), `Close()` (always — rest
 
 ## 12. UI Actor Glamour Mirroring
 
-Makes the character models the game renders inside menus reflect a character's glamoured appearance instead of their real, equipped gear. These "UI actors" are special menu actors — object indices 440–447, which resolve to `IdentifierType.Special` — that FFXIV spawns to preview a character in a window. Out of the box they show the real character; with mirroring on they show whatever glamour Glamourer has active for that character.
+Makes the character models the game renders inside menus reflect a character's glamoured appearance instead of their real, equipped gear. These "UI actors" are special menu actors — object indices 440–447, which resolve to `IdentifierType.Special` — that FFXIV spawns to preview a character in a window. Out of the box they show the real character; with mirroring on they show whatever glamour Glamourer already has active for that character.
+
+The mechanism is a **read-only mirror with no identifier remap**: the UI actor's identifier stays `Special`, GT looks up the resolved character's existing `ActorState` read-only, and writes the glamour into the UI actor's transient draw buffers. Nothing is persisted and the real character's state is never touched (see [Critical Invariant — no remap](#no-identifier-remap-critical) below).
 
 ### Surfaces
 
-Six surfaces are in scope, each independently toggleable with its own customize/gear sub-toggles:
+Six surfaces are in scope, each independently toggleable with its own customize/gear sub-toggles. The `UiActorSurface` enum (`UiActorSurface.cs`) names them: `CharacterWindow`, `Examine`, `FittingRoom`, `DyePreview`, `AdventurerPlate`, `Banner` (plus `None`).
 
-| Surface | Config prefix | Real character resolved via |
-|---------|---------------|------------------------------|
-| Own character window | `MirrorCharacterWindow` | `ActorManager.GetCurrentPlayer()` (`ScreenActor.CharacterScreen`) |
-| Examine (others) | `MirrorExamine` | `ActorManager.GetInspectPlayer()` (`ScreenActor.ExamineScreen`) |
-| Fitting room | `MirrorFittingRoom` | `ActorManager.GetCurrentPlayer()` (`ScreenActor.FittingRoom`) |
-| Dye preview | `MirrorDyePreview` | `ActorManager.GetCurrentPlayer()` (`ScreenActor.DyePreview`) |
-| Adventurer plate portrait | `MirrorAdventurerPlate` | `ActorManager.GetCurrentPlayer()` (`ScreenActor.Portrait`) |
-| Party / PvP banners | `MirrorBanner` | `ActorManager.ResolvePartyBannerPlayer()` / `ResolvePvPBannerPlayer()` |
+| Surface | Config prefix | Real character resolved via | Mirrors |
+|---------|---------------|------------------------------|---------|
+| Own character window | `MirrorCharacterWindow` | `ActorManager.GetCurrentPlayer()` (`ScreenActor.CharacterScreen`) | customize + gear + eyewear + weapon |
+| Examine (others) | `MirrorExamine` | `ActorManager.GetInspectPlayer()` (`ScreenActor.ExamineScreen`) | customize + gear + eyewear + weapon |
+| Fitting room | `MirrorFittingRoom` | `ActorManager.GetCurrentPlayer()` (`ScreenActor.FittingRoom`) | **customize only** |
+| Dye preview | `MirrorDyePreview` | `ActorManager.GetCurrentPlayer()` (`ScreenActor.DyePreview`) | **customize only** (via `ColorantPreviewService`) |
+| Adventurer plate portrait | `MirrorAdventurerPlate` | `ActorManager.GetCurrentPlayer()` (`ScreenActor.Portrait`) | customize + gear + eyewear + weapon |
+| Party / PvP banners | `MirrorBanner` | `ActorManager.ResolvePartyBannerPlayer()` / `ResolvePvPBannerPlayer()` | customize + gear + eyewear + weapon |
 
-The master switch `MirrorUiActors` gates all six; with it off the feature is fully inert. Each surface has `Mirror<Surface>` (enable), `Mirror<Surface>Customize` (mirror appearance), and `Mirror<Surface>Gear` (mirror equipment) flags.
+The master switch `MirrorUiActors` gates all six; with it off the feature is fully inert. Each surface has `Mirror<Surface>` (enable) and `Mirror<Surface>Customize` (mirror appearance) flags; the four gear-capable surfaces (CharacterWindow, Examine, AdventurerPlate, Banner) additionally have `Mirror<Surface>Gear`. Fitting room and dye preview have **no** `...Gear` flag — they are customize-only by design so the item being tried on or dyed keeps showing.
 
-**Deferred / out of scope** (v1): mahjong portraits, the login character-select lobby, the glamour-plate editor mannequin, and other players' synced (Mare) appearance.
+Banner/card contexts can themselves occupy indices 440–447, so `UiActorMirrorService` runs the banner resolvers **first** to disambiguate a banner slot from the character window before falling back to the per-`ScreenActor` switch.
+
+**Deferred / out of scope**: mahjong portraits, the login character-select lobby, the glamour-plate editor mannequin, other players' synced (Mare) appearance, fitting room / dye preview **gear** (intentionally customize-only), and advanced parameters / material dyes.
 
 ### Appearance Source
 
-The remapped identifier flows through the existing automation/state pipeline, so the appearance shown is exactly what Glamourer would apply to that character normally:
+The resolved character's existing `ActorState` is looked up **read-only** (`StateManager.TryGetValue`); GT never writes back to it. The state shown is whatever Glamourer already has for that character:
 
-- **Self** — the character's **active state** (`AutoDesignApplier.Reduce` resolves the live `ActorState`), including any manual tweaks the user has made in the Glamourer window.
-- **Others** — the **matching automation design** for that identifier, if one is enabled. No automation set → nothing mirrored (the real appearance shows through).
+- **Self** — the player's live `ActorState`, including any manual tweaks made in the Glamourer window.
+- **Others** (examine / banner of another player) — only mirrors when that player **already has an active `ActorState`**, i.e. they are rendered in the world with a design applied. Examining or banner-displaying someone who is not loaded does nothing (the real appearance shows through).
 
 ### Apply Mechanism
 
-Two GT partial methods on `StateListener` (declared in `Glamourer/State/StateListener.cs`, implemented in `Glamourer/GlamorousTerror/UiActorMirror/StateListener.UiActor.cs`) hook `OnCreatingCharacterBase`:
+`UiActorMirrorService` (`IService`, in `UiActorMirrorService.cs`) exposes `TryResolve(specialId, out realId, out surface, out mask)`. It returns early unless `MirrorUiActors` is on and the identifier is `IdentifierType.Special`, resolves the real character (banner resolvers first, then the `ScreenActor` switch), and computes the per-surface `UiActorMask(Customize, Gear)` from config.
 
-1. **`GTRemapUiActor()`** — runs immediately after `_creatingIdentifier = actor.GetIdentifier(_actors);`. It calls `UiActorMirrorService.TryResolve(specialId, …)`, which:
-   - Returns early unless `MirrorUiActors` is on and the identifier is `IdentifierType.Special`.
-   - Maps the `ScreenActor` to a surface and resolves the real character identifier (table above), resolving banner/card contexts first since they can occupy `CharacterScreen..Card8`.
-   - Builds a `UiActorMask(Customize, Gear)` from the surface's config flags.
+Five GT partial methods on `StateListener` (declared in `Glamourer/State/StateListener.cs`, implemented in `Glamourer/GlamorousTerror/UiActorMirror/StateListener.UiActor.cs`) do the mirroring. All are read-only (`_manager.TryGetValue`), all are gated on `actor.Index >= ScreenActor.CharacterScreen`, and (except customize) all require `mask.Gear`:
 
-   On success it rewrites `_creatingIdentifier` to the **real character id**, so the unchanged upstream `AutoDesignApplier.Reduce(actor, _creatingIdentifier, …)` resolves that character's glamour state into `_creatingState`.
+1. **`GTResolveUiActor()`** — runs immediately after `_creatingIdentifier = actor.GetIdentifier(_actors);` in `OnCreatingCharacterBase`. It resolves the surface/mask and looks up the resolved `ActorState` into private fields `_gtUiState` / `_gtUiMask` / `_gtUiGearAllowed` / `_gtUiActive`. It **does not touch `_creatingIdentifier`** — that stays `Special`, so upstream's stateful `Reduce`/`UpdateBaseData` runs against the menu actor and never against the player's real state.
+2. **`GTApplyUiActor(nint customizePtr, nint equipDataPtr)`** — runs after the `if (_autoDesignApplier.Reduce(...)) { … }` block. From `_gtUiState.ModelData` it writes customize (`*(CustomizeArray*)customizePtr` when `mask.Customize`) and, if gear is allowed, per-slot armor (`armor[idx] = ModelData.ArmorWithState(slot)` for each `EqdpSlot`) into the creation buffers.
+3. **`GTMirrorUiEquipSlot(actor, slot, ref armor)`** — re-applies glamoured armor per slot. Special UI actors **reload gear per slot after creation**, which would overwrite the creation-time mirror, so this hook (in `OnEquipSlotUpdating`) re-mirrors the slot's `ArmorWithState`.
+4. **`GTMirrorUiBonusSlot(actor, slot, ref armor)`** — mirrors the glamour's bonus item (glasses / eyewear) in `OnBonusSlotUpdating` via `ModelData.BonusItem(slot).Armor()`.
+5. **`GTMirrorUiWeapon(actor, slot, ref weapon)`** — mirrors the glamour's weapon in `OnWeaponLoading` via `ModelData.Weapon(slot)`.
 
-2. **`GTApplyUiActor(nint customizePtr, nint equipDataPtr)`** — runs after the `switch (UpdateBaseData(...))` block and before `_creatingState.TempUnlock();`. It authoritatively writes from `_creatingState.ModelData` into the game's customize/equip buffers for the enabled aspects:
-   - If `mask.Customize`: `*(CustomizeArray*)customizePtr = _creatingState.ModelData.Customize`.
-   - If gear is allowed: for each `EqdpSlot` (armor buffer indices 0–9), writes `_creatingState.ModelData.ArmorWithState(slot)` — **skipping any slot flagged in the previewed-slot mask** (see below).
+### Dye Preview — ColorantPreviewService
 
-This is an authoritative write rather than a diff, so it overrides whatever the game put in the buffers for the menu actor.
+The dye-preview character (index 443) is **not** drawn through the draw-object / equipment hooks the other surfaces use. `AgentColorant` renders it with its own `ColorantCharaView`, whose equip buffer is empty, so the `StateListener` path never reaches it. `ColorantPreviewService` (`IRequiredService`, in `ColorantPreviewService.cs`) handles it as a standalone hook:
 
-### Preview-Slot Preservation
-
-The fitting room and dye preview are *meant* to show the item the player is currently trying on or dyeing. Mirroring gear over those slots would defeat the window's purpose, so for the `FittingRoom` and `DyePreview` surfaces (when gear mirroring is on) `GTRemapUiActor` consults `UiActorPreviewSlots.TryGetPreviewedSlotMask(out mask)`:
-
-- `UiActorPreviewSlots` reads `AgentTryon` (`AgentTryon.Instance()`), iterating its `TryOnItems` and setting a bit per armor-buffer index for each slot with a non-zero item or an active dye preview. `GTApplyUiActor` then skips those bits, so the tried-on/dyed slots keep the game's preview while the rest of the body mirrors the glamour.
-- **Customize-only fallback** — if the agent is unavailable (null or inactive), `TryGetPreviewedSlotMask` returns `false`. Rather than risk clobbering the player's in-progress preview, `GTRemapUiActor` then clears `_gtUiGearAllowed` for that surface, mirroring **customizations only** and leaving all gear as the game rendered it.
+- It hooks the game function `CharaView.SetModelData` (`interop.HookFromAddress((nint)CharaView.MemberFunctionPointers.SetModelData, …)`).
+- In the detour, when `MirrorUiActors` + `MirrorDyePreview` + `MirrorDyePreviewCustomize` are all on and `IsColorant(self)` (the `CharaView` is `&AgentColorant.Instance()->CharaView` **and** the agent is active), it overwrites the customize portion of the `CharaViewModelData` with the current player's `ModelData.Customize`. Customize-only — the window keeps showing the item set being dyed.
+- The whole detour body is wrapped in try/catch so it can never crash the game; the original is always called afterward.
+- Because it hooks a game function directly (not via `StateListener`), it is **not** overlay-sensitive — an upstream overlay of `StateListener.cs` does not affect it.
 
 ### Safety & Limitations
 
-- **Render-only** — nothing is persisted. The feature only writes into the transient buffers the game hands to the menu actor at creation time; no design, automation, or character state is modified or saved.
-- **No live re-mirror (v1)** — mirroring is applied once, when the UI actor is created. If the source character's glamour changes while a mirroring window stays open, the window does **not** refresh. Close and reopen the window to pick up the new appearance.
+- **<a id="no-identifier-remap-critical"></a>No identifier remap (critical)** — `_creatingIdentifier` is deliberately left as the `Special` id. The original design remapped it to the player's identifier, which caused upstream's stateful `Reduce`/`UpdateBaseData` to run against — and corrupt — the player's real `ActorState` (opening the character window reverted the player's body on the next automation). The read-only, no-remap design above is the fix and must be preserved.
+- **Render-only** — nothing is persisted. The feature only writes into the transient buffers the game hands to the menu actor; no design, automation, or character state is modified or saved.
 
 ### Configuration
 
-All flags live on the GT config partial (`Glamourer/GlamorousTerror/Config/Configuration.GT.cs`). The settings UI is a "UI Actors" tree node in the Glamorous Terror settings section (`SettingsTab.GT.cs` → `DrawUiActorMirrorSettings`); the per-surface toggles are hidden until the `MirrorUiActors` master switch is on.
+All flags live on the GT config partial (`Glamourer/GlamorousTerror/Config/Configuration.GT.cs`) as plain auto-properties (no migration). The settings UI is a "UI Actors" tree node in the Glamorous Terror settings section (`SettingsTab.GT.cs` → `DrawUiActorMirrorSettings`); per-surface rows are drawn by `DrawSurfaceRow` with indented **Customizations** / **Gear** sub-toggles, and are hidden until the `MirrorUiActors` master switch is on. Fitting room and dye preview pass a null gear setter to `DrawSurfaceRow`, so they show only the **Customizations** sub-toggle.
 
-| Property | Type | Default |
-|----------|------|---------|
-| `MirrorUiActors` | `bool` | `false` |
-| `Mirror<Surface>` | `bool` | `false` |
-| `Mirror<Surface>Customize` | `bool` | `true` |
-| `Mirror<Surface>Gear` | `bool` | `true` |
+| Property | Type | Default | Surfaces |
+|----------|------|---------|----------|
+| `MirrorUiActors` | `bool` | `true` | master switch |
+| `Mirror<Surface>` | `bool` | `true` | all six |
+| `Mirror<Surface>Customize` | `bool` | `true` | all six |
+| `Mirror<Surface>Gear` | `bool` | `true` | CharacterWindow, Examine, AdventurerPlate, Banner only |
 
-where `<Surface>` ∈ { `CharacterWindow`, `Examine`, `FittingRoom`, `DyePreview`, `AdventurerPlate`, `Banner` }.
+where `<Surface>` ∈ { `CharacterWindow`, `Examine`, `FittingRoom`, `DyePreview`, `AdventurerPlate`, `Banner` }. `FittingRoom` and `DyePreview` have **no** `...Gear` field.
 
 ---
 
