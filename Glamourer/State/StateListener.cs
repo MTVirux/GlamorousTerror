@@ -25,7 +25,7 @@ namespace Glamourer.State;
 /// it always updates the base state for existing states,
 /// and either discards the changes or updates the model state too.
 /// </summary>
-public sealed class StateListener : IDisposable, IRequiredService
+public sealed partial class StateListener : IDisposable, IRequiredService
 {
     private readonly Configuration             _config;
     private readonly ActorManager              _actors;
@@ -52,6 +52,7 @@ public sealed class StateListener : IDisposable, IRequiredService
     private readonly ChangeCustomizeService    _changeCustomizeService;
     private readonly CrestService              _crestService;
     private readonly ICondition                _condition;
+    private readonly UiActorMirrorService      _uiActorMirror;
 
     private readonly Dictionary<Actor, CharacterWeapon> _fistOffhands = [];
 
@@ -60,12 +61,20 @@ public sealed class StateListener : IDisposable, IRequiredService
     private ActorState?     _creatingState;
     private ActorState?     _customizeState;
 
+    // Glamorous Terror: UI actor glamour mirroring (implemented in GlamorousTerror/UiActorMirror/StateListener.UiActor.cs).
+    private partial void GTResolveUiActor();
+    private unsafe partial void GTApplyUiActor(nint customizePtr, nint equipDataPtr);
+    private partial void GTMirrorUiEquipSlot(Actor actor, EquipSlot slot, ref CharacterArmor armor);
+    private partial void GTMirrorUiBonusSlot(Actor actor, BonusItemFlag slot, ref CharacterArmor armor);
+    private partial void GTMirrorUiWeapon(Actor actor, EquipSlot slot, ref CharacterWeapon weapon);
+
     public StateListener(StateManager manager, ItemManager items, PenumbraService penumbra, ActorManager actors, Configuration config,
         EquipSlotUpdating equipSlotUpdating, GearsetDataLoaded gearsetDataLoaded, WeaponLoading weaponLoading, VisorStateChanged visorState,
         WeaponVisibilityChanged weaponVisibility, HeadGearVisibilityChanged headGearVisibility, AutoDesignApplier autoDesignApplier,
         FunModule funModule, HumanModelList humans, StateApplier applier, MovedEquipment movedEquipment, ActorObjectManager objects,
         GPoseService gPose, ChangeCustomizeService changeCustomizeService, CustomizeService customizations, ICondition condition,
-        CrestService crestService, BonusSlotUpdating bonusSlotUpdating, StateFinalized stateFinalized, VieraEarStateChanged vieraEarState)
+        CrestService crestService, BonusSlotUpdating bonusSlotUpdating, StateFinalized stateFinalized, VieraEarStateChanged vieraEarState,
+        UiActorMirrorService uiActorMirror)
     {
         _manager                = manager;
         _items                  = items;
@@ -92,6 +101,7 @@ public sealed class StateListener : IDisposable, IRequiredService
         _bonusSlotUpdating      = bonusSlotUpdating;
         _stateFinalized         = stateFinalized;
         _vieraEarState          = vieraEarState;
+        _uiActorMirror          = uiActorMirror;
         Subscribe();
     }
 
@@ -127,6 +137,7 @@ public sealed class StateListener : IDisposable, IRequiredService
             return;
 
         _creatingIdentifier = actor.GetIdentifier(_actors);
+        GTResolveUiActor();
         ref var modelId   = ref *(uint*)modelPtr;
         ref var customize = ref *(CustomizeArray*)customizePtr;
         if (_autoDesignApplier.Reduce(actor, _creatingIdentifier, out _creatingState))
@@ -151,6 +162,8 @@ public sealed class StateListener : IDisposable, IRequiredService
 
             _creatingState.TempUnlock();
         }
+
+        GTApplyUiActor(customizePtr, equipDataPtr);
 
         _funModule.ApplyFunOnLoad(actor, new Span<CharacterArmor>((void*)equipDataPtr, 10), ref customize);
         if (modelId is 0 && _creatingState is not { IsLocked: true })
@@ -219,6 +232,7 @@ public sealed class StateListener : IDisposable, IRequiredService
     private void OnEquipSlotUpdating(in EquipSlotUpdating.Arguments arguments)
     {
         var actor = _penumbra.GameObjectFromDrawObject(arguments.Model);
+        GTMirrorUiEquipSlot(actor, arguments.Slot, ref arguments.Armor);
         if (_condition[ConditionFlag.CreatingCharacter] && actor.Index >= ObjectIndex.CutsceneStart)
             return;
 
@@ -244,6 +258,7 @@ public sealed class StateListener : IDisposable, IRequiredService
     private void OnBonusSlotUpdating(in BonusSlotUpdating.Arguments arguments)
     {
         var actor = _penumbra.GameObjectFromDrawObject(arguments.Model);
+        GTMirrorUiBonusSlot(actor, arguments.Slot, ref arguments.Armor);
         if (_condition[ConditionFlag.CreatingCharacter] && actor.Index >= ObjectIndex.CutsceneStart)
             return;
 
@@ -341,6 +356,8 @@ public sealed class StateListener : IDisposable, IRequiredService
     {
         if (_condition[ConditionFlag.CreatingCharacter] && arguments.Actor.Index >= ObjectIndex.CutsceneStart)
             return;
+
+        GTMirrorUiWeapon(arguments.Actor, arguments.Slot, ref arguments.Weapon);
 
         // Fist weapon gauntlet hack.
         if (arguments.Slot is EquipSlot.OffHand
