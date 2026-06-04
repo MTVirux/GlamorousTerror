@@ -61,7 +61,6 @@ public sealed partial class Configuration
 
     public bool MirrorFittingRoom          { get; set; } = false;
     public bool MirrorFittingRoomCustomize { get; set; } = true;
-    public bool MirrorFittingRoomGear      { get; set; } = true;
 
     public bool MirrorDyePreview          { get; set; } = false;
     public bool MirrorDyePreviewCustomize { get; set; } = true;

@@ -5,13 +5,10 @@ using Penumbra.GameData.Enums;
 
 namespace Glamourer.Services;
 
-/// <summary>
-/// Maps a special UI/menu actor (IdentifierType.Special, object index 440-447) to the real
-/// character it represents and the configured mirroring mask for that surface.
-/// </summary>
-public sealed class UiActorMirrorService(ActorManager actors, Configuration config, UiActorPreviewSlots previewSlots) : IService
+// Maps a special UI/menu actor (IdentifierType.Special, object index 440-447) to the real character
+// it represents and the configured mirroring mask for that surface.
+public sealed class UiActorMirrorService(ActorManager actors, Configuration config) : IService
 {
-    /// <summary> Try to resolve a special identifier to a real character + enabled surface mask. </summary>
     public bool TryResolve(ActorIdentifier specialId, out ActorIdentifier realId, out UiActorSurface surface, out UiActorMask mask)
     {
         realId  = ActorIdentifier.Invalid;
@@ -33,11 +30,6 @@ public sealed class UiActorMirrorService(ActorManager actors, Configuration conf
 
         return true;
     }
-
-    /// <summary> Compute the previewed-slot bitmask for try-on / dye surfaces. </summary>
-    /// <returns> True if detection succeeded; false if the try-on agent is unavailable. </returns>
-    public bool TryGetPreviewState(out ushort previewMask, out bool displayGear)
-        => previewSlots.TryGetPreviewState(out previewMask, out displayGear);
 
     private UiActorSurface DetermineSurface(ScreenActor screen, out ActorIdentifier realId)
     {
@@ -76,7 +68,7 @@ public sealed class UiActorMirrorService(ActorManager actors, Configuration conf
         {
             UiActorSurface.CharacterWindow => (config.MirrorCharacterWindow, config.MirrorCharacterWindowCustomize, config.MirrorCharacterWindowGear),
             UiActorSurface.Examine         => (config.MirrorExamine,         config.MirrorExamineCustomize,         config.MirrorExamineGear),
-            UiActorSurface.FittingRoom     => (config.MirrorFittingRoom,     config.MirrorFittingRoomCustomize,     config.MirrorFittingRoomGear),
+            UiActorSurface.FittingRoom     => (config.MirrorFittingRoom,     config.MirrorFittingRoomCustomize,     false),
             UiActorSurface.DyePreview      => (config.MirrorDyePreview,      config.MirrorDyePreviewCustomize,      false),
             UiActorSurface.AdventurerPlate => (config.MirrorAdventurerPlate, config.MirrorAdventurerPlateCustomize, config.MirrorAdventurerPlateGear),
             UiActorSurface.Banner          => (config.MirrorBanner,          config.MirrorBannerCustomize,          config.MirrorBannerGear),

@@ -139,10 +139,10 @@ public sealed partial class SettingsTab
             config.MirrorExamineGear, v => config.MirrorExamineGear = v);
 
         DrawSurfaceRow("Fitting Room"u8,
-            "The try-on window. The slot you are trying on is left untouched so the previewed item still shows."u8,
+            "The try-on window. Only customizations are mirrored here so the gear you are trying on shows normally."u8,
             config.MirrorFittingRoom, v => config.MirrorFittingRoom = v,
             config.MirrorFittingRoomCustomize, v => config.MirrorFittingRoomCustomize = v,
-            config.MirrorFittingRoomGear, v => config.MirrorFittingRoomGear = v);
+            false, null);
 
         DrawSurfaceRow("Dye Preview"u8,
             "The dye preview window. Only customizations are mirrored here — the window shows the item set being dyed, so its gear is left untouched."u8,

@@ -10,13 +10,9 @@ using Penumbra.GameData.Structs;
 
 namespace Glamourer.Services;
 
-/// <summary>
-/// Mirrors the player's glamoured customizations onto the in-game dye-preview character (object index
-/// 443). That actor is rendered by a self-contained <see cref="ColorantCharaView"/> owned by
-/// <see cref="AgentColorant"/> which bypasses the draw-object hooks the rest of the UI-actor mirror
-/// relies on, so the colorant's own model-setup function is hooked here. Only customizations are
-/// mirrored: the dye window shows the item set being dyed, so its equipment is deliberately left alone.
-/// </summary>
+// The dye-preview character (index 443) is drawn by AgentColorant's own CharaView, which bypasses the
+// draw-object hooks the rest of the UI-actor mirror uses, so its model setup is hooked here. Customize
+// only: the window shows the item set being dyed, so its gear is left alone.
 public sealed unsafe class ColorantPreviewService : IDisposable, IRequiredService
 {
     private readonly Configuration _config;
