@@ -66,6 +66,7 @@ public sealed partial class StateListener : IDisposable, IRequiredService
     private unsafe partial void GTApplyUiActor(nint customizePtr, nint equipDataPtr);
     private partial void GTMirrorUiEquipSlot(Actor actor, EquipSlot slot, ref CharacterArmor armor);
     private partial void GTMirrorUiBonusSlot(Actor actor, BonusItemFlag slot, ref CharacterArmor armor);
+    private partial void GTMirrorUiWeapon(Actor actor, EquipSlot slot, ref CharacterWeapon weapon);
 
     public StateListener(StateManager manager, ItemManager items, PenumbraService penumbra, ActorManager actors, Configuration config,
         EquipSlotUpdating equipSlotUpdating, GearsetDataLoaded gearsetDataLoaded, WeaponLoading weaponLoading, VisorStateChanged visorState,
@@ -355,6 +356,8 @@ public sealed partial class StateListener : IDisposable, IRequiredService
     {
         if (_condition[ConditionFlag.CreatingCharacter] && arguments.Actor.Index >= ObjectIndex.CutsceneStart)
             return;
+
+        GTMirrorUiWeapon(arguments.Actor, arguments.Slot, ref arguments.Weapon);
 
         // Fist weapon gauntlet hack.
         if (arguments.Slot is EquipSlot.OffHand

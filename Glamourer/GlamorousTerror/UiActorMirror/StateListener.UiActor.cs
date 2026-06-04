@@ -125,4 +125,24 @@ public sealed partial class StateListener
         if (_manager.TryGetValue(realId, out var state))
             armor = state.ModelData.BonusItem(slot).Armor();
     }
+
+    /// <summary>
+    /// Glamorous Terror: mirror the glamour's weapon onto special UI actors, so the weapon shown in the
+    /// character window, plate, banners, etc. matches the glamour instead of the equipped weapon.
+    /// </summary>
+    private partial void GTMirrorUiWeapon(Actor actor, EquipSlot slot, ref CharacterWeapon weapon)
+    {
+        if (!actor.Valid || actor.Index.Index < (ushort)ScreenActor.CharacterScreen)
+            return;
+
+        if (!_uiActorMirror.TryResolve(actor.GetIdentifier(_actors), out var realId, out var surface, out var mask) || !mask.Gear)
+            return;
+
+        // Try-on/dye windows have their own gear handling; leave their weapons to the game.
+        if (surface is UiActorSurface.FittingRoom or UiActorSurface.DyePreview)
+            return;
+
+        if (_manager.TryGetValue(realId, out var state))
+            weapon = state.ModelData.Weapon(slot);
+    }
 }
