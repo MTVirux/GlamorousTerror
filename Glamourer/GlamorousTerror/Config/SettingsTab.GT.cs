@@ -30,53 +30,17 @@ public sealed partial class SettingsTab
 
         Checkbox("Enable Immersive Dresser"u8,
             "Whether to show an Immersive Dresser option when right-clicking your own character. Opens a fullscreen equipment overlay with the game UI hidden."u8,
-            config.EnableImmersiveDresser, v =>
-            {
-                config.EnableImmersiveDresser = v;
-            });
+            config.EnableImmersiveDresser, v => config.EnableImmersiveDresser = v);
 
-        Im.Dummy(Vector2.Zero);
-        Im.Separator();
-        Im.Dummy(Vector2.Zero);
+        SpacedSeparator();
 
-        var currentLang  = config.EquipmentNameLanguage;
-        var currentLabel = _equipmentLanguages.FirstOrDefault(l => l.Language == currentLang).Label ?? currentLang.ToString();
+        DrawEquipmentLanguageControls("##gtEquipLangCombo"u8);
 
-        Im.Item.SetNextWidthScaled(300);
-        using (var combo = Im.Combo.Begin("##gtEquipLangCombo"u8, currentLabel))
-        {
-            if (combo)
-                foreach (var (lang, label) in _equipmentLanguages)
-                {
-                    if (Im.Selectable(label, lang == currentLang))
-                    {
-                        config.EquipmentNameLanguage = lang;
-                        config.Save();
-                        itemNameService.ClearCache();
-                    }
-                }
-        }
-
-        LunaStyle.DrawAlignedHelpMarkerLabel("Equipment Name Language"u8,
-            "Override the display language used for equipment item names. Requires a UI reload to take full effect."u8);
-
-        Checkbox("Cross-Language Equipment Search"u8,
-            "When enabled, equipment combo searches will match item names in all available languages, not just the selected display language."u8,
-            config.CrossLanguageEquipmentSearch, v =>
-            {
-                config.CrossLanguageEquipmentSearch = v;
-                itemNameService.ClearCache();
-            });
-
-        Im.Dummy(Vector2.Zero);
-        Im.Separator();
-        Im.Dummy(Vector2.Zero);
+        SpacedSeparator();
 
         EquipmentDrawer.DrawOwnedOnlyFilter(config);
 
-        Im.Dummy(Vector2.Zero);
-        Im.Separator();
-        Im.Dummy(Vector2.Zero);
+        SpacedSeparator();
 
         Checkbox("Icon Equipment Drawer"u8,
             "Display equipment slots as a compact icon grid instead of name-based combo dropdowns.\nClick an icon to open the item selector. Right-click to clear or revert."u8,
@@ -111,9 +75,7 @@ public sealed partial class SettingsTab
 
     private void DrawUiActorMirrorSettings()
     {
-        Im.Dummy(Vector2.Zero);
-        Im.Separator();
-        Im.Dummy(Vector2.Zero);
+        SpacedSeparator();
 
         using var tree = Im.Tree.Node("UI Actors"u8);
         if (!tree)
@@ -187,11 +149,23 @@ public sealed partial class SettingsTab
         if (!Im.Tree.Header("Equipment Language Settings"u8))
             return;
 
-        var currentLang = config.EquipmentNameLanguage;
+        DrawEquipmentLanguageControls("##equipLangCombo"u8);
+    }
+
+    private static void SpacedSeparator()
+    {
+        Im.Dummy(Vector2.Zero);
+        Im.Separator();
+        Im.Dummy(Vector2.Zero);
+    }
+
+    private void DrawEquipmentLanguageControls(ReadOnlySpan<byte> comboId)
+    {
+        var currentLang  = config.EquipmentNameLanguage;
         var currentLabel = _equipmentLanguages.FirstOrDefault(l => l.Language == currentLang).Label ?? currentLang.ToString();
 
         Im.Item.SetNextWidthScaled(300);
-        using (var combo = Im.Combo.Begin("##equipLangCombo"u8, currentLabel))
+        using (var combo = Im.Combo.Begin(comboId, currentLabel))
         {
             if (combo)
                 foreach (var (lang, label) in _equipmentLanguages)

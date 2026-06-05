@@ -78,6 +78,10 @@ public sealed class ItemNameService : IService
         }
     }
 
+    /// <summary> Special items (Nothing, Smallclothes, etc.) don't have real item IDs. </summary>
+    private static bool IsSpecialItem(uint id)
+        => id == 0 || id >= uint.MaxValue - 512;
+
     /// <summary>
     /// Gets the display name for an equipment item.
     /// If the item ID is valid, returns the name in the selected language.
@@ -86,37 +90,7 @@ public sealed class ItemNameService : IService
     /// <param name="item">The equipment item to get the name for.</param>
     /// <returns>The item name in the selected language.</returns>
     public string GetItemName(in EquipItem item)
-    {
-        // If using game default language and no override, just return the original name
-        if (_config.EquipmentNameLanguage == EquipmentNameLanguage.GameDefault)
-            return item.Name;
-        
-        CheckLanguageChange();
-
-        var itemId = item.ItemId.Id;
-        
-        // Special items (Nothing, Smallclothes, etc.) don't have real item IDs
-        if (itemId == 0 || itemId >= uint.MaxValue - 512)
-            return item.Name;
-        
-        // Check cache first
-        if (_nameCache.TryGetValue(itemId, out var cachedName))
-            return cachedName;
-        
-        // Look up the item name in the selected language sheet
-        if (_itemSheet != null && _itemSheet.TryGetRow(itemId, out var row))
-        {
-            var name = row.Name.ExtractText();
-            if (!string.IsNullOrEmpty(name))
-            {
-                _nameCache[itemId] = name;
-                return name;
-            }
-        }
-        
-        // Fall back to the original name if lookup fails
-        return item.Name;
-    }
+        => GetItemName(item.ItemId.Id, item.Name);
 
     /// <summary>
     /// Gets the display name for an equipment item by its item ID.
@@ -129,11 +103,11 @@ public sealed class ItemNameService : IService
         // If using game default language and no override, just return the fallback name
         if (_config.EquipmentNameLanguage == EquipmentNameLanguage.GameDefault)
             return fallbackName;
-        
+
         CheckLanguageChange();
 
         // Special items (Nothing, Smallclothes, etc.) don't have real item IDs
-        if (itemId == 0 || itemId >= uint.MaxValue - 512)
+        if (IsSpecialItem(itemId))
             return fallbackName;
         
         // Check cache first
@@ -174,18 +148,20 @@ public sealed class ItemNameService : IService
     /// <returns>True if the filter matches the item name in any language.</returns>
     public bool MatchesAnyLanguage(in EquipItem item, string filter)
     {
+        var display = GetItemName(item);
+
         // If cross-language search is disabled, only match in the selected language
         if (!_config.CrossLanguageEquipmentSearch)
-            return GetItemName(item).Contains(filter, StringComparison.OrdinalIgnoreCase);
+            return display.Contains(filter, StringComparison.OrdinalIgnoreCase);
 
         // First check the display name (most common case)
-        if (GetItemName(item).Contains(filter, StringComparison.OrdinalIgnoreCase))
+        if (display.Contains(filter, StringComparison.OrdinalIgnoreCase))
             return true;
 
         var itemId = item.ItemId.Id;
 
         // Special items don't have translations
-        if (itemId == 0 || itemId >= uint.MaxValue - 512)
+        if (IsSpecialItem(itemId))
             return false;
 
         // Get all language names for this item
@@ -236,21 +212,5 @@ public sealed class ItemNameService : IService
         }
         
         return null;
-    }
-
-    /// <summary>
-    /// Gets the currently configured language as a display string.
-    /// </summary>
-    public string GetCurrentLanguageDisplay()
-    {
-        return _config.EquipmentNameLanguage switch
-        {
-            EquipmentNameLanguage.GameDefault => $"Game Default ({_gameData.Language})",
-            EquipmentNameLanguage.English => "English",
-            EquipmentNameLanguage.Japanese => "日本語 (Japanese)",
-            EquipmentNameLanguage.German => "Deutsch (German)",
-            EquipmentNameLanguage.French => "Français (French)",
-            _ => "Unknown",
-        };
     }
 }

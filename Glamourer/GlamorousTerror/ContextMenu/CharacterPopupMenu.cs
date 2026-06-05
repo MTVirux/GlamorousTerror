@@ -207,7 +207,7 @@ public class CharacterPopupMenu : IDisposable, IService
             }
             if (Im.Item.Hovered())
             {
-                ApplyFullDesignToSelfPreview();
+                _previewService.StartFullDesignToSelfPreview(_lastActor);
                 anyPreviewSubmenuOpen = true;
             }
 
@@ -247,7 +247,7 @@ public class CharacterPopupMenu : IDisposable, IService
             }
             if (Im.Item.Hovered())
             {
-                ApplyFullDesignToTargetPreview();
+                _previewService.StartFullDesignToTargetPreview(_lastActor);
                 anyPreviewSubmenuOpen = true;
             }
 
@@ -307,7 +307,7 @@ public class CharacterPopupMenu : IDisposable, IService
         }
         if (Im.Item.Hovered() && automationEnabled)
         {
-            ApplyAutomationPreview();
+            _previewService.StartAutomationPreview(_lastActor);
             anyPreviewSubmenuOpen = true;
         }
 
@@ -319,14 +319,14 @@ public class CharacterPopupMenu : IDisposable, IService
         }
         if (Im.Item.Hovered())
         {
-            ApplyResetPreview();
+            _previewService.StartResetPreview(_lastActor);
             anyPreviewSubmenuOpen = true;
         }
 
         // Only revert preview if nothing with preview is being hovered/open
-        if (!anyPreviewSubmenuOpen)
+        if (!anyPreviewSubmenuOpen && _previewService.IsPreviewActive)
         {
-            CheckAndEndPreview();
+            _previewService.EndPreview();
         }
     }
 
@@ -575,49 +575,6 @@ public class CharacterPopupMenu : IDisposable, IService
     #endregion
 
     #region Preview System
-
-    /// <summary>
-    /// Starts a full design to self preview.
-    /// </summary>
-    private void ApplyFullDesignToSelfPreview()
-    {
-        _previewService.StartFullDesignToSelfPreview(_lastActor);
-    }
-
-    /// <summary>
-    /// Starts a full design to target preview.
-    /// </summary>
-    private void ApplyFullDesignToTargetPreview()
-    {
-        _previewService.StartFullDesignToTargetPreview(_lastActor);
-    }
-
-    /// <summary>
-    /// Starts an automation state preview.
-    /// </summary>
-    private void ApplyAutomationPreview()
-    {
-        _previewService.StartAutomationPreview(_lastActor);
-    }
-
-    /// <summary>
-    /// Starts a reset to game state preview.
-    /// </summary>
-    private void ApplyResetPreview()
-    {
-        _previewService.StartResetPreview(_lastActor);
-    }
-
-    /// <summary>
-    /// Checks if preview should be reverted (when no item is hovered).
-    /// </summary>
-    private void CheckAndEndPreview()
-    {
-        if (_previewService.IsPreviewActive)
-        {
-            _previewService.EndPreview();
-        }
-    }
 
     /// <summary>
     /// Applies the current preview permanently (with IsFinal=true) without reverting first.

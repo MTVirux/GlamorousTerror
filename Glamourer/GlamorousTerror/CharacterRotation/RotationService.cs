@@ -28,7 +28,7 @@ public sealed unsafe class RotationService : IDisposable, IService
             offsetDegrees.X, offsetDegrees.Y, offsetDegrees.Z));
         var finalQuat = MultiplyQuaternions(original, offsetQuat);
 
-        _overrides[actor.Address] = new RotationOverride(finalQuat, actor.Model.Address, original, offsetDegrees);
+        _overrides[actor.Address] = new RotationOverride(finalQuat, original, offsetDegrees);
         EnsureSubscribed();
     }
 
@@ -68,15 +68,6 @@ public sealed unsafe class RotationService : IDisposable, IService
 
         euler = Vector3.Zero;
         return false;
-    }
-
-    public Vector3 GetActorEuler(Actor actor)
-    {
-        if (!actor.Valid || !actor.Model)
-            return Vector3.Zero;
-
-        var e = actor.Model.AsDrawObject->Object.Rotation.EulerAngles;
-        return new Vector3(e.X, e.Y, e.Z);
     }
 
     public void Dispose()
@@ -175,5 +166,5 @@ public sealed unsafe class RotationService : IDisposable, IService
         return new Quaternion { X = sr.X, Y = sr.Y, Z = sr.Z, W = sr.W };
     }
 
-    private readonly record struct RotationOverride(Quaternion Rotation, nint LastModelAddress, Quaternion OriginalRotation, Vector3 OffsetDegrees);
+    private readonly record struct RotationOverride(Quaternion Rotation, Quaternion OriginalRotation, Vector3 OffsetDegrees);
 }

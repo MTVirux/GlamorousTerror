@@ -377,58 +377,6 @@ public sealed class PreviewService(
         }
     }
 
-    /// <summary>
-    /// Revert any active preview and restore the original state.
-    /// </summary>
-    public void RevertPreview()
-    {
-        if (!State.IsActive || State.TargetState == null)
-            return;
-
-        try
-        {
-            RestoreToOriginalState();
-        }
-        catch (Exception ex)
-        {
-            Glamourer.Log.Debug($"Revert preview failed: {ex.Message}");
-        }
-        finally
-        {
-            State.End();
-        }
-    }
-
-    /// <summary>
-    /// Finalize the current preview, making it a permanent change.
-    /// Call this when the user clicks to select a design after previewing.
-    /// </summary>
-    public void FinalizePreview()
-    {
-        if (!State.IsActive || State.TargetState == null)
-            return;
-
-        try
-        {
-            // Apply the final action based on preview type
-            switch (State.Type)
-            {
-                case PreviewType.Design when State.Design != null:
-                    stateManager.ApplyDesign(State.TargetState, State.Design, ApplySettings.ManualWithLinks with { IsFinal = true });
-                    break;
-                // Other types can be added as needed
-            }
-        }
-        catch (Exception ex)
-        {
-            Glamourer.Log.Debug($"Finalize preview failed: {ex.Message}");
-        }
-        finally
-        {
-            State.End();
-        }
-    }
-
     #endregion
 
     #region Equipment Preview

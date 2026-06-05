@@ -53,13 +53,8 @@ public sealed class CustomizeUnlockManager : IDisposable, ISavable, IRequiredSer
     public bool IsUnlocked(CustomizeData data, out DateTimeOffset time)
     {
         // All other customizations are not unlockable.
-        if (data.Index is not CustomizeIndex.Hairstyle and not CustomizeIndex.FacePaint)
-        {
-            time = DateTimeOffset.MinValue;
-            return true;
-        }
-
-        if (!Unlockable.TryGetValue(data, out var pair))
+        if (data.Index is not CustomizeIndex.Hairstyle and not CustomizeIndex.FacePaint
+         || !Unlockable.TryGetValue(data, out var pair))
         {
             time = DateTimeOffset.MinValue;
             return true;
@@ -91,7 +86,7 @@ public sealed class CustomizeUnlockManager : IDisposable, ISavable, IRequiredSer
         if (instance is null)
             return false;
 
-        return UIState.Instance()->IsUnlockLinkUnlocked(dataId);
+        return instance->IsUnlockLinkUnlocked(dataId);
     }
 
     /// <summary> Scan and update all unlockable customizations for their current game state. </summary>

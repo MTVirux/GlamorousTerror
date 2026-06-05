@@ -1,3 +1,4 @@
+using Glamourer.GlamorousTerror.WildcardAutomation;
 using Penumbra.GameData.Actors;
 using Penumbra.GameData.Enums;
 using Penumbra.GameData.Structs;
@@ -11,7 +12,7 @@ public sealed partial class AutoDesignApplier
     {
         foreach (var (key, value) in _manager.EnabledSets)
         {
-            if (!key.PlayerName.ToString().Contains('*'))
+            if (!WildcardIdentifier.IsWildcard(key.PlayerName))
                 continue;
 
             if (key.Type != identifier.Type

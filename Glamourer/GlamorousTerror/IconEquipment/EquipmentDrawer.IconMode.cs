@@ -46,6 +46,9 @@ public sealed partial class EquipmentDrawer
     private readonly Dictionary<EquipSlot, float>     _iconPickerSlotScroll      = new();
     private readonly Dictionary<BonusItemFlag, float> _iconPickerBonusSlotScroll = new();
 
+    // Reused per frame for GroupIconPickerByModel dedupe; only one picker body runs per frame.
+    private readonly HashSet<(FullEquipType, PrimaryId, SecondaryId, Variant)> _iconPickerModelSet = new();
+
     // Filter & sort state (session-scoped, not persisted)
     private string             _iconPickerNameFilter       = string.Empty;
     private bool               _iconPickerFavoritesOnly;
@@ -56,9 +59,7 @@ public sealed partial class EquipmentDrawer
     private bool               _iconPickerShowSettings;
 
     private partial void GTResetIconState()
-    {
-        _iconPickerPopupOpen = false;
-    }
+        => _iconPickerPopupOpen = false;
 
     private void ApplyIconPickerScroll<TKey>(TKey key, Dictionary<TKey, float> dict) where TKey : notnull
     {
@@ -95,23 +96,21 @@ public sealed partial class EquipmentDrawer
             && !item.Name.Contains(_iconPickerNameFilter, StringComparison.OrdinalIgnoreCase))
             return false;
 
-        if (_iconPickerNeutralJobFilter)
+        if (_iconPickerNeutralJobFilter || _iconPickerJobFilter != JobFlag.All)
         {
             var id = item.JobRestrictions.Id;
             var jg = id > 0 && id < _jobService.AllJobGroups.Count
                 ? _jobService.AllJobGroups[id]
                 : _jobService.AllJobGroups[1];
-            if ((jg.Flags & _jobService.Jobs.AllAvailableJobs) != _jobService.Jobs.AllAvailableJobs)
+            if (_iconPickerNeutralJobFilter)
+            {
+                if ((jg.Flags & _jobService.Jobs.AllAvailableJobs) != _jobService.Jobs.AllAvailableJobs)
+                    return false;
+            }
+            else if ((jg.Flags & _iconPickerJobFilter) == 0)
+            {
                 return false;
-        }
-        else if (_iconPickerJobFilter != JobFlag.All)
-        {
-            var id = item.JobRestrictions.Id;
-            var jg = id > 0 && id < _jobService.AllJobGroups.Count
-                ? _jobService.AllJobGroups[id]
-                : _jobService.AllJobGroups[1];
-            if ((jg.Flags & _iconPickerJobFilter) == 0)
-                return false;
+            }
         }
 
         if (_iconPickerDyeChannelFilter >= 0 && GetDyeChannelCount(in item) != _iconPickerDyeChannelFilter)
@@ -558,15 +557,21 @@ public sealed partial class EquipmentDrawer
             .Push(ImStyleSingle.FrameRounding, 0);
 
         var nothing = ItemManager.NothingItem(data.Slot);
-        DrawIconPickerItem(nothing, data.CurrentItem, data, 0);
+        var (nothingPtr, nothingSize, nothingEmpty) = _textures.GetIcon(nothing, data.Slot);
+        if (DrawPickerItemButton(nothing, data.CurrentItem, nothingPtr, nothingSize, nothingEmpty, 0))
+        {
+            data.SetItem(nothing);
+            _iconPickerSelectionMade = true;
+            if (!_config.KeepIconPickerOpen)
+                CloseIconPickerAfterSelection();
+        }
 
         var hasItems = false;
         if (_items.ItemData.ByType.TryGetValue(data.Slot.ToEquipType(), out var list))
         {
-            var i = 1;
-            HashSet<(FullEquipType, PrimaryId, SecondaryId, Variant)>? modelSet = _config.GroupIconPickerByModel
-                ? new HashSet<(FullEquipType, PrimaryId, SecondaryId, Variant)>()
-                : null;
+            var i        = 1;
+            var modelSet = _config.GroupIconPickerByModel ? _iconPickerModelSet : null;
+            modelSet?.Clear();
             foreach (var equipItem in SortIconPickerItems(list))
             {
                 if (_config.OwnedOnlyComboFilter
@@ -582,7 +587,15 @@ public sealed partial class EquipmentDrawer
                 hasItems = true;
                 if (i % IconPickerColumns is not 0)
                     Im.Line.Same();
-                DrawIconPickerItem(equipItem, data.CurrentItem, data, i);
+                var (ptr, textureSize, empty) = _textures.GetIcon(equipItem, data.Slot);
+                if (DrawPickerItemButton(equipItem, data.CurrentItem, ptr, textureSize, empty, i))
+                {
+                    data.SetItem(equipItem);
+                    _iconPickerSelectionMade = true;
+                    if (!_config.KeepIconPickerOpen)
+                        CloseIconPickerAfterSelection();
+                }
+
                 ++i;
             }
         }
@@ -591,7 +604,11 @@ public sealed partial class EquipmentDrawer
             Im.Text("No items match the current filter."u8);
     }
 
-    private void DrawIconPickerItem(in EquipItem item, in EquipItem current, in EquipDrawData data, int index)
+    // Shared per-item button used by every icon picker body. Returns whether it was left-clicked so the
+    // caller can run its slot-specific SetItem; takes the pre-resolved icon so the bonus path keeps its
+    // BonusItemFlag GetIcon overload. No closure is allocated on this per-frame draw path.
+    private bool DrawPickerItemButton(in EquipItem item, in EquipItem current, ImTextureId ptr, Vector2 textureSize, bool empty,
+        int index)
     {
         using var id         = Im.Id.Push(index);
         var       isFavorite = _favoriteManager.Contains(item);
@@ -599,14 +616,7 @@ public sealed partial class EquipmentDrawer
             ? ImGuiColor.Button.Push(Colors.SelectedRed)
             : ImGuiColor.Button.Push(FavoriteIconPickerColor, isFavorite);
 
-        var (ptr, textureSize, empty) = _textures.GetIcon(item, data.Slot);
-        if (Im.Image.Button(ptr, _iconSize))
-        {
-            data.SetItem(item);
-            _iconPickerSelectionMade = true;
-            if (!_config.KeepIconPickerOpen)
-                CloseIconPickerAfterSelection();
-        }
+        var clicked = Im.Image.Button(ptr, _iconSize);
 
         if (Im.Item.RightClicked())
         {
@@ -625,6 +635,8 @@ public sealed partial class EquipmentDrawer
                 Im.Image.Draw(ptr, textureSize);
             Im.Text("Right-Click to toggle favorite."u8);
         }
+
+        return clicked;
     }
 
     internal void DrawBonusItemIcon(in BonusDrawData data, bool stainsBeside = false, bool simplified = false)
@@ -711,15 +723,21 @@ public sealed partial class EquipmentDrawer
             .Push(ImStyleSingle.FrameRounding, 0);
 
         var nothing = EquipItem.BonusItemNothing(data.Slot);
-        DrawBonusIconPickerItem(nothing, data.CurrentItem, data, 0);
+        var (nothingPtr, nothingSize, nothingEmpty) = _textures.GetIcon(nothing, data.Slot);
+        if (DrawPickerItemButton(nothing, data.CurrentItem, nothingPtr, nothingSize, nothingEmpty, 0))
+        {
+            data.SetItem(nothing);
+            _iconPickerSelectionMade = true;
+            if (!_config.KeepIconPickerOpen)
+                CloseIconPickerAfterSelection();
+        }
 
         var hasItems = false;
         if (_items.ItemData.ByType.TryGetValue(data.Slot.ToEquipType(), out var list))
         {
-            var i = 1;
-            HashSet<(FullEquipType, PrimaryId, SecondaryId, Variant)>? modelSet = _config.GroupIconPickerByModel
-                ? new HashSet<(FullEquipType, PrimaryId, SecondaryId, Variant)>()
-                : null;
+            var i        = 1;
+            var modelSet = _config.GroupIconPickerByModel ? _iconPickerModelSet : null;
+            modelSet?.Clear();
             foreach (var equipItem in SortIconPickerItems(list))
             {
                 if (_config.OwnedOnlyComboFilter
@@ -735,49 +753,21 @@ public sealed partial class EquipmentDrawer
                 hasItems = true;
                 if (i % IconPickerColumns is not 0)
                     Im.Line.Same();
-                DrawBonusIconPickerItem(equipItem, data.CurrentItem, data, i);
+                var (ptr, textureSize, empty) = _textures.GetIcon(equipItem, data.Slot);
+                if (DrawPickerItemButton(equipItem, data.CurrentItem, ptr, textureSize, empty, i))
+                {
+                    data.SetItem(equipItem);
+                    _iconPickerSelectionMade = true;
+                    if (!_config.KeepIconPickerOpen)
+                        CloseIconPickerAfterSelection();
+                }
+
                 ++i;
             }
         }
 
         if (!hasItems)
             Im.Text("No items match the current filter."u8);
-    }
-
-    private void DrawBonusIconPickerItem(in EquipItem item, in EquipItem current, in BonusDrawData data, int index)
-    {
-        using var id         = Im.Id.Push(index);
-        var       isFavorite = _favoriteManager.Contains(item);
-        using var frameColor = item.Id == current.Id
-            ? ImGuiColor.Button.Push(Colors.SelectedRed)
-            : ImGuiColor.Button.Push(FavoriteIconPickerColor, isFavorite);
-
-        var (ptr, textureSize, empty) = _textures.GetIcon(item, data.Slot);
-        if (Im.Image.Button(ptr, _iconSize))
-        {
-            data.SetItem(item);
-            _iconPickerSelectionMade = true;
-            if (!_config.KeepIconPickerOpen)
-                CloseIconPickerAfterSelection();
-        }
-
-        if (Im.Item.RightClicked())
-        {
-            if (isFavorite)
-                _favoriteManager.Remove(item);
-            else
-                _favoriteManager.TryAdd(item);
-        }
-
-        if (Im.Item.Hovered())
-        {
-            _iconPickerHoveredItem = item;
-            using var tt = Im.Tooltip.Begin();
-            Im.Text(item.Name);
-            if (!empty)
-                Im.Image.Draw(ptr, textureSize);
-            Im.Text("Right-Click to toggle favorite."u8);
-        }
     }
 
     private void DrawWeaponsIcon(EquipDrawData mainhand, EquipDrawData offhand, bool allWeapons)
@@ -939,12 +929,11 @@ public sealed partial class EquipmentDrawer
         using var style = ImStyleDouble.ItemSpacing.Push(Im.Style.ItemSpacing * 0.25f)
             .Push(ImStyleSingle.FrameRounding, 0);
 
-        ref var data    = ref isMainhand ? ref mainhand : ref offhand;
-        var     current = data.CurrentItem;
-        var     i       = 0;
-        HashSet<(FullEquipType, PrimaryId, SecondaryId, Variant)>? modelSet = _config.GroupIconPickerByModel
-            ? new HashSet<(FullEquipType, PrimaryId, SecondaryId, Variant)>()
-            : null;
+        ref var data     = ref isMainhand ? ref mainhand : ref offhand;
+        var     current  = data.CurrentItem;
+        var     i        = 0;
+        var     modelSet = _config.GroupIconPickerByModel ? _iconPickerModelSet : null;
+        modelSet?.Clear();
 
         if (comboType is FullEquipType.Unknown)
         {
@@ -967,7 +956,9 @@ public sealed partial class EquipmentDrawer
 
                     if (i > 0 && i % IconPickerColumns is not 0)
                         Im.Line.Same();
-                    DrawWeaponIconPickerItem(item, current, slot, ref mainhand, ref offhand, i);
+                    var (ptr, textureSize, empty) = _textures.GetIcon(item, slot);
+                    if (DrawPickerItemButton(item, current, ptr, textureSize, empty, i))
+                        ApplyWeaponPickerSelection(item, slot, ref mainhand, ref offhand);
                     ++i;
                 }
             }
@@ -988,7 +979,9 @@ public sealed partial class EquipmentDrawer
 
                 if (i > 0 && i % IconPickerColumns is not 0)
                     Im.Line.Same();
-                DrawWeaponIconPickerItem(item, current, slot, ref mainhand, ref offhand, i);
+                var (ptr, textureSize, empty) = _textures.GetIcon(item, slot);
+                if (DrawPickerItemButton(item, current, ptr, textureSize, empty, i))
+                    ApplyWeaponPickerSelection(item, slot, ref mainhand, ref offhand);
                 ++i;
             }
         }
@@ -997,56 +990,27 @@ public sealed partial class EquipmentDrawer
             Im.Text("No items match the current filter."u8);
     }
 
-    private void DrawWeaponIconPickerItem(in EquipItem item, in EquipItem current, EquipSlot slot,
-        ref EquipDrawData mainhand, ref EquipDrawData offhand, int index)
+    private void ApplyWeaponPickerSelection(in EquipItem item, EquipSlot slot, ref EquipDrawData mainhand, ref EquipDrawData offhand)
     {
-        using var id         = Im.Id.Push(index);
-        var       isFavorite = _favoriteManager.Contains(item);
-        using var frameColor = item.Id == current.Id
-            ? ImGuiColor.Button.Push(Colors.SelectedRed)
-            : ImGuiColor.Button.Push(FavoriteIconPickerColor, isFavorite);
-
-        var (ptr, textureSize, empty) = _textures.GetIcon(item, slot);
-        if (Im.Image.Button(ptr, _iconSize))
+        if (slot is EquipSlot.MainHand)
         {
-            if (slot is EquipSlot.MainHand)
+            mainhand.SetItem(item);
+            if (item.Type.ValidOffhand() != mainhand.CurrentItem.Type.ValidOffhand())
             {
-                mainhand.SetItem(item);
-                if (item.Type.ValidOffhand() != mainhand.CurrentItem.Type.ValidOffhand())
-                {
-                    offhand.CurrentItem = _items.GetDefaultOffhand(item);
-                    offhand.SetItem(offhand.CurrentItem);
-                }
-
-                mainhand.CurrentItem = item;
-            }
-            else
-            {
-                offhand.SetItem(item);
+                offhand.CurrentItem = _items.GetDefaultOffhand(item);
+                offhand.SetItem(offhand.CurrentItem);
             }
 
-            _iconPickerSelectionMade = true;
-            if (!_config.KeepIconPickerOpen)
-                CloseIconPickerAfterSelection();
+            mainhand.CurrentItem = item;
+        }
+        else
+        {
+            offhand.SetItem(item);
         }
 
-        if (Im.Item.RightClicked())
-        {
-            if (isFavorite)
-                _favoriteManager.Remove(item);
-            else
-                _favoriteManager.TryAdd(item);
-        }
-
-        if (Im.Item.Hovered())
-        {
-            _iconPickerHoveredItem = item;
-            using var tt = Im.Tooltip.Begin();
-            Im.Text(item.Name);
-            if (!empty)
-                Im.Image.Draw(ptr, textureSize);
-            Im.Text("Right-Click to toggle favorite."u8);
-        }
+        _iconPickerSelectionMade = true;
+        if (!_config.KeepIconPickerOpen)
+            CloseIconPickerAfterSelection();
     }
 
     private void DrawIconStainIndicators(in EquipDrawData data, bool vertical = false)

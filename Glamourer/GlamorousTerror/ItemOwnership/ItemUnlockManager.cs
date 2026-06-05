@@ -115,8 +115,6 @@ public sealed class ItemUnlockManager : ISavable, IDisposable, IReadOnlyDictiona
         _fullyScannedSources   = 0;
     }
 
-    //private Achievement.AchievementState _achievementState = Achievement.AchievementState.Invalid;
-
     private static readonly InventoryType[] ScannableInventories =
     {
         InventoryType.Inventory1,
@@ -154,21 +152,27 @@ public sealed class ItemUnlockManager : ISavable, IDisposable, IReadOnlyDictiona
     private static ItemSource GetInventorySource(InventoryType type)
         => type switch
         {
-            InventoryType.SaddleBag1        => ItemSource.Saddlebags,
-            InventoryType.SaddleBag2        => ItemSource.Saddlebags,
-            InventoryType.PremiumSaddleBag1 => ItemSource.Saddlebags,
-            InventoryType.PremiumSaddleBag2 => ItemSource.Saddlebags,
-            InventoryType.RetainerPage1          => ItemSource.Retainers,
-            InventoryType.RetainerPage2          => ItemSource.Retainers,
-            InventoryType.RetainerPage3          => ItemSource.Retainers,
-            InventoryType.RetainerPage4          => ItemSource.Retainers,
-            InventoryType.RetainerPage5          => ItemSource.Retainers,
-            InventoryType.RetainerPage6          => ItemSource.Retainers,
-            InventoryType.RetainerPage7          => ItemSource.Retainers,
-            InventoryType.RetainerEquippedItems  => ItemSource.Retainers,
-            InventoryType.RetainerMarket         => ItemSource.Retainers,
+            InventoryType.SaddleBag1
+                or InventoryType.SaddleBag2
+                or InventoryType.PremiumSaddleBag1
+                or InventoryType.PremiumSaddleBag2 => ItemSource.Saddlebags,
+            InventoryType.RetainerPage1
+                or InventoryType.RetainerPage2
+                or InventoryType.RetainerPage3
+                or InventoryType.RetainerPage4
+                or InventoryType.RetainerPage5
+                or InventoryType.RetainerPage6
+                or InventoryType.RetainerPage7
+                or InventoryType.RetainerEquippedItems
+                or InventoryType.RetainerMarket => ItemSource.Retainers,
             _ => ItemSource.Inventory,
         };
+
+    private void OrSource(uint id, ItemSource source)
+        => _sources[id] = (_sources.TryGetValue(id, out var existing) ? existing : 0) | source;
+
+    private void OrSeen(uint id, ItemSource source)
+        => _seenThisCycle[id] = (_seenThisCycle.TryGetValue(id, out var existing) ? existing : 0) | source;
 
     private bool AddItem(ItemId itemId, long time, ItemSource source = ItemSource.Inventory)
     {
@@ -179,10 +183,7 @@ public sealed class ItemUnlockManager : ISavable, IDisposable, IReadOnlyDictiona
         var isNew = _unlocked.TryAdd(equip.ItemId.Id, time);
 
         // Always OR-in the source, even if the item was already unlocked.
-        if (_sources.TryGetValue(equip.ItemId.Id, out var existing))
-            _sources[equip.ItemId.Id] = existing | source;
-        else
-            _sources[equip.ItemId.Id] = source;
+        OrSource(equip.ItemId.Id, source);
 
         if (isNew)
             _event.Invoke(new ObjectUnlocked.Arguments(ObjectUnlocked.Type.Item, equip.ItemId.Id, DateTimeOffset.FromUnixTimeMilliseconds(time)));
@@ -192,10 +193,7 @@ public sealed class ItemUnlockManager : ISavable, IDisposable, IReadOnlyDictiona
         {
             var variantIsNew = _unlocked.TryAdd(item.ItemId.Id, time);
 
-            if (_sources.TryGetValue(item.ItemId.Id, out var variantExisting))
-                _sources[item.ItemId.Id] = variantExisting | source;
-            else
-                _sources[item.ItemId.Id] = source;
+            OrSource(item.ItemId.Id, source);
 
             if (variantIsNew)
                 _event.Invoke(new ObjectUnlocked.Arguments(ObjectUnlocked.Type.Item, item.ItemId.Id,
@@ -212,19 +210,11 @@ public sealed class ItemUnlockManager : ISavable, IDisposable, IReadOnlyDictiona
         if (!_items.ItemData.TryGetValue(itemId, EquipSlot.MainHand, out var equip))
             return;
 
-        if (_seenThisCycle.TryGetValue(equip.ItemId.Id, out var existing))
-            _seenThisCycle[equip.ItemId.Id] = existing | source;
-        else
-            _seenThisCycle[equip.ItemId.Id] = source;
+        OrSeen(equip.ItemId.Id, source);
 
         var ident = _identifier.Identify(equip.PrimaryId, equip.SecondaryId, equip.Variant, equip.Type.ToSlot());
         foreach (var item in ident)
-        {
-            if (_seenThisCycle.TryGetValue(item.ItemId.Id, out var variantExisting))
-                _seenThisCycle[item.ItemId.Id] = variantExisting | source;
-            else
-                _seenThisCycle[item.ItemId.Id] = source;
-        }
+            OrSeen(item.ItemId.Id, source);
     }
 
     private unsafe void OnFramework(IFramework _)
@@ -438,10 +428,7 @@ public sealed class ItemUnlockManager : ISavable, IDisposable, IReadOnlyDictiona
                 Save();
             }
 
-            if (_sources.TryGetValue(id, out var existing))
-                _sources[id] = existing | source;
-            else
-                _sources[id] = source;
+            OrSource(id, source);
 
             return true;
         }
@@ -449,9 +436,6 @@ public sealed class ItemUnlockManager : ISavable, IDisposable, IReadOnlyDictiona
         time = DateTimeOffset.MaxValue;
         return false;
     }
-
-    public bool IsGameUnlocked(ItemId itemId)
-        => IsGameUnlocked(itemId, out _);
 
     public bool IsGameUnlocked(ItemId itemId, out ItemSource source)
     {
@@ -475,13 +459,6 @@ public sealed class ItemUnlockManager : ISavable, IDisposable, IReadOnlyDictiona
 
         var id = itemId.Item.Id;
         return _sources.TryGetValue(id, out var src) && (src & filter) != 0;
-    }
-
-    /// <summary> Get all sources an item has been seen from. </summary>
-    public ItemSource GetSources(CustomItemId itemId)
-    {
-        var id = itemId.Item.Id;
-        return _sources.TryGetValue(id, out var src) ? src : default;
     }
 
     public void Dispose()
@@ -508,10 +485,7 @@ public sealed class ItemUnlockManager : ISavable, IDisposable, IReadOnlyDictiona
             }
 
             // Always OR-in the source even if already unlocked.
-            if (_sources.TryGetValue(itemId.Id, out var existing))
-                _sources[itemId.Id] = existing | source;
-            else
-                _sources[itemId.Id] = source;
+            OrSource(itemId.Id, source);
         }
 
         // TODO inventories
@@ -596,10 +570,7 @@ public sealed class ItemUnlockManager : ISavable, IDisposable, IReadOnlyDictiona
                 if (_unlocked.TryAdd(item2.ItemId.Id, time))
                     _event.Invoke(new ObjectUnlocked.Arguments(ObjectUnlocked.Type.Item, item2.ItemId.Id, DateTimeOffset.FromUnixTimeMilliseconds(time)));
 
-                if (_sources.TryGetValue(item2.ItemId.Id, out var existingSrc))
-                    _sources[item2.ItemId.Id] = existingSrc | parentSource;
-                else
-                    _sources[item2.ItemId.Id] = parentSource;
+                OrSource(item2.ItemId.Id, parentSource);
             }
         }
     }

@@ -46,37 +46,22 @@ public sealed partial class ContextMenuService : IDisposable, IRequiredService
         if (config.EnableGameContextMenu)
             Enable();
 
-        _inventoryItem = new MenuItem
-        {
-            IsEnabled   = true,
-            IsReturn    = false,
-            PrefixChar  = 'G',
-            Name        = "Try On",
-            OnClicked   = OnClick,
-            IsSubmenu   = false,
-            PrefixColor = SeStringBuilderExtensions.Purple,
-        };
-        _characterItem = new MenuItem
-        {
-            IsEnabled   = true,
-            IsReturn    = false,
-            PrefixChar  = 'G',
-            Name        = "Glamorous Terror",
-            OnClicked   = OnCharacterClick,
-            IsSubmenu   = false,
-            PrefixColor = SeStringBuilderExtensions.Purple,
-        };
-        _immersiveDresserItem = new MenuItem
-        {
-            IsEnabled   = true,
-            IsReturn    = false,
-            PrefixChar  = 'G',
-            Name        = "Immersive Dresser",
-            OnClicked   = OnImmersiveDresserClick,
-            IsSubmenu   = false,
-            PrefixColor = SeStringBuilderExtensions.Purple,
-        };
+        _inventoryItem        = MakeItem("Try On", OnClick);
+        _characterItem        = MakeItem("Glamorous Terror", OnCharacterClick);
+        _immersiveDresserItem = MakeItem("Immersive Dresser", OnImmersiveDresserClick);
     }
+
+    private static MenuItem MakeItem(string name, Action<IMenuItemClickedArgs> onClicked)
+        => new()
+        {
+            IsEnabled   = true,
+            IsReturn    = false,
+            PrefixChar  = 'G',
+            Name        = name,
+            OnClicked   = onClicked,
+            IsSubmenu   = false,
+            PrefixColor = SeStringBuilderExtensions.Purple,
+        };
 
     private unsafe void OnMenuOpened(IMenuOpenedArgs args)
     {
@@ -123,8 +108,7 @@ public sealed partial class ContextMenuService : IDisposable, IRequiredService
 
                     if (HandleItem(*(ItemId*)(agent + ChatLogContextItemId)))
                     {
-                        for (var i = 0; i < _lastStains.Length; ++i)
-                            _lastStains[i] = 0;
+                        Array.Clear(_lastStains, 0, _lastStains.Length);
                         args.AddMenuItem(_inventoryItem);
                     }
 
@@ -138,8 +122,7 @@ public sealed partial class ContextMenuService : IDisposable, IRequiredService
 
                     if (HandleItem(agent->ContextMenuResultItemId))
                     {
-                        for (var i = 0; i < _lastStains.Length; ++i)
-                            _lastStains[i] = 0;
+                        Array.Clear(_lastStains, 0, _lastStains.Length);
                         args.AddMenuItem(_inventoryItem);
                     }
 

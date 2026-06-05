@@ -201,7 +201,8 @@ public sealed class FavoriteManager : ISavable, IService
     public bool Remove(EquipItem item)
     {
         if (item.Id.IsBonusItem)
-            Remove(item.Id.BonusItem);
+            return Remove(item.Id.BonusItem);
+
         return Remove(item.ItemId);
     }
 
@@ -241,7 +242,7 @@ public sealed class FavoriteManager : ISavable, IService
         if (!_favoriteHairStyles.Remove(id))
             return false;
 
-        FavoriteChanged?.Invoke(FavoriteType.Customization, id.ToValue(), true);
+        FavoriteChanged?.Invoke(FavoriteType.Customization, id.ToValue(), false);
         Save();
         return true;
     }
