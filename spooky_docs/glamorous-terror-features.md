@@ -33,7 +33,7 @@ Fork-specific code lives under `Glamourer/GlamorousTerror/` and is organized by 
 | `IconEquipment/` | `EquipmentDrawer.IconMode.cs` (icon grid + icon picker popup) |
 | `ImmersiveDresser/` | `ImmersiveDresserWindow.cs` (manager + 3 panel classes) |
 | `CharacterRotation/` | `RotationService.cs`, `RotationDrawer.cs` |
-| `UiActorMirror/` | `UiActorMirrorService.cs`, `UiActorSurface.cs`, `StateListener.UiActor.cs`, `ColorantPreviewService.cs` (UI/menu actor glamour mirroring) |
+| `UiActorMirror/` | `UiActorMirrorService.cs`, `UiActorSurface.cs`, `StateListener.UiActor.cs`, `UiActorMirrorRefreshService.cs`, `ColorantPreviewService.cs` (UI/menu actor glamour mirroring) |
 | `Config/` | `Configuration.GT.cs` (GT-only fields), `SettingsTab.GT.cs` (GT section UI) |
 
 Upstream-shaped code that needed hooks to call into fork code uses the partial-class + partial-method pattern (e.g., `EquipmentDrawer` has `GTTryDrawEquipIcon`, `GTResetIconState`, `GTCaptureStainSlot`, `GTPreFilterItem`, etc. — implemented in the GT folder, declared in the upstream file).
@@ -1452,6 +1452,16 @@ Five GT partial methods on `StateListener` (declared in `Glamourer/State/StateLi
 3. **`GTMirrorUiEquipSlot(actor, slot, ref armor)`** — re-applies glamoured armor per slot. Special UI actors **reload gear per slot after creation**, which would overwrite the creation-time mirror, so this hook (in `OnEquipSlotUpdating`) re-mirrors the slot's `ArmorWithState`.
 4. **`GTMirrorUiBonusSlot(actor, slot, ref armor)`** — mirrors the glamour's bonus item (glasses / eyewear) in `OnBonusSlotUpdating` via `ModelData.BonusItem(slot).Armor()`.
 5. **`GTMirrorUiWeapon(actor, slot, ref weapon)`** — mirrors the glamour's weapon in `OnWeaponLoading` via `ModelData.Weapon(slot)`.
+
+### State-Change Push — UiActorMirrorRefreshService
+
+The five hooks above are pull-only: they run when the game creates or reloads the UI actor's draw data, so a state change made *after* the window refreshed (equipping/unequipping gear via the game UI, editing the glamour in Glamourer) would never reach the menu actor. `UiActorMirrorRefreshService` (`IRequiredService`, in `UiActorMirrorRefreshService.cs`) closes that gap by subscribing to `StateChanged` and `StateFinalized` and re-pushing the gear family (equip slots via `UpdateSlotService.UpdateEquipSlot`, bonus slots via `UpdateBonusSlot`, weapons via `WeaponService.LoadWeapon`) onto every live screen actor (440–447) whose `TryResolve` maps to the changed state and has `mask.Gear` set. Properties:
+
+- **Equality-guarded** — current model values (`Model.GetArmor`/`GetBonus`/`GetWeapons`) are compared before writing, so redundant events cause zero slot reloads.
+- **No event re-entry** — all writes go through the hooks' `.Original` paths (`UpdateSlotService`/`WeaponService`), so nothing loops back into `StateListener`.
+- **Read-only on state** — like the hooks, it only reads the resolved character's `ActorState` and writes into the UI actor's transient draw data (preserves the no-remap invariant).
+- Empty weapons have their stains stripped before `LoadWeapon` (stains on an empty weapon crash the game).
+- Customize is deliberately not pushed (changes requiring a redraw cannot be safely applied to a special actor mid-frame); customize still mirrors at creation/reload time via `GTResolveUiActor`/`GTApplyUiActor`.
 
 ### Dye Preview — ColorantPreviewService
 
