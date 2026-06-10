@@ -3,6 +3,7 @@ using FFXIVClientStructs.FFXIV.Client.System.Resource.Handle;
 using Glamourer.Config;
 using Glamourer.Designs;
 using Glamourer.Interop.Penumbra;
+using Glamourer.Services;
 using Glamourer.State;
 using Luna;
 using Penumbra.GameData.Actors;
@@ -13,24 +14,26 @@ using Penumbra.GameData.Structs;
 
 namespace Glamourer.Interop.Material;
 
-public sealed unsafe class MaterialManager : IRequiredService, IDisposable
+public sealed unsafe partial class MaterialManager : IRequiredService, IDisposable
 {
-    private readonly PrepareColorSet _event;
-    private readonly StateManager    _stateManager;
-    private readonly PenumbraService _penumbra;
-    private readonly ActorManager    _actors;
+    private readonly PrepareColorSet      _event;
+    private readonly StateManager         _stateManager;
+    private readonly PenumbraService      _penumbra;
+    private readonly ActorManager         _actors;
+    private readonly UiActorMirrorService _uiActorMirror;
 
     private int _lastSlot;
 
     private readonly ThreadLocal<List<MaterialValueIndex>> _deleteList = new(() => []);
 
     public MaterialManager(PrepareColorSet prepareColorSet, StateManager stateManager, ActorManager actors, PenumbraService penumbra,
-        Configuration config)
+        Configuration config, UiActorMirrorService uiActorMirror)
     {
-        _stateManager = stateManager;
-        _actors       = actors;
-        _penumbra     = penumbra;
-        _event        = prepareColorSet;
+        _stateManager  = stateManager;
+        _actors        = actors;
+        _penumbra      = penumbra;
+        _uiActorMirror = uiActorMirror;
+        _event         = prepareColorSet;
         _event.Subscribe(OnPrepareColorSet, PrepareColorSet.Priority.MaterialManager);
     }
 
@@ -43,9 +46,14 @@ public sealed unsafe class MaterialManager : IRequiredService, IDisposable
         var validType = FindType(arguments.Model.AsCharacterBase, actor, out var type);
         var (slotId, materialId) = FindMaterial(arguments.Model.AsCharacterBase, arguments.Handle);
 
-        if (!validType
-         || type is not MaterialValueIndex.DrawObjectType.Human && slotId > 0
-         || !actor.Identifier(_actors, out var identifier)
+        if (!validType || type is not MaterialValueIndex.DrawObjectType.Human && slotId > 0)
+            return;
+
+        // UI/menu actors mirror the player's advanced dyes; applied read-only, never mutating the mirrored state.
+        if (GTApplyUiActorColorSet(actor, type, slotId, materialId, in arguments))
+            return;
+
+        if (!actor.Identifier(_actors, out var identifier)
          || !_stateManager.TryGetValue(identifier, out var state))
             return;
 

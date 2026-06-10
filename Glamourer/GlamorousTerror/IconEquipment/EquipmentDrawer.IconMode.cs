@@ -464,6 +464,36 @@ public sealed partial class EquipmentDrawer
             Im.Popup.CloseCurrent();
     }
 
+    // Mirrors the upstream DrawGearDragDrop, but the icon-mode source is an ID-less Im.Image, so it needs
+    // SourceAllowNullId; otherwise ImGui's BeginDragDropSource asserts when the icon is held/dragged.
+    private void GTDrawGearDragDrop(in EquipDrawData data)
+    {
+        if (data.CurrentItem.Valid)
+        {
+            using var dragSource = Im.DragDrop.Source(DragDropSourceFlags.SourceAllowNullId);
+            if (dragSource.Success)
+            {
+                dragSource.SetPayload("equipDragDrop"u8);
+                _draggedItem.Update(_items, data.CurrentItem, data.Slot);
+            }
+        }
+
+        using var dragTarget = Im.DragDrop.TargetUnclipped();
+        if (!dragTarget)
+            return;
+
+        var item = _draggedItem[data.Slot];
+        if (!item.Valid)
+            return;
+
+        _dragTarget = data.Slot;
+        if (!dragTarget.IsDropping("equipDragDrop"u8))
+            return;
+
+        data.SetItem(item);
+        _draggedItem.Clear();
+    }
+
     internal void DrawEquipIcon(in EquipDrawData data, bool stainsBeside = false, bool simplified = false)
     {
         var combo = _equipCombo[data.Slot.ToIndex()];
@@ -490,7 +520,7 @@ public sealed partial class EquipmentDrawer
                     ItemManager.NothingItem(data.Slot), out var item))
                 data.SetItem(item);
 
-            DrawGearDragDrop(data);
+            GTDrawGearDragDrop(data);
             if (!stainsBeside)
                 DrawIconStainIndicators(data);
         }
@@ -861,7 +891,7 @@ public sealed partial class EquipmentDrawer
                 }
             }
 
-            DrawGearDragDrop(data);
+            GTDrawGearDragDrop(data);
             if (!stainsBeside)
                 DrawIconStainIndicators(data);
         }

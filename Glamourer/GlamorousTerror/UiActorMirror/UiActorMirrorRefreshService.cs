@@ -20,17 +20,19 @@ public sealed class UiActorMirrorRefreshService : IDisposable, IRequiredService
     private readonly ActorObjectManager   _objects;
     private readonly UpdateSlotService    _updateSlot;
     private readonly WeaponService        _weapons;
+    private readonly StateApplier         _applier;
     private readonly StateChanged         _stateChanged;
     private readonly StateFinalized       _stateFinalized;
 
     public UiActorMirrorRefreshService(UiActorMirrorService uiActorMirror, StateManager stateManager, ActorObjectManager objects,
-        UpdateSlotService updateSlot, WeaponService weapons, StateChanged stateChanged, StateFinalized stateFinalized)
+        UpdateSlotService updateSlot, WeaponService weapons, StateApplier applier, StateChanged stateChanged, StateFinalized stateFinalized)
     {
         _uiActorMirror  = uiActorMirror;
         _stateManager   = stateManager;
         _objects        = objects;
         _updateSlot     = updateSlot;
         _weapons        = weapons;
+        _applier        = applier;
         _stateChanged   = stateChanged;
         _stateFinalized = stateFinalized;
         _stateChanged.Subscribe(OnStateChanged, (StateChanged.Priority)(-2000));
@@ -71,7 +73,20 @@ public sealed class UiActorMirrorRefreshService : IDisposable, IRequiredService
                 continue;
 
             PushGear(actor, model, state);
+            PushMaterials(actor, state);
         }
+    }
+
+    // Advanced dyes (material colour-table edits) are not part of a gear-slot reload, so the draw-object hooks
+    // never carry them onto a window that is already open. ChangeMaterialValues reads the mirrored state
+    // read-only and writes only into the UI actor's live colour-table textures, so nothing is persisted onto
+    // the mirrored character. Gated by the caller on the surface's Gear mask, like the gear push.
+    private void PushMaterials(Actor actor, ActorState state)
+    {
+        if (state.Materials.Values.Count == 0)
+            return;
+
+        _applier.ChangeMaterialValues(new ActorData(actor, "UI Actor Mirror"), state.Materials);
     }
 
     // Equality-guarded so redundant events cause no slot reloads; all writes go through the
