@@ -533,7 +533,7 @@ public sealed partial class EquipmentDrawer
                 DrawIconStainIndicators(data, vertical: simplified);
                 if (!simplified && !data.DisplayApplication && data.IsState)
                     _advancedDyes.DrawButton(data.Slot,
-                        data.HasAdvancedDyes ? _advancedMaterialColor : ColorParameter.Default, false);
+                        _advancedMaterialColor, false, data.HasAdvancedDyes);
             }
         }
 
@@ -701,7 +701,7 @@ public sealed partial class EquipmentDrawer
             {
                 Im.FrameDummy();
                 _advancedDyes.DrawButton(data.Slot,
-                    data.HasAdvancedDyes ? _advancedMaterialColor : ColorParameter.Default, false);
+                    _advancedMaterialColor, false, data.HasAdvancedDyes);
             }
         }
 
@@ -904,7 +904,7 @@ public sealed partial class EquipmentDrawer
                 DrawIconStainIndicators(data, vertical: simplified);
                 if (!simplified && !data.DisplayApplication && data.IsState)
                     _advancedDyes.DrawButton(slot,
-                        data.HasAdvancedDyes ? _advancedMaterialColor : ColorParameter.Default, false);
+                        _advancedMaterialColor, false, data.HasAdvancedDyes);
             }
         }
 

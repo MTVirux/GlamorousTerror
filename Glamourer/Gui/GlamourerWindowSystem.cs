@@ -1,4 +1,5 @@
 ﻿using Dalamud.Interface;
+using Glamourer.Api.Enums;
 using Glamourer.Config;
 using Glamourer.Gui.Tabs.AutomationTab;
 using Glamourer.Gui.Tabs.UnlocksTab;
@@ -8,15 +9,18 @@ namespace Glamourer.Gui;
 
 public sealed class GlamourerWindowSystem : IDisposable, IUiService
 {
-    private readonly WindowSystem _windowSystem;
-    private readonly IUiBuilder   _uiBuilder;
-    private readonly MainWindow   _ui;
+    private readonly NavigationService _navigation;
+    private readonly WindowSystem      _windowSystem;
+    private readonly IUiBuilder        _uiBuilder;
+    private readonly MainWindow        _ui;
 
     public GlamourerWindowSystem(IUiBuilder uiBuilder, MainWindow ui, Configuration config, UnlocksTab unlocksTab, GlamourerChangelog changelog,
-        DesignQuickBar quick, EquipmentBarWindow equipment, AutomationTestWindow automationTest, ImmersiveDresserManager immersiveDresser)
+        DesignQuickBar quick, EquipmentBarWindow equipment, AutomationTestWindow automationTest, NavigationService navigation,
+        ImmersiveDresserManager immersiveDresser)
     {
         _uiBuilder    = uiBuilder;
         _ui           = ui;
+        _navigation   = navigation;
         _windowSystem = WindowSystem.Create(uiBuilder, "Glamourer");
         _windowSystem.AddWindow(ui);
         _windowSystem.AddWindow(unlocksTab);
@@ -28,7 +32,7 @@ public sealed class GlamourerWindowSystem : IDisposable, IUiService
         _windowSystem.AddWindow(immersiveDresser.Right);
         _windowSystem.AddWindow(immersiveDresser.Options);
         _uiBuilder.OpenMainUi            += _ui.Toggle;
-        _uiBuilder.OpenConfigUi          += _ui.OpenSettings;
+        _uiBuilder.OpenConfigUi          += OpenSettings;
         _uiBuilder.DisableCutsceneUiHide =  !config.HideWindowInCutscene;
         _uiBuilder.DisableUserUiHide     =  config.ShowWindowWhenUiHidden;
     }
@@ -36,7 +40,10 @@ public sealed class GlamourerWindowSystem : IDisposable, IUiService
     public void Dispose()
     {
         _uiBuilder.OpenMainUi   -= _ui.Toggle;
-        _uiBuilder.OpenConfigUi -= _ui.OpenSettings;
+        _uiBuilder.OpenConfigUi -= OpenSettings;
         _windowSystem.Dispose();
     }
+
+    private void OpenSettings()
+        => _navigation.OpenTo(MainTabType.Settings);
 }
