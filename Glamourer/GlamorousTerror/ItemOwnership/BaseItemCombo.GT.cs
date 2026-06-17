@@ -5,6 +5,19 @@ namespace Glamourer.Gui.Equipment;
 
 public abstract partial class BaseItemCombo
 {
+    /// <summary>
+    /// Clears transient per-frame popup state. Called once per frame for every weapon combo so a combo that
+    /// stops being drawn mid-session (because a mainhand hover preview changed the weapon type and re-keyed
+    /// <c>_weaponCombo</c> to a different instance) cannot retain a stale <see cref="IsPopupOpen"/>/<see cref="HoveredItem"/>.
+    /// Without this, the hover-preview loop would stick on the undrawn combo and never revert the preview.
+    /// The live combo re-establishes its state when it is redrawn later in the same frame.
+    /// </summary>
+    public void GTResetFrameState()
+    {
+        IsPopupOpen = false;
+        HoveredItem = null;
+    }
+
     protected sealed partial class ItemFilter
     {
         private partial bool GTPreFilterItem(in CacheItem item)

@@ -17,6 +17,13 @@ public sealed partial class EquipmentDrawer
     {
         _stainPreviewValid    = false;
         _allStainPreviewValid = false;
+
+        // Defensive net: clear stale popup state on weapon combos not drawn this frame. A mainhand hover preview
+        // can change the weapon type and re-key _weaponCombo to a different instance; the abandoned instance keeps
+        // IsPopupOpen latched true (its Draw never runs again), which would trap ApplyHoverPreview's loop and stop
+        // the preview from reverting. The live combo re-sets its state when redrawn this frame.
+        foreach (var combo in _weaponCombo.Values)
+            combo.GTResetFrameState();
     }
 
     private partial void GTCaptureStainSlot(EquipSlot slot, int index)

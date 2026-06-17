@@ -402,7 +402,18 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
 
     private void DrawMainhand(ref EquipDrawData mainhand, ref EquipDrawData offhand, out StringU8 label, bool drawAll, bool open)
     {
-        if (!_weaponCombo.TryGetValue(drawAll ? FullEquipType.Unknown : mainhand.CurrentItem.Type, out var combo))
+        // GT: While a hover preview is mutating the mainhand, key the combo by the pre-preview weapon type.
+        // Otherwise a previewed cross-type weapon (e.g. another caster job's weapon) re-keys _weaponCombo to a
+        // different instance, abandoning the open dropdown — its IsPopupOpen latches true (Draw never runs again),
+        // trapping the hover-preview loop so the preview never reverts and the weapon can no longer be changed back.
+        var comboType = drawAll ? FullEquipType.Unknown : mainhand.CurrentItem.Type;
+        if (!drawAll
+         && _previewService.State.IsSingleItemPreview(EquipSlot.MainHand)
+         && _previewService.State.OriginalItem is { } original
+         && original.Type is not FullEquipType.Unknown)
+            comboType = original.Type;
+
+        if (!_weaponCombo.TryGetValue(comboType, out var combo))
         {
             label = StringU8.Empty;
             return;
