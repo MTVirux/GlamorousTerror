@@ -115,7 +115,8 @@ public sealed partial class SettingsTab(
         {
             Im.Line.SameInner();
             ImEx.Icon.DrawAligned(LunaStyle.WarningIcon, Colors.SelectedRed);
-            Im.Tooltip.OnHover("You have seasonal events disabled globally in Dalamud.\n\nGlamourer will respect this setting, so choosing yes here will not work until you enable the global setting.");
+            Im.Tooltip.OnHover(
+                "You have seasonal events disabled globally in Dalamud.\n\nGlamourer will respect this setting, so choosing yes here will not work until you enable the global setting.");
         }
 
         if (config.FestivalMode is not FestivalSetting.Undefined)
@@ -133,7 +134,9 @@ public sealed partial class SettingsTab(
                     });
         }
         else
+        {
             Im.FrameDummy();
+        }
 
         DrawPenumbraIntegrationSettings1();
         Checkbox("Revert Manual Changes on Zone Change"u8,
@@ -239,9 +242,7 @@ public sealed partial class SettingsTab(
             config.ShowQuickBarInTabs, v => config.ShowQuickBarInTabs = v);
         DrawQuickDesignBoxes();
 
-        Im.Dummy(Vector2.Zero);
-        Im.Separator();
-        Im.Dummy(Vector2.Zero);
+        LunaStyle.DrawSeparator();
 
         Checkbox("Enable Game Context Menus"u8, "Whether to show a Try On via Glamourer button on context menus for equippable items."u8,
             config.EnableGameContextMenu,       v =>
@@ -312,10 +313,7 @@ public sealed partial class SettingsTab(
             config.Save();
         });
 
-
-        Im.Dummy(Vector2.Zero);
-        Im.Separator();
-        Im.Dummy(Vector2.Zero);
+        LunaStyle.DrawSeparator();
 
         Checkbox("Allow Double-Clicking Designs to Apply"u8,
             "Tries to apply a design to the current player character When double-clicking it in the design selector."u8,
@@ -344,18 +342,21 @@ public sealed partial class SettingsTab(
             config.DebugMode,
             v => config.DebugMode = v);
 
-        Im.Dummy(Vector2.Zero);
-        Im.Separator();
-        Im.Dummy(Vector2.Zero);
+        LunaStyle.DrawSeparator();
 
         EquipmentDrawer.DrawKeepItemFilter(config);
+
+        var sortMode = config.ActorSortMode;
+        Im.Item.SetNextWidthScaled(300);
+        if (Im.Combo.DrawEnum("Actor Tab Sort Mode"u8, ref sortMode, ActorSortModeExtensions.ToNameU8, ActorSortModeExtensions.Tooltip))
+            config.ActorSortMode = sortMode;
 
         Checkbox("Remember Design Filter Across Sessions"u8,
             "Whether the filter in the Designs tab should remember its input and start with its list filtered identically to the last session."u8,
             config.RememberDesignFilter, v => config.RememberDesignFilter = v);
 
         Checkbox("Remember Actor Filter Across Sessions"u8,
-            "Whether the filter in the Actors tab should remember its input and start with its list filtered identically to the last session."u8,
+            "Whether the text filter in the Actors tab should remember its input and start with its list filtered identically to the last session. The type filters are remembered either way."u8,
             config.RememberActorFilter, v => config.RememberActorFilter = v);
 
         Checkbox("Remember Automation Filters Across Sessions"u8,
