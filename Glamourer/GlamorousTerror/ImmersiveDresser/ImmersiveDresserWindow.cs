@@ -430,7 +430,8 @@ public sealed class ImmersiveDresserManager : IDisposable, IService
             if (manager._currentMode is DresserMode.Appearance)
             {
                 // Customization drawer
-                if (customizationDrawer.Draw(state.ModelData.Customize, state.IsLocked, false))
+                if (customizationDrawer.Draw(state.ModelData.Customize, state.IsLocked, false, true,
+                        state.Materials.CheckExistenceSlots(ModelCombinedSlotsExtensions.AllCustomization)))
                     stateManager.ChangeEntireCustomize(state, customizationDrawer.Customize,
                         customizationDrawer.Changed, ApplySettings.Manual);
 

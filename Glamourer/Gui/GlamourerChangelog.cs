@@ -13,7 +13,7 @@ public sealed class GlamourerChangelog : IUiService
     public GlamourerChangelog(Configuration config)
     {
         _config   = config;
-        Changelog = new Changelog("Glamourer Changelog (synced with upstream Glamourer 1.6.1.7 (stable +3))", ConfigData, Save);
+        Changelog = new Changelog("Glamourer Changelog (synced with upstream Glamourer 1.7.0.1 (testing +1))", ConfigData, Save);
 
         Add1_0_0_0(Changelog);
         Add1_0_0_1(Changelog);
@@ -50,6 +50,7 @@ public sealed class GlamourerChangelog : IUiService
         AddDummy(Changelog);
         Add1_6_0_0(Changelog);
         Add1_6_1_0(Changelog);
+        Add1_7_0_0(Changelog);
         AddGlamorousTerrorFeatures(Changelog);
     }
 
@@ -88,11 +89,42 @@ public sealed class GlamourerChangelog : IUiService
             .RegisterEntry("Character rotation override inside the Immersive Dresser — drag yaw, pitch, and roll independently of the game's animation."u8)
             .RegisterEntry("/gt command alias for /glamour."u8);
 
+    private static void Add1_7_0_0(Changelog log)
+        => log.NextVersion("Version 1.7.0.0"u8)
+            .RegisterHighlight("Improved filtering and sorting of the actor tab."u8)
+            .RegisterHighlight("Added a text command to update an existing design with an actor's state."u8)
+            .RegisterHighlight("Added the option to manipulate the advanced dyes of the remaining slots (Thanks Ny!)."u8)
+            .RegisterEntry(
+                "Generally, those slots have no materials to edit, unless they have accessories (in case of hairstyles) or are modded."u8, 1)
+            .RegisterEntry(
+                "Face, Hair, and Ear or Tail advanced dyes can be edited on the actor tab via advanced dye buttons, as well as in designs directly."u8,
+                1)
+            .RegisterEntry(
+                "Connector and Body slots can only be added and edited directly in designs for the moment, but there is nothing to edit for them in general, unmodded situations."u8,
+                1)
+            .RegisterEntry("Fixed Glamourers hat state affecting the checksum used for portraits."u8)
+            .RegisterEntry("Fixed the application of the second dye in the context menu try-on (thanks Ny!)."u8)
+            .RegisterEntry("Fixed issues with transformations like reaper form and advanced dyes."u8)
+            .RegisterEntry("Fixed several issues with advanced dye states."u8)
+            .RegisterEntry("Added API and IPC to manage navigation of Glamourer (1.6.1.7)."u8)
+            .RegisterEntry("Added the option to right-click the advanced dyes button to remove all advanced dyes on that slot (1.6.1.7)."u8)
+            .RegisterEntry("Fixed issues with advanced dyes not clearing from IPC application (thanks UniversalConquistador!) (1.6.1.7)."u8)
+            .RegisterEntry("Fixed issues with infinity values in advanced dyes (1.6.1.7)."u8)
+            .RegisterEntry("Fixed missing labels if no application rules are shown (1.6.1.7)."u8)
+            .RegisterEntry("Fixed issues with bonus items on head slots and vice versa (1.6.1.7)."u8)
+            .RegisterEntry("Added a chat command to toggle the equipment bar (1.6.1.5)."u8)
+            .RegisterEntry("Fixed issues with offhand application when applying designs (1.6.1.5)."u8)
+            .RegisterEntry("Fixed issue with drag & drop on the equipment bar (1.6.1.5)."u8)
+            .RegisterEntry("Fixed several issues with resetting advanced dyes (1.6.1.5)."u8)
+            .RegisterEntry("Fixed an issue when sorting for inverse update dates (1.6.1.3)."u8)
+            .RegisterEntry("Fixed Several issues with application of compatible weapon types in automation (1.6.1.3)."u8);
+
     private static void Add1_6_1_0(Changelog log)
         => log.NextVersion("Version 1.6.1.0"u8)
             .RegisterHighlight("Glamourer has been updated for game version 7.50 and Dalamud API 15."u8)
             .RegisterEntry(
-                "The game entirely removed the specular advanced customization options for skin- and hair color, which were already removed from visible editing in Glamourer. This is probably in preparation for the changes in 8.0. This means it is very unlikely for them to come back."u8, 1)
+                "The game entirely removed the specular advanced customization options for skin- and hair color, which were already removed from visible editing in Glamourer. This is probably in preparation for the changes in 8.0. This means it is very unlikely for them to come back."u8,
+                1)
             .RegisterHighlight(
                 "Added an Automation Test Window that can check your automation sets against a job or gearset to see which design applies which changes."u8)
             .RegisterEntry("The Unlocks tab has been renamed to the Item Log tab."u8)
