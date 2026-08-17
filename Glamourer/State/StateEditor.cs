@@ -5,6 +5,7 @@ using Glamourer.Designs.History;
 using Glamourer.Designs.Links;
 using Glamourer.Events;
 using Glamourer.GameData;
+using Glamourer.GlamorousTerror.WeaponUnlock;
 using Glamourer.Interop.Material;
 using Glamourer.Interop.Penumbra;
 using Glamourer.Services;
@@ -88,8 +89,9 @@ public class StateEditor(
             ? Applier.ChangeArmor(state, slot, settings.Source.RequiresChange())
             : Applier.ChangeWeapon(state, slot, settings.Source.RequiresChange(),
                 slot is EquipSlot.MainHand
-                    ? !item.Type.IsCompatible(state.BaseData.MainhandType)
-                    : !item.Type.IsOffhandCompatible(state.BaseData.MainhandType, state.ModelData.MainhandType, state.BaseData.OffhandType));
+                    ? !item.Type.IsCompatibleGT(state.BaseData.MainhandType, Config)
+                    : !item.Type.IsOffhandCompatibleGT(state.BaseData.MainhandType, state.ModelData.MainhandType,
+                        state.BaseData.OffhandType, Config));
 
         if (slot is EquipSlot.MainHand)
             ApplyMainhandPeriphery(state, item, null, settings);
@@ -154,8 +156,9 @@ public class StateEditor(
             ? Applier.ChangeArmor(state, slot, settings.Source.RequiresChange())
             : Applier.ChangeWeapon(state, slot, settings.Source.RequiresChange(),
                 slot is EquipSlot.MainHand
-                    ? !item!.Value.Type.IsCompatible(state.BaseData.MainhandType)
-                    : !item!.Value.Type.IsOffhandCompatible(state.BaseData.MainhandType, state.ModelData.MainhandType, state.BaseData.OffhandType));
+                    ? !item!.Value.Type.IsCompatibleGT(state.BaseData.MainhandType, Config)
+                    : !item!.Value.Type.IsOffhandCompatibleGT(state.BaseData.MainhandType, state.ModelData.MainhandType,
+                        state.BaseData.OffhandType, Config));
 
         if (slot is EquipSlot.MainHand)
             ApplyMainhandPeriphery(state, item, stains, settings);

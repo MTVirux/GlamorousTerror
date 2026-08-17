@@ -16,7 +16,7 @@ public sealed class WeaponCombo(FavoriteManager favorites, ItemManager items, Co
 
     protected override bool Identify(out EquipItem item)
     {
-        if (Slot is not FullEquipType.Unknown && !ItemData.ConvertWeaponId(CustomSetId).IsCompatible(CurrentItem.Type))
+        if (!Slot.IsUnknown() && !ItemData.ConvertWeaponId(CustomSetId).IsCompatible(CurrentItem.Type))
         {
             item = default;
             return false;
@@ -27,16 +27,22 @@ public sealed class WeaponCombo(FavoriteManager favorites, ItemManager items, Co
 
     protected override IEnumerable<CacheItem> GetItems()
     {
-        if (Slot is FullEquipType.Unknown)
+        // GT: Unknown lists every mainhand, UnknownOffhand every offhand. Both are used by the
+        // Unrestricted Weapons setting to offer weapons outside the character's current job.
+        if (Slot is FullEquipType.Unknown or FullEquipType.UnknownOffhand)
         {
+            var wantedSlot = Slot is FullEquipType.Unknown ? EquipSlot.MainHand : EquipSlot.OffHand;
             var enumerable = Array.Empty<EquipItem>().AsEnumerable();
-            foreach (var t in FullEquipType.Values.Where(e => e.ToSlot() is EquipSlot.MainHand))
+            foreach (var t in FullEquipType.Values.Where(e => e.ToSlot() == wantedSlot))
             {
                 if (Items.ItemData.ByType.TryGetValue(t, out var l))
                     enumerable = enumerable.Concat(l);
             }
 
-            return enumerable.OrderByDescending(Favorites.Contains).ThenBy(e => e.Name).Select(e => new CacheItem(e));
+            IEnumerable<EquipItem> all = enumerable.OrderByDescending(Favorites.Contains).ThenBy(e => e.Name);
+            if (wantedSlot is EquipSlot.OffHand)
+                all = all.Prepend(ItemManager.NothingItem(FullEquipType.Shield));
+            return all.Select(e => new CacheItem(e));
         }
 
         if (!Items.ItemData.ByType.TryGetValue(Slot, out var list))
@@ -54,5 +60,10 @@ public sealed class WeaponCombo(FavoriteManager favorites, ItemManager items, Co
     }
 
     private static StringU8 GetLabel(FullEquipType type)
-        => type.IsUnknown() ? new StringU8("Mainhand"u8) : new StringU8(type.ToName());
+        => type switch
+        {
+            FullEquipType.UnknownOffhand => new StringU8("Offhand"u8),
+            _ when type.IsUnknown()      => new StringU8("Mainhand"u8),
+            _                            => new StringU8(type.ToName()),
+        };
 }

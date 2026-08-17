@@ -16,6 +16,7 @@ using Glamourer.Designs;
 using Penumbra.GameData.Interop;
 using Glamourer.Api.Enums;
 using Glamourer.Config;
+using Glamourer.GlamorousTerror.WeaponUnlock;
 using Luna;
 
 namespace Glamourer.State;
@@ -397,8 +398,9 @@ public sealed partial class StateListener : IDisposable, IRequiredService
         {
             // Only allow overwriting compatible weapons
             var canApply = (arguments.Slot is EquipSlot.MainHand
-                ? modelType.IsCompatible(state.BaseData.MainhandType)
-                : modelType.IsOffhandCompatible(state.BaseData.MainhandType, state.ModelData.MainhandType, state.BaseData.OffhandType))
+                ? modelType.IsCompatibleGT(state.BaseData.MainhandType, _config)
+                : modelType.IsOffhandCompatibleGT(state.BaseData.MainhandType, state.ModelData.MainhandType, state.BaseData.OffhandType,
+                    _config))
              || _gPose.InGPose && arguments.Actor.IsGPoseOrCutscene;
             var newWeapon = state.ModelData.Weapon(arguments.Slot);
             if (canApply)

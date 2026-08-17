@@ -1,5 +1,7 @@
-﻿using Glamourer.Designs;
+﻿using Glamourer.Config;
+using Glamourer.Designs;
 using Glamourer.GameData;
+using Glamourer.GlamorousTerror.WeaponUnlock;
 using Glamourer.Interop;
 using Glamourer.Interop.Material;
 using Glamourer.Interop.Penumbra;
@@ -27,7 +29,8 @@ public class StateApplier(
     MetaService metaService,
     ActorObjectManager objects,
     CrestService crests,
-    DirectXService directX) : IRequiredService
+    DirectXService directX,
+    Configuration config) : IRequiredService
 {
     /// <summary> Simply force a redraw regardless of conditions. </summary>
     public void ForceRedraw(ActorData data)
@@ -415,11 +418,11 @@ public class StateApplier(
                 ChangeBonusItem(actors, slot, item.PrimaryId, item.Variant);
             }
 
-            var mainhandActors = state.ModelData.MainhandType.IsCompatible(state.BaseData.MainhandType) ? actors : actors.OnlyGPose();
+            var mainhandActors = state.ModelData.MainhandType.IsCompatibleGT(state.BaseData.MainhandType, config) ? actors : actors.OnlyGPose();
             ChangeMainhand(mainhandActors, state.ModelData.Item(EquipSlot.MainHand), state.ModelData.Stain(EquipSlot.MainHand));
             var offhandActors =
-                state.ModelData.OffhandType.IsOffhandCompatible(state.BaseData.MainhandType, state.ModelData.MainhandType,
-                    state.BaseData.OffhandType)
+                state.ModelData.OffhandType.IsOffhandCompatibleGT(state.BaseData.MainhandType, state.ModelData.MainhandType,
+                    state.BaseData.OffhandType, config)
                     ? actors
                     : actors.OnlyGPose();
             ChangeOffhand(offhandActors, state.ModelData.Item(EquipSlot.OffHand), state.ModelData.Stain(EquipSlot.OffHand));

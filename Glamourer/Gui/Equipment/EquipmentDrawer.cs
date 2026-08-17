@@ -406,8 +406,10 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
         // Otherwise a previewed cross-type weapon (e.g. another caster job's weapon) re-keys _weaponCombo to a
         // different instance, abandoning the open dropdown — its IsPopupOpen latches true (Draw never runs again),
         // trapping the hover-preview loop so the preview never reverts and the weapon can no longer be changed back.
-        var comboType = drawAll ? FullEquipType.Unknown : mainhand.CurrentItem.Type;
+        // GT: Unrestricted Weapons keys the combo to Unknown so it lists every mainhand in the game.
+        var comboType = drawAll || _config.UnrestrictedWeapons ? FullEquipType.Unknown : mainhand.CurrentItem.Type;
         if (!drawAll
+         && !_config.UnrestrictedWeapons
          && _previewService.State.IsSingleItemPreview(EquipSlot.MainHand)
          && _previewService.State.OriginalItem is { } original
          && original.Type is not FullEquipType.Unknown)
@@ -420,7 +422,7 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
         }
 
         label = combo.Label;
-        var        unknown     = !_gPose.InGPose && mainhand.CurrentItem.Type is FullEquipType.Unknown;
+        var        unknown     = !_gPose.InGPose && !_config.UnrestrictedWeapons && mainhand.CurrentItem.Type is FullEquipType.Unknown;
         using var  style       = ImStyleDouble.ItemSpacing.Push(Im.Style.ItemInnerSpacing);
         EquipItem? changedItem = null;
         using (Im.Disabled(mainhand.Locked | unknown))
@@ -457,7 +459,9 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
     private void DrawOffhand(in EquipDrawData mainhand, FullEquipType validOffhand, in EquipDrawData offhand, out StringU8 label, bool clear,
         bool open)
     {
-        if (!_weaponCombo.TryGetValue(validOffhand, out var combo))
+        // GT: Unrestricted Weapons keys the combo to UnknownOffhand so it lists every offhand in the game.
+        var comboType = _config.UnrestrictedWeapons ? FullEquipType.UnknownOffhand : validOffhand;
+        if (!_weaponCombo.TryGetValue(comboType, out var combo))
         {
             label = StringU8.Empty;
             return;
@@ -465,7 +469,7 @@ public sealed partial class EquipmentDrawer : IUiService, IDisposable
 
         label = combo.Label;
         var locked = offhand.Locked
-         || !_gPose.InGPose && validOffhand.IsUnknown();
+         || !_gPose.InGPose && !_config.UnrestrictedWeapons && validOffhand.IsUnknown();
         using var disabled = Im.Disabled(locked);
         if (!locked && open)
             UiHelpers.OpenCombo(combo.Label);

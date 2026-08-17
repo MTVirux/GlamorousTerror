@@ -99,7 +99,8 @@ public sealed partial class EquipmentDrawer
         {
             if (combo.IsPopupOpen)
             {
-                var slot = type.ToSlot();
+                // Unknown keys the all-mainhands combo, but ToSlot() maps it to EquipSlot.Unknown.
+                var slot = type is FullEquipType.Unknown ? EquipSlot.MainHand : type.ToSlot();
                 if (combo.HoveredItem is { } hoveredItem)
                     _previewService.PreviewSingleItem(state, slot, hoveredItem);
                 else

@@ -299,7 +299,26 @@ public sealed class ItemManager : IService
     public bool IsOffhandValid(FullEquipType offType, ItemId offId, out EquipItem off)
     {
         off = Resolve(offType, offId);
-        return offType == FullEquipType.Unknown || off.Valid;
+        if (offType == FullEquipType.Unknown || off.Valid)
+            return true;
+
+        // GT: Unrestricted Weapons accepts an offhand whose type differs from the one implied by the mainhand,
+        // so designs can store and reload cross-class offhands instead of resetting them to the implied default.
+        if (!_config.UnrestrictedWeapons)
+            return false;
+
+        // The unrestricted offhand list offers a single Nothing entry, which carries the shield nothing id.
+        if (offId == NothingId(FullEquipType.Shield))
+        {
+            off = NothingItem(offType);
+            return true;
+        }
+
+        if (!ItemData.TryGetValue(offId, EquipSlot.OffHand, out var crossType))
+            return false;
+
+        off = crossType;
+        return true;
     }
 
     /// <summary> Returns whether an offhand is valid given mainhand. </summary>

@@ -1,7 +1,9 @@
 ﻿using Dalamud.Plugin.Services;
+using Glamourer.Config;
 using Glamourer.Designs;
 using Glamourer.Events;
 using Glamourer.GameData;
+using Glamourer.GlamorousTerror.WeaponUnlock;
 using Glamourer.Interop.Material;
 using Glamourer.Services;
 using ImSharp;
@@ -17,6 +19,7 @@ public class InternalStateEditor(
     HumanModelList humans,
     ItemManager items,
     GPoseService gPose,
+    Configuration config,
     ICondition condition) : IService
 {
     /// <summary> Change the model id. If the actor is changed from a human to another human, customize and equipData are unused. </summary>
@@ -138,9 +141,9 @@ public class InternalStateEditor(
             return false;
 
         // Can not change weapon type from expected type in state.
-        if (slot is EquipSlot.MainHand && !item.Type.IsCompatible(state.BaseData.MainhandType)
+        if (slot is EquipSlot.MainHand && !item.Type.IsCompatibleGT(state.BaseData.MainhandType, config)
          || slot is EquipSlot.OffHand
-         && !item.Type.IsOffhandCompatible(state.BaseData.MainhandType, state.ModelData.MainhandType, state.BaseData.OffhandType))
+         && !item.Type.IsOffhandCompatibleGT(state.BaseData.MainhandType, state.ModelData.MainhandType, state.BaseData.OffhandType, config))
         {
             if (!gPose.InGPose)
                 return false;
@@ -180,9 +183,9 @@ public class InternalStateEditor(
             return false;
 
         // Can not change weapon type from expected type in state.
-        if (slot is EquipSlot.MainHand && !item.Type.IsCompatible(state.BaseData.MainhandType)
+        if (slot is EquipSlot.MainHand && !item.Type.IsCompatibleGT(state.BaseData.MainhandType, config)
          || slot is EquipSlot.OffHand
-         && !item.Type.IsOffhandCompatible(state.BaseData.MainhandType, state.ModelData.MainhandType, state.BaseData.OffhandType))
+         && !item.Type.IsOffhandCompatibleGT(state.BaseData.MainhandType, state.ModelData.MainhandType, state.BaseData.OffhandType, config))
         {
             if (!gPose.InGPose)
                 return false;

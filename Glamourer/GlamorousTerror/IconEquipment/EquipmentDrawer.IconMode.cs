@@ -831,8 +831,8 @@ public sealed partial class EquipmentDrawer
     {
         ref var data = ref isMainhand ? ref mainhand : ref offhand;
         var comboType = isMainhand
-            ? (allWeapons ? FullEquipType.Unknown : mainhand.CurrentItem.Type)
-            : offhand.CurrentItem.Type;
+            ? (allWeapons || _config.UnrestrictedWeapons ? FullEquipType.Unknown : mainhand.CurrentItem.Type)
+            : (_config.UnrestrictedWeapons ? FullEquipType.UnknownOffhand : offhand.CurrentItem.Type);
 
         if (!_weaponCombo.TryGetValue(comboType, out var combo))
             return;
@@ -965,9 +965,10 @@ public sealed partial class EquipmentDrawer
         var     modelSet = _config.GroupIconPickerByModel ? _iconPickerModelSet : null;
         modelSet?.Clear();
 
-        if (comboType is FullEquipType.Unknown)
+        if (comboType is FullEquipType.Unknown or FullEquipType.UnknownOffhand)
         {
-            foreach (var t in FullEquipType.Values.Where(e => e.ToSlot() is EquipSlot.MainHand))
+            var wantedSlot = comboType is FullEquipType.Unknown ? EquipSlot.MainHand : EquipSlot.OffHand;
+            foreach (var t in FullEquipType.Values.Where(e => e.ToSlot() == wantedSlot))
             {
                 if (!_items.ItemData.ByType.TryGetValue(t, out var l))
                     continue;

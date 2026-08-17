@@ -43,6 +43,8 @@ public sealed partial class Configuration
     public EquipmentNameLanguage EquipmentNameLanguage        { get; set; } = EquipmentNameLanguage.GameDefault;
     public bool                  CrossLanguageEquipmentSearch { get; set; } = false;
 
+    public bool                  UnrestrictedWeapons          { get; set; } = false;
+
     public bool                                   OwnedOnlyComboFilter    { get; set; } = false;
     public Unlocks.ItemUnlockManager.ItemSource   OwnedComboFilterSources { get; set; } = Unlocks.ItemUnlockManager.ItemSource.All;
 
