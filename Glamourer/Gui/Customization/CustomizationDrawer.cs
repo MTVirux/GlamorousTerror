@@ -80,7 +80,7 @@ public sealed partial class CustomizationDrawer(
     {
         GTResetPopupFlags();
         UpdateSizes();
-        _advancedMaterialColor = ColorId.AdvancedDyeActive.Value();
+        _advancedMaterialColor = ColorId.AdvancedDyeActive.Value;
         _terminate             = null;
         Changed                = 0;
         _customize             = current;

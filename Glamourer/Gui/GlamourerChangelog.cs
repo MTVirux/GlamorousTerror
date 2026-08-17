@@ -13,7 +13,7 @@ public sealed class GlamourerChangelog : IUiService
     public GlamourerChangelog(Configuration config)
     {
         _config   = config;
-        Changelog = new Changelog("Glamourer Changelog (synced with upstream Glamourer 1.7.0.1 (testing +1))", ConfigData, Save);
+        Changelog = new Changelog("Glamourer Changelog (synced with upstream Glamourer 1.7.0.2 (testing +6))", ConfigData, Save);
 
         Add1_0_0_0(Changelog);
         Add1_0_0_1(Changelog);

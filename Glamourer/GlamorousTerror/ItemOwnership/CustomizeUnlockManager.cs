@@ -1,7 +1,6 @@
 ﻿using Dalamud.Game;
 using Dalamud.Hooking;
 using Dalamud.Plugin.Services;
-using Dalamud.Utility.Signatures;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
 using Glamourer.GameData;
 using Glamourer.Events;
@@ -17,6 +16,7 @@ namespace Glamourer.Unlocks;
 
 public sealed class CustomizeUnlockManager : IDisposable, ISavable, IRequiredService
 {
+    private readonly HookManager            _hooks;
     private readonly SaveService            _saveService;
     private readonly IClientState           _clientState;
     private readonly ObjectUnlocked         _event;
@@ -29,23 +29,24 @@ public sealed class CustomizeUnlockManager : IDisposable, ISavable, IRequiredSer
         => _unlocked;
 
     public CustomizeUnlockManager(SaveService saveService, CustomizeService customizations, IDataManager gameData,
-        IClientState clientState, ObjectUnlocked @event, IGameInteropProvider interop, ActorObjectManager objects)
+        IClientState clientState, ObjectUnlocked @event, ActorObjectManager objects, HookManager hooks)
     {
-        interop.InitializeFromAttributes(this);
         _saveService = saveService;
         _clientState = clientState;
         _event       = @event;
         _objects     = objects;
+        _hooks       = hooks;
         Unlockable   = CreateUnlockableCustomizations(customizations, gameData);
         Load();
-        _setUnlockLinkValueHook.Enable();
+        _setUnlockLinkValueHook =
+            _hooks.CreateHook<SetUnlockLinkValueDelegate>("SetUnlockLinkValue", Sigs.SetUnlockLinkValue, SetUnlockLinkValueDetour, true)!;
         _clientState.Login += Scan;
         Scan();
     }
 
     public void Dispose()
     {
-        _setUnlockLinkValueHook.Dispose();
+        _hooks.DisposeHook("SetUnlockLinkValue");
         _clientState.Login -= Scan;
     }
 
@@ -127,12 +128,11 @@ public sealed class CustomizeUnlockManager : IDisposable, ISavable, IRequiredSer
 
     private delegate void SetUnlockLinkValueDelegate(nint uiState, uint data, byte value);
 
-    [Signature(Sigs.SetUnlockLinkValue, DetourName = nameof(SetUnlockLinkValueDetour))]
-    private readonly Hook<SetUnlockLinkValueDelegate> _setUnlockLinkValueHook = null!;
+    private readonly Task<Hook<SetUnlockLinkValueDelegate>> _setUnlockLinkValueHook;
 
     private void SetUnlockLinkValueDetour(nint uiState, uint data, byte value)
     {
-        _setUnlockLinkValueHook.Original(uiState, data, value);
+        _setUnlockLinkValueHook.Result.Original(uiState, data, value);
         try
         {
             if (value is 0)
