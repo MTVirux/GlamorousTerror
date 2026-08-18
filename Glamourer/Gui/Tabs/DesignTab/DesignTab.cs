@@ -2,6 +2,7 @@
 using Glamourer.Api.Enums;
 using Glamourer.Config;
 using Glamourer.Designs;
+using Glamourer.GlamorousTerror.DesignImport;
 using Glamourer.Interop;
 using ImSharp;
 using Luna;
@@ -13,9 +14,10 @@ public sealed class DesignTab : TwoPanelLayout, ITab<MainTabType>
     private readonly ImportService _importService;
     private readonly DesignManager _manager;
     private readonly UiConfig      _uiConfig;
+    private readonly Configuration _config;
 
     public DesignTab(DesignFileSystemDrawer drawer, DesignPanel panel, ImportService importService, DesignManager manager, DesignFilter filter,
-        DesignHeader header, UiConfig uiConfig)
+        DesignHeader header, UiConfig uiConfig, Configuration config)
     {
         LeftHeader = drawer.Header;
         LeftPanel  = drawer;
@@ -27,6 +29,7 @@ public sealed class DesignTab : TwoPanelLayout, ITab<MainTabType>
         _importService = importService;
         _manager       = manager;
         _uiConfig      = uiConfig;
+        _config        = config;
     }
 
     public override ReadOnlySpan<byte> Label
@@ -40,7 +43,7 @@ public sealed class DesignTab : TwoPanelLayout, ITab<MainTabType>
         base.DrawLeftGroup(in width);
         if (_importService.CreateCharaTarget(out var designBase, out var name))
         {
-            var newDesign = _manager.CreateClone(designBase, name, true);
+            var newDesign = _manager.CreateClone(designBase, _config.WithImportFolder(name), true);
             Glamourer.Messager.NotificationMessage($"Imported Anamnesis .chara file {name} as new design {newDesign.Name}",
                 NotificationType.Success, false);
         }

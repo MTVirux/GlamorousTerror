@@ -44,6 +44,10 @@ public sealed partial class SettingsTab
 
         SpacedSeparator();
 
+        DrawImportFolderControls();
+
+        SpacedSeparator();
+
         EquipmentDrawer.DrawOwnedOnlyFilter(config);
 
         SpacedSeparator();
@@ -77,6 +81,26 @@ public sealed partial class SettingsTab
         DrawUiActorMirrorSettings();
 
         Im.Line.New();
+    }
+
+    private void DrawImportFolderControls()
+    {
+        Checkbox("Sort Imported Designs into a Folder"u8,
+            "Place designs created by importing (clipboard, .chara/.cma files, other plugins) into a dedicated folder.\nThe folder is created on the first import and reused afterwards.\nImports that already specify their own folder path are left alone."u8,
+            config.AutoFolderImportedDesigns, v => config.AutoFolderImportedDesigns = v);
+
+        if (!config.AutoFolderImportedDesigns)
+            return;
+
+        Im.Item.SetNextWidth(0.4f * Im.ContentRegion.Available.X);
+        if (ImEx.InputOnDeactivation.Text("##importedDesignsFolder"u8, config.ImportedDesignsFolder, out string newFolder))
+        {
+            config.ImportedDesignsFolder = newFolder;
+            config.Save();
+        }
+
+        LunaStyle.DrawAlignedHelpMarkerLabel("Imported Designs Folder"u8,
+            "The folder imported designs are moved to on creation.\nLeave blank to import into Root."u8);
     }
 
     private void DrawUiActorMirrorSettings()

@@ -1,11 +1,13 @@
 ﻿using Dalamud.Interface.ImGuiNotification;
+using Glamourer.Config;
 using Glamourer.Designs;
+using Glamourer.GlamorousTerror.DesignImport;
 using ImSharp;
 using Luna;
 
 namespace Glamourer.Gui.Tabs.DesignTab;
 
-public sealed class ImportDesignButton(DesignConverter converter, DesignManager manager) : BaseIconButton<AwesomeIcon>
+public sealed class ImportDesignButton(DesignConverter converter, DesignManager manager, Configuration config) : BaseIconButton<AwesomeIcon>
 {
     private string _clipboardText = string.Empty;
 
@@ -40,10 +42,11 @@ public sealed class ImportDesignButton(DesignConverter converter, DesignManager 
             return;
 
         var design = converter.FromBase64(_clipboardText, true, true, out _);
+        var path   = config.WithImportFolder(newName);
         if (design is Design d)
-            manager.CreateClone(d, newName, true);
+            manager.CreateClone(d, path, true);
         else if (design is not null)
-            manager.CreateClone(design, newName, true);
+            manager.CreateClone(design, path, true);
         else
             Glamourer.Messager.NotificationMessage("Could not create a design, clipboard did not contain valid design data.",
                 NotificationType.Error, false);

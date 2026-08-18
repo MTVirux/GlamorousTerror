@@ -45,6 +45,9 @@ public sealed partial class Configuration
 
     public bool                  UnrestrictedWeapons          { get; set; } = false;
 
+    public bool                  AutoFolderImportedDesigns    { get; set; } = true;
+    public string                ImportedDesignsFolder        { get; set; } = "[Imported Designs]";
+
     public bool                                   OwnedOnlyComboFilter    { get; set; } = false;
     public Unlocks.ItemUnlockManager.ItemSource   OwnedComboFilterSources { get; set; } = Unlocks.ItemUnlockManager.ItemSource.All;
 

@@ -1,6 +1,8 @@
 ﻿using Glamourer.Api.Api;
 using Glamourer.Api.Enums;
+using Glamourer.Config;
 using Glamourer.Designs;
+using Glamourer.GlamorousTerror.DesignImport;
 using Glamourer.State;
 using Luna;
 using Newtonsoft.Json.Linq;
@@ -12,7 +14,8 @@ public class DesignsApi(
     DesignManager designs,
     StateManager stateManager,
     DesignColors color,
-    DesignConverter converter)
+    DesignConverter converter,
+    Configuration config)
     : IGlamourerApiDesigns, IApiService
 {
     public Dictionary<Guid, string> GetDesignList()
@@ -102,9 +105,10 @@ public class DesignsApi(
 
         try
         {
+            var path = config.WithImportFolder(name);
             var design = designBase is Design d
-                ? designs.CreateClone(d,          name, true)
-                : designs.CreateClone(designBase, name, true);
+                ? designs.CreateClone(d,          path, true)
+                : designs.CreateClone(designBase, path, true);
             return (ApiHelpers.Return(GlamourerApiEc.Success, args), design.Identifier);
         }
         catch (Exception ex)
