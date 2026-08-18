@@ -4,6 +4,7 @@ using Glamourer.Automation;
 using Glamourer.Config;
 using Glamourer.Designs;
 using Glamourer.GameData;
+using Glamourer.GlamorousTerror.DesignImport;
 using Glamourer.Interop.Material;
 using Glamourer.Services;
 using Glamourer.State;
@@ -610,7 +611,7 @@ public class CharacterPopupMenu : IDisposable, IService
         {
             var designData = _state.FromActor(_lastActor, true, false);
             var tempDesign = _designConverter.Convert(designData, new StateMaterialManager(), ApplicationRules.All);
-            _designManager.CreateClone(tempDesign, _lastCharacterName, true);
+            _designManager.CreateClone(tempDesign, _config.WithImportFolder(_lastCharacterName), true);
             Glamourer.Log.Information($"Imported design from character: {_lastCharacterName}");
         }
         catch (Exception ex)
