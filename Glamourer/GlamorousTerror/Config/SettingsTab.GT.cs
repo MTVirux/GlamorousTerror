@@ -39,7 +39,7 @@ public sealed partial class SettingsTab
         SpacedSeparator();
 
         Checkbox("Unrestricted Weapons"u8,
-            "List every weapon in the game instead of only those matching the type you are currently holding. The offhand slot lists offhands and mainhands alike.\n\nClient-side only - other players still see your real weapon, and the game reloads it on job change, zoning and combat, so cross-class weapons can revert until reapplied.\n\nTwo-handed weapons load into both hands and clear the offhand."u8,
+            "List every weapon in the game instead of only those matching the type you are currently holding.\nThe offhand slot lists offhands and mainhands alike.\nTwo-handed weapons load into both hands and clear the offhand."u8,
             config.UnrestrictedWeapons, v => config.UnrestrictedWeapons = v);
 
         SpacedSeparator();
@@ -86,7 +86,7 @@ public sealed partial class SettingsTab
     private void DrawImportFolderControls()
     {
         Checkbox("Sort Imported Designs into a Folder"u8,
-            "Place designs created by importing (clipboard, .chara/.cma files, other plugins) into a dedicated folder.\nThe folder is created on the first import and reused afterwards.\nImports that already specify their own folder path are left alone."u8,
+            "Place imported designs into a dedicated folder.\nThe folder is created on the first import and reused afterwards.\nImports that already specify their own folder path are left alone."u8,
             config.AutoFolderImportedDesigns, v => config.AutoFolderImportedDesigns = v);
 
         if (!config.AutoFolderImportedDesigns)
