@@ -39,7 +39,7 @@ public sealed partial class SettingsTab
         SpacedSeparator();
 
         Checkbox("Unrestricted Weapons"u8,
-            "List every weapon in the game instead of only those matching the type you are currently holding.\n\nClient-side only - other players still see your real weapon, and the game reloads it on job change, zoning and combat, so cross-class weapons can revert until reapplied.\n\nTwo-handed weapons load into both hands and clear the offhand."u8,
+            "List every weapon in the game instead of only those matching the type you are currently holding. The offhand slot lists offhands and mainhands alike.\n\nClient-side only - other players still see your real weapon, and the game reloads it on job change, zoning and combat, so cross-class weapons can revert until reapplied.\n\nTwo-handed weapons load into both hands and clear the offhand."u8,
             config.UnrestrictedWeapons, v => config.UnrestrictedWeapons = v);
 
         SpacedSeparator();

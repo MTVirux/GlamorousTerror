@@ -1,6 +1,7 @@
 using System.Numerics;
 using Dalamud.Interface;
 using Glamourer.Config;
+using Glamourer.GlamorousTerror.WeaponUnlock;
 using Glamourer.Services;
 using Glamourer.Unlocks;
 using ImSharp;
@@ -967,8 +968,7 @@ public sealed partial class EquipmentDrawer
 
         if (comboType is FullEquipType.Unknown or FullEquipType.UnknownOffhand)
         {
-            var wantedSlot = comboType is FullEquipType.Unknown ? EquipSlot.MainHand : EquipSlot.OffHand;
-            foreach (var t in FullEquipType.Values.Where(e => e.ToSlot() == wantedSlot))
+            foreach (var t in WeaponRestrictions.UnrestrictedTypes(comboType))
             {
                 if (!_items.ItemData.ByType.TryGetValue(t, out var l))
                     continue;

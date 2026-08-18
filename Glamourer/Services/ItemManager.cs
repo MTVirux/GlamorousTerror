@@ -299,26 +299,30 @@ public sealed class ItemManager : IService
     public bool IsOffhandValid(FullEquipType offType, ItemId offId, out EquipItem off)
     {
         off = Resolve(offType, offId);
-        if (offType == FullEquipType.Unknown || off.Valid)
+        if (off.Valid)
             return true;
 
-        // GT: Unrestricted Weapons accepts an offhand whose type differs from the one implied by the mainhand,
-        // so designs can store and reload cross-class offhands instead of resetting them to the implied default.
-        if (!_config.UnrestrictedWeapons)
-            return false;
-
-        // The unrestricted offhand list offers a single Nothing entry, which carries the shield nothing id.
-        if (offId == NothingId(FullEquipType.Shield))
+        // GT: Unrestricted Weapons accepts an offhand whose type differs from the one implied by the mainhand -
+        // mainhands included - so designs can store and reload cross-class offhands instead of resetting them
+        // to the implied default. Look the id up in both weapon lists, offhands first.
+        if (_config.UnrestrictedWeapons)
         {
-            off = NothingItem(offType);
-            return true;
+            // The unrestricted offhand list offers a single Nothing entry, which carries the shield nothing id.
+            if (offId == NothingId(FullEquipType.Shield))
+            {
+                off = NothingItem(offType is FullEquipType.Unknown ? FullEquipType.Shield : offType);
+                return true;
+            }
+
+            if (ItemData.TryGetValue(offId, EquipSlot.OffHand, out var crossType)
+             || ItemData.TryGetValue(offId, EquipSlot.MainHand, out crossType))
+            {
+                off = crossType;
+                return true;
+            }
         }
 
-        if (!ItemData.TryGetValue(offId, EquipSlot.OffHand, out var crossType))
-            return false;
-
-        off = crossType;
-        return true;
+        return offType == FullEquipType.Unknown;
     }
 
     /// <summary> Returns whether an offhand is valid given mainhand. </summary>

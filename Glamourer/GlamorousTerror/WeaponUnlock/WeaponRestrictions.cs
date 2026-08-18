@@ -1,4 +1,5 @@
 using Glamourer.Config;
+using ImSharp;
 using Penumbra.GameData.Enums;
 
 namespace Glamourer.GlamorousTerror.WeaponUnlock;
@@ -19,4 +20,15 @@ public static class WeaponRestrictions
     public static bool IsOffhandCompatibleGT(this FullEquipType type, FullEquipType gameMainhand, FullEquipType actualMainhand,
         FullEquipType gameOffhand, Configuration config)
         => config.UnrestrictedWeapons || type.IsOffhandCompatible(gameMainhand, actualMainhand, gameOffhand);
+
+    /// <summary>
+    /// The equipment types listed by an unrestricted weapon combo.
+    /// <see cref="FullEquipType.Unknown"/> keys the mainhand list, <see cref="FullEquipType.UnknownOffhand"/> the offhand one.
+    /// The offhand also offers every mainhand, since the game happily loads a mainhand model into the offhand slot.
+    /// </summary>
+    public static IEnumerable<FullEquipType> UnrestrictedTypes(FullEquipType comboType)
+        => comboType is FullEquipType.UnknownOffhand
+            ? FullEquipType.Values.Where(e => e.ToSlot() is EquipSlot.OffHand)
+                .Concat(FullEquipType.Values.Where(e => e.ToSlot() is EquipSlot.MainHand))
+            : FullEquipType.Values.Where(e => e.ToSlot() is EquipSlot.MainHand);
 }
