@@ -43,7 +43,7 @@ public class CommandService : IDisposable, IApiService
     private readonly DesignManager      _designManager;
     private readonly DesignConverter    _converter;
     private readonly DesignResolver     _resolver;
-    private readonly PenumbraService    _penumbra;
+    private readonly PenumbraSubscriber _penumbra;
     private readonly ImmersiveDresserManager _immersiveDresser;
     private readonly EquipmentBarWindow _equipmentBar;
 
@@ -51,7 +51,7 @@ public class CommandService : IDisposable, IApiService
         AutoDesignApplier autoDesignApplier, StateManager stateManager, DesignManager designManager, DesignConverter converter,
         DesignFileSystem designFileSystem, AutoDesignManager autoDesignManager, Configuration config,
         ItemManager items, RandomDesignGenerator randomDesign, CustomizeService customizeService, DesignFileSystemDrawer designDrawer,
-        QuickDesignCombo quickDesignCombo, DesignResolver resolver, PenumbraService penumbra, ImmersiveDresserManager immersiveDresser,
+        QuickDesignCombo quickDesignCombo, DesignResolver resolver, PenumbraSubscriber penumbra, ImmersiveDresserManager immersiveDresser,
         EquipmentBarWindow equipmentBar, ActorSelection stateSelection)
     {
         _commands          = commands;
@@ -94,10 +94,12 @@ public class CommandService : IDisposable, IApiService
     {
         if (arguments.Length > 0)
         {
-            if (arguments.StartsWith("equip ") || arguments.StartsWith("e "))
+            arguments = arguments.ToLowerInvariant();
+            var args = arguments.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (args[0] is "equip" or "e")
             {
                 _equipmentBar.IsOpen ^= true;
-                var args = arguments.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                
                 if (args.Length is not 2)
                     return;
 
@@ -123,7 +125,7 @@ public class CommandService : IDisposable, IApiService
                 return;
             }
 
-            switch (arguments)
+            switch (args[0])
             {
                 case "qdb":
                 case "quick":
@@ -131,33 +133,20 @@ public class CommandService : IDisposable, IApiService
                 case "designs":
                 case "design":
                 case "design bar":
-                    _config.Ephemeral.ShowDesignQuickBar = !_config.Ephemeral.ShowDesignQuickBar;
+                    _config.Ephemeral.ShowDesignQuickBar = ParseTrueFalse(args, _config.Ephemeral.ShowDesignQuickBar);
                     _config.Ephemeral.Save();
                     return;
                 case "lock":
                 case "unlock":
-                    _config.Ephemeral.LockMainWindow = !_config.Ephemeral.LockMainWindow;
+                    _config.Ephemeral.LockMainWindow = ParseTrueFalse(args, _config.Ephemeral.LockMainWindow);
                     _config.Ephemeral.Save();
                     return;
                 case "dresser":
                 case "im":
                     _immersiveDresser.Open();
                     return;
-                case "equip":
-                case "e":
-                    if (_stateSelection.State is null)
-                    {
-                        var (ident, data) = _objects.PlayerData;
-                        _stateSelection.Select(ident, data);
-                        if (_stateSelection.State is null)
-                            _chat.Print(new SeStringBuilder().AddRed("No valid state was selected, or could be created for the current player.")
-                                .BuiltString);
-                    }
-
-                    _equipmentBar.IsOpen ^= true;
-                    return;
                 case "automation":
-                    var newValue = !_config.EnableAutoDesigns;
+                    var newValue = ParseTrueFalse(args, _config.EnableAutoDesigns);
                     _config.EnableAutoDesigns = newValue;
                     _autoDesignApplier.OnEnableAutoDesignsChanged(newValue);
                     _config.Save();
@@ -167,18 +156,33 @@ public class CommandService : IDisposable, IApiService
                     _chat.Print(new SeStringBuilder().AddText("Use ").AddPurple("/glamour").AddText(" instead of ")
                         .AddRed("/glamourer")
                         .AddText(" for application commands.").BuiltString);
-                    _chat.Print(new SeStringBuilder().AddCommand("qdb", "Toggles the quick design bar on or off.")
+                    _chat.Print(new SeStringBuilder().AddCommand("qdb", "Toggles the quick design bar on or off, or supply 'on' or 'off' to force specific state.")
                         .BuiltString);
                     _chat.Print(new SeStringBuilder().AddCommand("equip",
                             "Toggles the compact equipment bar on or off. Note that showing the bar closes the main window if it is open.")
                         .BuiltString);
                     _chat.Print(new SeStringBuilder()
-                        .AddCommand("lock", "Toggles the lock of the main window on or off.").BuiltString);
+                        .AddCommand("lock", "Toggles the lock of the main window on or off, or supply 'on' or 'off' to force specific state.").BuiltString);
+                    _chat.Print(new SeStringBuilder()
+                        .AddCommand("automation", "Toggles the general application of automation on or off, or supply 'on' or 'off' to force specific state.").BuiltString);
                     return;
             }
         }
 
         _mainWindow.Toggle();
+    }
+
+    private static bool ParseTrueFalse(string[] arguments, bool currentValue)
+    {
+        if (arguments.Length is 1)
+            return !currentValue;
+
+        return arguments[1].ToLowerInvariant() switch
+        {
+            "enabled" or "enable" or "on" or "true"     => true,
+            "disabled" or "disable" or "off" or "false" => false,
+            _                                           => !currentValue,
+        };
     }
 
     private void OnGlamour(string command, string arguments)
@@ -278,12 +282,12 @@ public class CommandService : IDisposable, IApiService
         if (argumentList.Length > 2 && bool.TryParse(argumentList[2], out var a))
             clearAutomatic = a;
 
-        if (!clearManual && !clearAutomatic)
+        if (!clearManual && !clearAutomatic || !_penumbra.Available)
             return true;
 
         if (argumentList[0].ToLowerInvariant() is "all")
         {
-            _penumbra.ClearAllTemporarySettings(clearAutomatic, clearManual);
+            _penumbra.RemoveAllTemporarySettings(clearAutomatic, clearManual);
             return true;
         }
 
@@ -298,7 +302,7 @@ public class CommandService : IDisposable, IApiService
 
             foreach (var obj in data.Objects)
             {
-                var guid = _penumbra.GetActorCollection(obj, out _);
+                var guid = _penumbra.Collections.ObjectCollectionId(obj.Index).Identifier;
                 if (!set.Add(guid))
                     continue;
 

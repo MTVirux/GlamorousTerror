@@ -18,7 +18,7 @@ public sealed unsafe partial class MaterialManager : IRequiredService, IDisposab
 {
     private readonly PrepareColorSet      _event;
     private readonly StateManager         _stateManager;
-    private readonly PenumbraService      _penumbra;
+    private readonly PenumbraSubscriber   _penumbra;
     private readonly ActorManager         _actors;
     private readonly UiActorMirrorService _uiActorMirror;
 
@@ -26,7 +26,7 @@ public sealed unsafe partial class MaterialManager : IRequiredService, IDisposab
 
     private readonly ThreadLocal<List<MaterialValueIndex>> _deleteList = new(() => []);
 
-    public MaterialManager(PrepareColorSet prepareColorSet, StateManager stateManager, ActorManager actors, PenumbraService penumbra,
+    public MaterialManager(PrepareColorSet prepareColorSet, StateManager stateManager, ActorManager actors, PenumbraSubscriber penumbra,
         Configuration config, UiActorMirrorService uiActorMirror)
     {
         _stateManager  = stateManager;

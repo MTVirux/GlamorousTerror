@@ -18,6 +18,7 @@ using Glamourer.Api.Enums;
 using Glamourer.Config;
 using Glamourer.GlamorousTerror.WeaponUnlock;
 using Luna;
+using Penumbra.Api.Wrappers;
 
 namespace Glamourer.State;
 
@@ -35,7 +36,7 @@ public sealed partial class StateListener : IDisposable, IRequiredService
     private readonly StateApplier              _applier;
     private readonly ItemManager               _items;
     private readonly CustomizeService          _customizations;
-    private readonly PenumbraService           _penumbra;
+    private readonly PenumbraSubscriber        _penumbra;
     private readonly EquipSlotUpdating         _equipSlotUpdating;
     private readonly BonusSlotUpdating         _bonusSlotUpdating;
     private readonly GearsetDataLoaded         _gearsetDataLoaded;
@@ -45,6 +46,7 @@ public sealed partial class StateListener : IDisposable, IRequiredService
     private readonly VieraEarStateChanged      _vieraEarState;
     private readonly WeaponVisibilityChanged   _weaponVisibility;
     private readonly StateFinalized            _stateFinalized;
+    private readonly EnableDrawEvent           _enableDraw;
     private readonly AutoDesignApplier         _autoDesignApplier;
     private readonly FunModule                 _funModule;
     private readonly HumanModelList            _humans;
@@ -69,13 +71,13 @@ public sealed partial class StateListener : IDisposable, IRequiredService
     private partial void GTMirrorUiBonusSlot(Actor actor, BonusItemFlag slot, ref CharacterArmor armor);
     private partial void GTMirrorUiWeapon(Actor actor, EquipSlot slot, ref CharacterWeapon weapon);
 
-    public StateListener(StateManager manager, ItemManager items, PenumbraService penumbra, ActorManager actors, Configuration config,
+    public StateListener(StateManager manager, ItemManager items, PenumbraSubscriber penumbra, ActorManager actors, Configuration config,
         EquipSlotUpdating equipSlotUpdating, GearsetDataLoaded gearsetDataLoaded, WeaponLoading weaponLoading, VisorStateChanged visorState,
         WeaponVisibilityChanged weaponVisibility, HeadGearVisibilityChanged headGearVisibility, AutoDesignApplier autoDesignApplier,
         FunModule funModule, HumanModelList humans, StateApplier applier, MovedEquipment movedEquipment, ActorObjectManager objects,
         GPoseService gPose, ChangeCustomizeService changeCustomizeService, CustomizeService customizations, ICondition condition,
         CrestService crestService, BonusSlotUpdating bonusSlotUpdating, StateFinalized stateFinalized, VieraEarStateChanged vieraEarState,
-        UiActorMirrorService uiActorMirror)
+        EnableDrawEvent enableDraw, UiActorMirrorService uiActorMirror)
     {
         _manager                = manager;
         _items                  = items;
@@ -102,6 +104,7 @@ public sealed partial class StateListener : IDisposable, IRequiredService
         _bonusSlotUpdating      = bonusSlotUpdating;
         _stateFinalized         = stateFinalized;
         _vieraEarState          = vieraEarState;
+        _enableDraw             = enableDraw;
         _uiActorMirror          = uiActorMirror;
         Subscribe();
     }
@@ -131,24 +134,24 @@ public sealed partial class StateListener : IDisposable, IRequiredService
     /// Weapons and meta flags are updated independently.
     /// We also need to apply fixed designs here.
     /// </summary>
-    private unsafe void OnCreatingCharacterBase(nint actorPtr, Guid _, nint modelPtr, nint customizePtr, nint equipDataPtr)
+    private unsafe void OnCreatingCharacterBase(in CreatingCharacterBaseArguments args)
     {
-        var actor = (Actor)actorPtr;
+        var actor = (Actor)args.GameObject;
         if (_condition[ConditionFlag.CreatingCharacter] && actor.Index >= ObjectIndex.CutsceneStart)
             return;
 
         _creatingIdentifier = actor.GetIdentifier(_actors);
         GTResolveUiActor();
-        ref var modelId   = ref *(uint*)modelPtr;
-        ref var customize = ref *(CustomizeArray*)customizePtr;
+        ref var modelId   = ref *(uint*)args.ModelId;
+        ref var customize = ref *(CustomizeArray*)args.Customize;
         if (_autoDesignApplier.Reduce(actor, _creatingIdentifier, out _creatingState))
         {
             _isPlayerNpc = _creatingIdentifier.Type is IdentifierType.Player
              && actor.IsCharacter
              && actor.AsCharacter->GetObjectKind() is ObjectKind.EventNpc;
-            switch (UpdateBaseData(actor, _creatingState, modelId, customizePtr, equipDataPtr))
+            switch (UpdateBaseData(actor, _creatingState, modelId, args.Customize, args.EquipData))
             {
-                // TODO handle right
+                // TODO 20260824 handle right
                 case UpdateState.Change:      break;
                 case UpdateState.Transformed: break;
                 case UpdateState.NoChange:
@@ -156,7 +159,7 @@ public sealed partial class StateListener : IDisposable, IRequiredService
                     modelId = _creatingState.ModelData.ModelId;
                     UpdateCustomize(actor, _creatingState, ref customize, true);
                     foreach (var slot in EquipSlotExtensions.EqdpSlots)
-                        HandleEquipSlot(actor, _creatingState, slot, ref ((CharacterArmor*)equipDataPtr)[slot.ToIndex()]);
+                        HandleEquipSlot(actor, _creatingState, slot, ref ((CharacterArmor*)args.EquipData)[slot.ToIndex()]);
 
                     break;
             }
@@ -164,11 +167,11 @@ public sealed partial class StateListener : IDisposable, IRequiredService
             _creatingState.TempUnlock();
         }
 
-        GTApplyUiActor(customizePtr, equipDataPtr);
+        GTApplyUiActor(args.Customize, args.EquipData);
 
-        _funModule.ApplyFunOnLoad(actor, new Span<CharacterArmor>((void*)equipDataPtr, 10), ref customize);
+        _funModule.ApplyFunOnLoad(actor, new Span<CharacterArmor>((void*)args.EquipData, 10), ref customize);
         if (modelId is 0 && _creatingState is not { IsLocked: true })
-            ProtectRestrictedGear(equipDataPtr, customize.Race, customize.Gender);
+            ProtectRestrictedGear(args.EquipData, customize.Race, customize.Gender);
     }
 
     private void OnCustomizeChange(in ChangeCustomizeService.Arguments arguments)
@@ -398,9 +401,9 @@ public sealed partial class StateListener : IDisposable, IRequiredService
         {
             // Only allow overwriting compatible weapons
             var canApply = (arguments.Slot is EquipSlot.MainHand
-                ? modelType.IsCompatibleGT(state.BaseData.MainhandType, _config)
-                : modelType.IsOffhandCompatibleGT(state.BaseData.MainhandType, state.ModelData.MainhandType, state.BaseData.OffhandType,
-                    _config))
+                    ? modelType.IsCompatibleGT(state.BaseData.MainhandType, _config)
+                    : modelType.IsOffhandCompatibleGT(state.BaseData.MainhandType, state.ModelData.MainhandType, state.BaseData.OffhandType,
+                        _config))
              || _gPose.InGPose && arguments.Actor.IsGPoseOrCutscene;
             var newWeapon = state.ModelData.Weapon(arguments.Slot);
             if (canApply)
@@ -692,7 +695,7 @@ public sealed partial class StateListener : IDisposable, IRequiredService
 
         // Customize array did not change to stored state.
         if (state.BaseData.Customize.Equals(customize))
-            return UpdateState.NoChange; // TODO: handle wrong base data.
+            return UpdateState.NoChange; // TODO 20260824 handle wrong base data.
 
         // Update customize base state.
         state.BaseData.Customize = customize;
@@ -867,8 +870,8 @@ public sealed partial class StateListener : IDisposable, IRequiredService
 
     private void Subscribe()
     {
-        _penumbra.CreatingCharacterBase += OnCreatingCharacterBase;
-        _penumbra.CreatedCharacterBase  += OnCreatedCharacterBase;
+        _penumbra.GameState.CreatingCharacterBase += OnCreatingCharacterBase;
+        _penumbra.GameState.CreatedCharacterBase  += OnCreatedCharacterBase;
         _equipSlotUpdating.Subscribe(OnEquipSlotUpdating, EquipSlotUpdating.Priority.StateListener);
         _bonusSlotUpdating.Subscribe(OnBonusSlotUpdating, BonusSlotUpdating.Priority.StateListener);
         _gearsetDataLoaded.Subscribe(OnGearsetDataLoaded, GearsetDataLoaded.Priority.StateListener);
@@ -882,12 +885,13 @@ public sealed partial class StateListener : IDisposable, IRequiredService
         _crestService.Subscribe(OnCrestChange, CrestService.Priority.StateListener);
         _crestService.ModelCrestSetup += OnModelCrestSetup;
         _changeCustomizeService.Subscribe(OnCustomizeChanged, ChangeCustomizeService.Post.Priority.StateListener);
+        _enableDraw.Subscribe(AfterEnableDraw, EnableDrawEvent.Priority.StateListener);
     }
 
     private void Unsubscribe()
     {
-        _penumbra.CreatingCharacterBase -= OnCreatingCharacterBase;
-        _penumbra.CreatedCharacterBase  -= OnCreatedCharacterBase;
+        _penumbra.GameState.CreatingCharacterBase -= OnCreatingCharacterBase;
+        _penumbra.GameState.CreatedCharacterBase  -= OnCreatedCharacterBase;
         _equipSlotUpdating.Unsubscribe(OnEquipSlotUpdating);
         _bonusSlotUpdating.Unsubscribe(OnBonusSlotUpdating);
         _gearsetDataLoaded.Unsubscribe(OnGearsetDataLoaded);
@@ -901,24 +905,37 @@ public sealed partial class StateListener : IDisposable, IRequiredService
         _crestService.Unsubscribe(OnCrestChange);
         _crestService.ModelCrestSetup -= OnModelCrestSetup;
         _changeCustomizeService.Unsubscribe(OnCustomizeChanged);
+        _enableDraw.Unsubscribe(AfterEnableDraw);
     }
 
-    private void OnCreatedCharacterBase(nint gameObject, Guid _, nint drawObject)
+    private void OnCreatedCharacterBase(in CreatedCharacterBaseArguments args)
     {
-        if (_condition[ConditionFlag.CreatingCharacter])
-            return;
-
         if (_creatingState is null)
             return;
 
-        var data = new ActorData(gameObject, _creatingIdentifier.ToName());
+        if (_condition[ConditionFlag.CreatingCharacter])
+            return;
+
+        var data = new ActorData(args.GameObject, _creatingIdentifier.ToName());
         _applier.ChangeMetaState(data, MetaIndex.HatState,    _creatingState.ModelData.IsHatVisible());
         _applier.ChangeMetaState(data, MetaIndex.Wetness,     _creatingState.ModelData.IsWet());
         _applier.ChangeMetaState(data, MetaIndex.WeaponState, _creatingState.ModelData.IsWeaponVisible());
-        _applier.ChangeVisorState(drawObject, _creatingState.ModelData.IsVisorToggled());
-        _applier.ChangeEarState(drawObject, _creatingState.ModelData.AreEarsVisible());
+        _applier.ChangeVisorState(args.DrawObject, _creatingState.ModelData.IsVisorToggled());
 
-        ApplyParameters(_creatingState, drawObject);
+        ApplyParameters(_creatingState, args.DrawObject);
+    }
+
+
+    private void AfterEnableDraw(in Actor character)
+    {
+        if (_creatingState is null)
+            return;
+
+        if (_condition[ConditionFlag.CreatingCharacter])
+            return;
+
+        _applier.ChangeEarState(character.Model, _creatingState.ModelData.AreEarsVisible());
+        _creatingState = null;
     }
 
     private void OnCustomizeChanged(in Model model)

@@ -417,7 +417,7 @@ public class StateEditor(
                     var slotsToReset = mergedDesign.ResetAdvancedDyes;
                     while (slotsToReset is not 0)
                     {
-                        // TODO Consider working on bit ranges to improve performance?
+                        // TODO 20260824 Consider working on bit ranges to improve performance?
                         var slot = slotsToReset.First;
                         state.Materials.RemoveValues(MaterialValueIndex.Min(slot), MaterialValueIndex.Max(slot));
                         slotsToReset &= ~slot;
@@ -509,7 +509,7 @@ public class StateEditor(
 
         var mh = newMainhand ?? state.ModelData.Item(EquipSlot.MainHand);
         // Do not change Shields to nothing.
-        if (mh.Type is FullEquipType.Sword)
+        if (mh.Type is FullEquipType.Sword or FullEquipType.Handaxe)
             return;
 
         var offhand = newMainhand != null ? Items.GetDefaultOffhand(mh) : state.ModelData.Item(EquipSlot.OffHand);

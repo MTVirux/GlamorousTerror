@@ -34,6 +34,7 @@ public sealed partial class SettingsTab(
     PredefinedTagManager predefinedTags,
     PcpService pcpService,
     IgnoredMods ignoredMods,
+    DesignColorUi designColors,
     ItemNameService itemNameService)
     : ITab<MainTabType>
 {
@@ -160,7 +161,7 @@ public sealed partial class SettingsTab(
             });
         Checkbox("Attach to PCP Handling"u8,
             "Add the actor's glamourer state when a PCP is created by Penumbra, and create a design and apply it if possible when a PCP is installed by Penumbra."u8,
-            config.AttachToPcp, pcpService.Set);
+            config.AttachToPcp, v => config.AttachToPcp = v);
         var active = config.DeleteDesignModifier.IsActive();
         Im.Line.Same();
         if (ImEx.Button("Delete all PCP Designs"u8, default, "Deletes all designs tagged with 'PCP' from the design list."u8, !active))
@@ -469,6 +470,12 @@ public sealed partial class SettingsTab(
     /// <summary> Draw the entire Color subsection. </summary>
     private void DrawColorSettings()
     {
+        using (var tree = Im.Tree.HeaderId("Custom Design Colors"u8))
+        {
+            if (tree)
+                designColors.Draw();
+        }
+
         using var header = Im.Tree.HeaderId("Colors"u8);
         if (!header)
             return;

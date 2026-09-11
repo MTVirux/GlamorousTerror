@@ -45,6 +45,8 @@ public readonly struct ColorIdData : IColorData<ColorId>
             new ColorData<ColorId>(FolderLine, "Collapsed Design Folder"u8, "A design folder that is currently collapsed."u8, designs);
         ret[(int)FolderLine] = new ColorData<ColorId>(0xFFFFF0C0, "Expanded Design Folder Line"u8,
             "The line signifying which descendants belong to an expanded design folder."u8, designs);
+        ret[(int)AlternatingFolderLine] = new ColorData<ColorId>(FolderLine, "Expanded Mod Folder Line (Alternating)"u8,
+            "The line signifying which descendants belong to an expanded mod folder for even folder lines."u8, designs);
         ret[(int)EnabledAutoSet] = new ColorData<ColorId>(0xFFA0F0A0, "Enabled Automation Set"u8,
             "An automation set that is currently enabled. Only one set can be enabled for each identifier at once."u8, automation);
         ret[(int)DisabledAutoSet] =
@@ -61,6 +63,10 @@ public readonly struct ColorIdData : IColorData<ColorId>
             "The color of the star for favored items when it is hovered."u8, metadata);
         ret[(int)FavoriteStarOff] = new ColorData<ColorId>(0x20808080, "Favorite Star Outline"u8,
             "The color of the star for items that are not favored when it is not hovered."u8, metadata);
+        ret[(int)PredefinedTagAdd] = new ColorData<ColorId>(DalamudColor.SuccessBackground, "Predefined Tags: Add Tag"u8,
+            "A predefined tag that is not present on the current design and can be added."u8, metadata);
+        ret[(int)PredefinedTagRemove] = new ColorData<ColorId>(DalamudColor.ErrorBackground, "Predefined Tags: Remove Tag"u8,
+            "A predefined tag that is already present on the current design and can be removed."u8, metadata);
         ret[(int)QuickDesignButton] = new ColorData<ColorId>(0x900A0A0A, "Quick Design Bar Button Background"u8,
             "The color of button frames in the quick design bar."u8, qdb);
         ret[(int)QuickDesignFrame] = new ColorData<ColorId>(0x90383838, "Quick Design Bar Combo Background"u8,
