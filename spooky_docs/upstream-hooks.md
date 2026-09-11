@@ -86,7 +86,7 @@ _windowSystem.AddWindow(immersiveDresser.Options);
 ### 4. `Glamourer/Gui/Tabs/SettingsTab/SettingsTab.cs`
 
 - Add `partial` keyword to class declaration
-- **Primary-ctor parameters**: Add `ContextMenuService contextMenuService` (used to enable/disable the in-game menu when the GT checkbox flips) and `ItemNameService itemNameService` (used by the equipment-language combo)
+- **Primary-ctor parameters**: Add `ContextMenuService contextMenuService` (used to enable/disable the in-game menu when the GT checkbox flips) and `ItemNameService itemNameService` (used by the equipment-language combo). `itemNameService` stays the last parameter, after upstream's `DesignColorUi designColors`
 - Call `DrawGlamorousTerrorSettings()` in the draw method (currently at line ~65, just after the "Enable Auto Designs" checkbox)
 - GT methods are defined in `SettingsTab.GT.cs`
 - After the "Enable Auto Designs" checkbox, change the cursor offset from `Im.Style.FrameHeightWithSpacing * 4` to `Im.Style.FrameHeightWithSpacing`. Upstream reserves 4 lines for the stacked support-button column; GT only draws a single "Show Changelogs" button (see #19), so the larger offset leaves a visible empty gap above the settings child.
@@ -178,9 +178,9 @@ private partial bool GTFallbackNameMatch(in CacheItem item);
 ### 11a. `Glamourer/Automation/AutoDesignManager.cs`
 
 - Add `using Glamourer.GlamorousTerror.WildcardAutomation;`
-- In the V1 loader (`LoadV1`), both `_actors.FromJson(...)` calls become `GTActorIdentifierJson.FromJson(_actors, ...)`:
-  - The primary identifier read inside `foreach (var obj in array)` (after the empty-name guard)
-  - The secondary identifier read inside the `SecondaryIdentifiers` JArray foreach
+- In the V1 loader (`LoadV1(in JsonElement? data)`, System.Text.Json), both `_actors.FromJson(...)` calls become `GTActorIdentifierJson.FromJson(_actors, ...)`:
+  - The primary identifier read inside `foreach (var obj in array.EnumerateArray())` (after the empty-name guard), passing `obj.TryReadObject("Identifier"u8, out var i) ? i : null`
+  - The secondary identifier read inside `foreach (var idJObj in identifierArray.EnumerateArray())` (the `SecondaryIdentifiers` array), passing `idJObj`
 - Other `_actors.FromJson` call sites in the codebase (CollectionOverrideService, PcpService, UiConfig) are intentionally left untouched — they do not carry wildcard identifiers.
 
 ### 11b. `Glamourer/Gui/Tabs/AutomationTab/IdentifierDrawer.cs`
@@ -201,7 +201,7 @@ GT-only file. Routes `*`-bearing names through the upstream public API `ActorMan
 
 ### 11d. `Glamourer/GlamorousTerror/WildcardAutomation/GTActorIdentifierJson.cs`
 
-GT-only file. Wraps `ActorManager.FromJson`. When the `PlayerName` field of an incoming `JObject` contains `*`, constructs the identifier via `WildcardIdentifier`. Otherwise delegates to upstream `FromJson`.
+GT-only file. Wraps `ActorManager.FromJson`. Takes `in JsonElement?` (System.Text.Json). When the object's `PlayerName` property contains `*`, constructs the identifier via `WildcardIdentifier`. Otherwise delegates to upstream `FromJson`.
 
 ### 12. `Glamourer/Gui/Tabs/ActorTab/ActorPanel.cs`
 
@@ -220,9 +220,9 @@ GT-only file. Wraps `ActorManager.FromJson`. When the `PlayerName` field of an i
 
 ### 15. `Glamourer/Services/CommandService.cs`
 
-- Add ctor param `ImmersiveDresserManager immersiveDresser`, store in `_immersiveDresser`
+- Add ctor param `ImmersiveDresserManager immersiveDresser` (after upstream's `PenumbraSubscriber penumbra`), store in `_immersiveDresser`
 - Register command aliases `/glam`, `/glamorous`, `/gt` (dispatch to `OnGlamourer`)
-- Add `case "dresser": case "im":` in `OnGlamourer` argument switch — calls `_immersiveDresser.Open()`
+- Add `case "dresser": case "im":` in `OnGlamourer`'s `switch (args[0])` - calls `_immersiveDresser.Open()`. Upstream now lowercases `arguments` and splits it into `args` so sub-commands can take an on/off value
 
 ### 16. `Glamourer/Gui/Equipment/GlamourerColorCombo.cs`
 
@@ -347,7 +347,7 @@ Upstream rewrites this file each version to append a new `Add1_X_Y_Z(Changelog)`
 Powers UI Actor Glamour Mirroring (object indices 440–447 → `IdentifierType.Special`). Upstream rewrites `OnCreatingCharacterBase`, `OnEquipSlotUpdating`, `OnBonusSlotUpdating`, and `OnWeaponLoading` periodically, so re-apply all of the following after an overlay:
 
 - Add `partial` to the class declaration: `public sealed partial class StateListener : IDisposable, IRequiredService`
-- **Constructor**: add the trailing parameter `UiActorMirrorService uiActorMirror`, add the field `private readonly UiActorMirrorService _uiActorMirror;`, and assign `_uiActorMirror = uiActorMirror;` in the body (before `Subscribe();`)
+- **Constructor**: add the trailing parameter `UiActorMirrorService uiActorMirror` (after upstream's `EnableDrawEvent enableDraw`), add the field `private readonly UiActorMirrorService _uiActorMirror;`, and assign `_uiActorMirror = uiActorMirror;` in the body (before `Subscribe();`)
 - **Five partial-method declarations** (alongside the other fields):
   ```csharp
   // Glamorous Terror: UI actor glamour mirroring (implemented in GlamorousTerror/UiActorMirror/StateListener.UiActor.cs).
@@ -358,7 +358,7 @@ Powers UI Actor Glamour Mirroring (object indices 440–447 → `IdentifierType.
   private partial void GTMirrorUiWeapon(Actor actor, EquipSlot slot, ref CharacterWeapon weapon);
   ```
 - **Call sites**:
-  - `OnCreatingCharacterBase`: `GTResolveUiActor();` **immediately after** `_creatingIdentifier = actor.GetIdentifier(_actors);`, and `GTApplyUiActor(customizePtr, equipDataPtr);` **after** the `if (_autoDesignApplier.Reduce(...)) { … }` block.
+  - `OnCreatingCharacterBase(in CreatingCharacterBaseArguments args)`: `GTResolveUiActor();` **immediately after** `_creatingIdentifier = actor.GetIdentifier(_actors);`, and `GTApplyUiActor(args.Customize, args.EquipData);` **after** the `if (_autoDesignApplier.Reduce(...)) { … }` block.
   - `OnEquipSlotUpdating`: `GTMirrorUiEquipSlot(actor, arguments.Slot, ref arguments.Armor);` **after** `var actor = _penumbra.GameObjectFromDrawObject(arguments.Model);`.
   - `OnBonusSlotUpdating`: `GTMirrorUiBonusSlot(actor, arguments.Slot, ref arguments.Armor);` **after** `var actor = _penumbra.GameObjectFromDrawObject(arguments.Model);`.
   - `OnWeaponLoading`: `GTMirrorUiWeapon(arguments.Actor, arguments.Slot, ref arguments.Weapon);` **after** the CreatingCharacter guard.
@@ -371,7 +371,7 @@ Powers UI Actor Glamour Mirroring (object indices 440–447 → `IdentifierType.
 
 ## Configuration Field Conflicts (carried since 1.6.1.4, still present as of 1.6.1.17)
 
-Upstream 1.6.1.4 introduced its own `EnableGameContextMenu` config field on `Configuration` (now at `Configuration.cs:39`). The duplicate field was removed from `Configuration.GT.cs`; the GT context-menu wiring (`contextMenuService.Enable/Disable()`) still hangs off the GT settings checkbox. Two checkboxes now bind to the same flag — upstream's (added in 1.6.1.4) and the GT one in `SettingsTab.GT.cs`. Consolidate before publish: pick one canonical checkbox and remove the other.
+Upstream 1.6.1.4 introduced its own `EnableGameContextMenu` config field on `Configuration` (now at `Configuration.cs:40`). The duplicate field was removed from `Configuration.GT.cs`; the GT context-menu wiring (`contextMenuService.Enable/Disable()`) still hangs off the GT settings checkbox. Two checkboxes now bind to the same flag - upstream's (added in 1.6.1.4) and the GT one in `SettingsTab.GT.cs`. Consolidate before publish: pick one canonical checkbox and remove the other.
 
 ---
 

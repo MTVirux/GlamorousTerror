@@ -103,7 +103,7 @@ Right-click character
 
 | Property | Type | Default | Location |
 |----------|------|---------|----------|
-| `EnableGameContextMenu` | `bool` | `true` | Upstream `Configuration.cs:39` (NOT `Configuration.GT.cs` — this is one of the known config-placement quirks; see [upstream-hooks.md → Configuration Field Conflicts](upstream-hooks.md#configuration-field-conflicts-carried-since-1614-still-present-as-of-1616)) |
+| `EnableGameContextMenu` | `bool` | `true` | Upstream `Configuration.cs:40` (NOT `Configuration.GT.cs` - this is one of the known config-placement quirks; see [upstream-hooks.md → Configuration Field Conflicts](upstream-hooks.md#configuration-field-conflicts-carried-since-1614-still-present-as-of-1616)) |
 
 Controlled in the Settings tab (Glamorous Terror section) via `ContextMenuService.Enable()` / `Disable()`. Because the field lives on the upstream `Configuration`, upstream's own settings tab also surfaces a checkbox for it — two checkboxes bind to the same flag until one is consolidated.
 
@@ -417,9 +417,9 @@ Extends the automation system to allow **wildcard patterns** (`*`) and **single-
 |------|------|
 | `Glamourer/GlamorousTerror/WildcardAutomation/AutoDesignApplier.Wildcard.cs` | Partial-class extension of upstream `AutoDesignApplier`; wildcard name matching against enabled sets |
 | `Glamourer/GlamorousTerror/WildcardAutomation/WildcardIdentifier.cs` | Constructs `ActorIdentifier`s for `*`-bearing names via upstream's public `ActorManager.CreateIndividualUnchecked` API (bypasses SE name validation); falls back to the validated factory for non-wildcard names. Exposes `PlayerOrFallback`, `RetainerOrFallback`, `OwnedOrFallback`, and two `IsWildcard` overloads (`ByteString` / `string?`) for callers that want to check before authoring |
-| `Glamourer/GlamorousTerror/WildcardAutomation/GTActorIdentifierJson.cs` | Wraps `ActorManager.FromJson` so config loads with `*` in `PlayerName` route through `WildcardIdentifier` instead of the validated parse. Falls back to `actors.FromJson(data)` for non-wildcard names and for unknown identifier types |
+| `Glamourer/GlamorousTerror/WildcardAutomation/GTActorIdentifierJson.cs` | Wraps `ActorManager.FromJson` so config loads with `*` in `PlayerName` route through `WildcardIdentifier` instead of the validated parse. Takes `in JsonElement?` (System.Text.Json). Falls back to `actors.FromJson(j)` for non-wildcard names and for unknown identifier types |
 
-The feature **no longer requires a `Penumbra.GameData` fork**: wildcard identifiers are constructed entirely through upstream's public `CreateIndividualUnchecked` entry point, so the submodule tracks vanilla Ottermandias `upstream/main`. JSON load is intercepted in `AutoDesignManager.LoadV1` (see [upstream-hooks.md #11a](upstream-hooks.md)), and the automation editor is intercepted in `IdentifierDrawer.UpdateIdentifiers` (#11b), which means wildcard names can now be typed directly into the UI rather than only being authored by hand-editing the config file. The loaded identifier is also passed through `WithoutIndex()` before being stored (`AutoDesignManager.cs:526, 560`), stripping any stale object index so equality checks against runtime-generated identifiers remain stable.
+The feature **no longer requires a `Penumbra.GameData` fork**: wildcard identifiers are constructed entirely through upstream's public `CreateIndividualUnchecked` entry point, so the submodule tracks vanilla Ottermandias `upstream/main`. JSON load is intercepted in `AutoDesignManager.LoadV1` (see [upstream-hooks.md #11a](upstream-hooks.md)), and the automation editor is intercepted in `IdentifierDrawer.UpdateIdentifiers` (#11b), which means wildcard names can now be typed directly into the UI rather than only being authored by hand-editing the config file. The loaded identifier is also passed through `WithoutIndex()` before being stored (`AutoDesignManager.cs:527, 563`), stripping any stale object index so equality checks against runtime-generated identifiers remain stable.
 
 **Combined dispatch via upstream `GetPlayerSet` + GT fallback** (`AutoDesignApplier.cs:315-346`):
 
